@@ -1,8 +1,14 @@
+export interface DbRunResult {
+  lastID: number;
+  lastInsertRowid: number;
+  changes: number;
+}
+
 declare global {
   interface Window {
     api: {
       dbQuery: (sql: string, params: any[]) => Promise<any[]>;
-      dbRun: (sql: string, params: any[]) => Promise<any>;
+      dbRun: (sql: string, params: any[]) => Promise<DbRunResult>;
       dbGet: (sql: string, params: any[]) => Promise<any>;
       fsBackup: () => Promise<boolean>;
       fsRestore: () => Promise<boolean>;

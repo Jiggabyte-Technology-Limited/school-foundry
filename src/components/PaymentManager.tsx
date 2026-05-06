@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
+import { useAuth } from '../lib/auth-context';
 
 interface Payment {
   id: number;
@@ -25,6 +26,7 @@ interface PaymentStats {
 }
 
 const PaymentManager: React.FC = () => {
+  const { user } = useAuth();
   const [students, setStudents] = useState<any[]>([]);
   const [years, setYears] = useState<any[]>([]);
   const [terms, setTerms] = useState<any[]>([]);
@@ -141,15 +143,15 @@ const PaymentManager: React.FC = () => {
     try {
       const amountCents = Math.round(parseFloat(form.amount) * 100);
       
-      await db.run(`
+      const result = await db.run(`
         INSERT INTO payments (student_id, year_id, term_id, receipt_number, amount_paid_cents)
         VALUES (?, ?, ?, ?, ?)
       `, [form.student_id, form.year_id, form.term_id, form.receipt_number, amountCents]);
 
       const student = students.find(s => s.id === Number(form.student_id));
       await db.run(
-        'INSERT INTO activity_log (action, details) VALUES (?, ?)',
-        ['payment_recorded', `Payment of $${form.amount} recorded for ${student?.full_name} (${form.receipt_number})`]
+        'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+        [user?.id ?? null, user?.username ?? 'System', 'payment_recorded', 'payments', result.lastInsertRowid || result.lastID, `Payment of $${form.amount} recorded for ${student?.full_name} (${form.receipt_number})`]
       );
 
       // Reset form and reload

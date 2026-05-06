@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import { db } from './lib/db-client';
+import { AuthProvider, useAuth } from './lib/auth-context';
 import SetupWizard from './components/SetupWizard';
 import LoginScreen from './components/LoginScreen';
 import Sidebar from './components/Sidebar';
@@ -14,7 +15,6 @@ import FinancialStatements from './components/FinancialStatements';
 import ActivityLog from './components/ActivityLog';
 import BackupManager from './components/BackupManager';
 import SettingsModal from './components/SettingsModal';
-import { ToastProvider } from './components/Toast';
 
 const pageTitles: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -26,9 +26,9 @@ const pageTitles: Record<string, string> = {
   backup: 'Backup & Restore',
 };
 
-const App = () => {
+function AppInner() {
+  const { user, login, logout } = useAuth();
   const [isSetup, setIsSetup] = useState(false);
-  const [user, setUser] = useState<{ id: number; username: string; role: string } | null>(null);
   const [view, setView] = useState('dashboard');
   const [schoolName, setSchoolName] = useState('');
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
@@ -51,7 +51,7 @@ const App = () => {
   }, [isSetup]);
 
   const handleLogout = () => {
-    setUser(null);
+    logout();
     setView('dashboard');
   };
 
@@ -67,22 +67,22 @@ const App = () => {
         </div>
       ) : !user ? (
         <div className="centered-card-container">
-          <LoginScreen onLoginSuccess={setUser} />
+          <LoginScreen onLoginSuccess={login} />
         </div>
       ) : (
         <div className="app-layout">
           <Sidebar activeView={view} onViewChange={setView} />
-          
+
           <main className="main-content">
             <TopBar
               pageTitle={pageTitles[view] || 'Dashboard'}
               schoolName={schoolName}
-              userName={user.username}
+              userName={user.full_name || user.username}
               userRole={user.role}
               onSettingsClick={() => setShowSettings(true)}
               onLogout={handleLogout}
             />
-            
+
             <div className="page-content">
               {view === 'dashboard' && <Dashboard />}
               {view === 'students' && <StudentManager />}
@@ -93,7 +93,7 @@ const App = () => {
               {view === 'backup' && <BackupManager />}
             </div>
           </main>
-          
+
           {showSettings && (
             <SettingsModal
               user={user}
@@ -106,7 +106,13 @@ const App = () => {
       )}
     </div>
   );
-};
+}
+
+const App = () => (
+  <AuthProvider>
+    <AppInner />
+  </AuthProvider>
+);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

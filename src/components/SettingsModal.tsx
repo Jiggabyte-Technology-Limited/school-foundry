@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import bcryptjs from 'bcryptjs';
 import { db } from '../lib/db-client';
 import HelpTooltip from './HelpTooltip';
 
@@ -20,7 +21,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [localSchoolName, setLocalSchoolName] = useState(schoolName);
   const [users, setUsers] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
-  const [newUser, setNewUser] = useState({ username: '', password: '', role: 'user' });
+  const [newUser, setNewUser] = useState({ full_name: '', username: '', password: '', role: 'bursar' });
   const [showAddUser, setShowAddUser] = useState(false);
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'school' | 'users' | 'print'>('school');
@@ -41,7 +42,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const loadUsers = async () => {
-    const result = await db.all('SELECT id, username, role, last_login_at FROM users ORDER BY id');
+    const result = await db.all(
+      'SELECT id, full_name, username, role, is_active, last_login_at FROM users WHERE is_active = 1 ORDER BY id'
+    );
     setUsers(result);
   };
 
@@ -110,34 +113,32 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleAddUser = async () => {
-    if (!newUser.username || !newUser.password) return;
-    
-    // Simple hash for demo - in production use proper hashing
-    const passwordHash = btoa(newUser.password);
-    
-    await db.run(
-      'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
-      [newUser.username, passwordHash, newUser.role]
+    if (!newUser.username || !newUser.password || !newUser.full_name) return;
+
+    const passwordHash = await bcryptjs.hash(newUser.password, 10);
+    const result = await db.run(
+      'INSERT INTO users (full_name, username, password_hash, role, created_by) VALUES (?, ?, ?, ?, ?)',
+      [newUser.full_name, newUser.username, passwordHash, newUser.role, user.id]
     );
-    
+
     await db.run(
-      'INSERT INTO activity_log (user_id, username, action, details) VALUES (?, ?, ?, ?)',
-      [user.id, user.username, 'user_created', `Created user: ${newUser.username} (${newUser.role})`]
+      'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+      [user.id, user.username, 'user_created', 'users', result.lastID, `Created user: ${newUser.full_name} (${newUser.role})`]
     );
-    
-    setNewUser({ username: '', password: '', role: 'user' });
+
+    setNewUser({ full_name: '', username: '', password: '', role: 'bursar' });
     setShowAddUser(false);
     loadUsers();
   };
 
-  const handleDeleteUser = async (userId: number, username: string) => {
+  const handleDeactivateUser = async (userId: number, username: string) => {
     if (userId === user.id) return;
-    if (!confirm(`Are you sure you want to delete user "${username}"?`)) return;
-    
-    await db.run('DELETE FROM users WHERE id = ?', [userId]);
+    if (!confirm(`Are you sure you want to deactivate user "${username}"?`)) return;
+
+    await db.run('UPDATE users SET is_active = 0 WHERE id = ?', [userId]);
     await db.run(
-      'INSERT INTO activity_log (user_id, username, action, details) VALUES (?, ?, ?, ?)',
-      [user.id, user.username, 'user_deleted', `Deleted user: ${username}`]
+      'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+      [user.id, user.username, 'user_deactivated', 'users', userId, `Deactivated user: ${username}`]
     );
     loadUsers();
   };
@@ -331,7 +332,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex-between mb-2">
                 <div className="flex-row gap-2" style={{ alignItems: 'center' }}>
                   <h3 className="settings-section-title" style={{ margin: 0 }}>User Management</h3>
-                  <HelpTooltip text="Manage who can access the system. Admins have full access, Users can manage students and payments." />
+                  <HelpTooltip text="Manage who can access the system. Admins have full access, Bursars can record payments and manage students, Viewers can only view reports." />
                 </div>
                 <button className="btn btn-primary" onClick={() => setShowAddUser(!showAddUser)}>
                   {showAddUser ? 'Cancel' : '+ Add User'}
@@ -343,6 +344,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   <h4 style={{ marginBottom: 16, color: 'var(--color-accent-teal)' }}>New User</h4>
                   <div className="flex-col gap-4">
                     <div className="flex-row gap-4" style={{ flexWrap: 'wrap' }}>
+                      <div className="flex-col flex-1" style={{ minWidth: 150 }}>
+                        <label className="settings-label">Full Name</label>
+                        <input
+                          type="text"
+                          className="input-default"
+                          placeholder="Enter full name"
+                          value={newUser.full_name}
+                          onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
+                        />
+                      </div>
                       <div className="flex-col flex-1" style={{ minWidth: 150 }}>
                         <label className="settings-label">Username</label>
                         <input
@@ -363,14 +374,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                         />
                       </div>
-                      <div className="flex-col" style={{ minWidth: 120 }}>
+                      <div className="flex-col" style={{ minWidth: 140 }}>
                         <label className="settings-label">Role</label>
                         <select
                           className="input-default"
                           value={newUser.role}
                           onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
                         >
-                          <option value="user">User</option>
+                          <option value="bursar">Bursar</option>
+                          <option value="viewer">Viewer</option>
                           <option value="admin">Admin</option>
                         </select>
                       </div>
@@ -397,10 +409,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   <tbody>
                     {users.map((u) => (
                       <tr key={u.id}>
-                        <td className="td-bold">{u.username}</td>
+                        <td className="td-bold">{u.full_name || u.username}</td>
                         <td>
-                          <span className={`status-badge ${u.role === 'admin' ? 'status-active' : 'status-paid'}`}>
-                            {u.role === 'admin' ? 'Admin' : 'User'}
+                          <span className={`status-badge ${u.role === 'admin' ? 'status-active' : u.role === 'bursar' ? 'status-paid' : 'status-pending'}`}>
+                            {u.role === 'admin' ? 'Admin' : u.role === 'bursar' ? 'Bursar' : 'Viewer'}
                           </span>
                         </td>
                         <td>{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : 'Never'}</td>
@@ -408,9 +420,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           {u.id !== user.id ? (
                             <button
                               className="btn btn-danger"
-                              onClick={() => handleDeleteUser(u.id, u.username)}
+                              onClick={() => handleDeactivateUser(u.id, u.full_name || u.username)}
                             >
-                              Delete
+                              Deactivate
                             </button>
                           ) : (
                             <span style={{ color: 'var(--color-sage-placeholder)', fontSize: '13px' }}>You</span>

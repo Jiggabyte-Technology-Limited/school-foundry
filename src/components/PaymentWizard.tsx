@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
+import { useAuth } from '../lib/auth-context';
 
 interface PaymentWizardProps {
   onClose: () => void;
@@ -26,6 +27,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
   onSuccess,
   preSelectedStudent 
 }) => {
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState<Step>(preSelectedStudent ? 'payment' : 'student');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -161,14 +163,14 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
     try {
       const amountCents = Math.round(parseFloat(form.amount) * 100);
       
-      await db.run(`
+      const result = await db.run(`
         INSERT INTO payments (student_id, year_id, term_id, receipt_number, amount_paid_cents)
         VALUES (?, ?, ?, ?, ?)
       `, [selectedStudentId, currentYear?.id, form.term_id, form.receipt_number, amountCents]);
 
       await db.run(
-        'INSERT INTO activity_log (action, details) VALUES (?, ?)',
-        ['payment_recorded', `Payment of $${form.amount} recorded for ${selectedStudent?.full_name} (${form.receipt_number})`]
+        'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+        [user?.id ?? null, user?.username ?? 'System', 'payment_recorded', 'payments', result.lastInsertRowid || result.lastID, `Payment of $${form.amount} recorded for ${selectedStudent?.full_name} (${form.receipt_number})`]
       );
 
       onSuccess();
@@ -469,7 +471,6 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                 <div style={{ 
                   display: 'flex', 
                   justifyContent: 'space-between',
-                  padding: '12px 0',
                   backgroundColor: 'var(--color-sage-cream)',
                   margin: '0 -20px',
                   padding: '12px 20px'

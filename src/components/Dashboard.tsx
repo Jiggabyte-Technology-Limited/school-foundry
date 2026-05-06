@@ -85,7 +85,7 @@ const Dashboard: React.FC = () => {
         SELECT al.*, u.username
         FROM activity_log al
         LEFT JOIN users u ON al.user_id = u.id
-        ORDER BY al.timestamp DESC
+        ORDER BY al.logged_at DESC
         LIMIT 10
       `);
 
@@ -338,7 +338,7 @@ const Dashboard: React.FC = () => {
             {stats.recentActivity.map((activity: any) => (
               <tr key={activity.id}>
                 <td style={{ fontSize: '13px', color: 'var(--color-sage-placeholder)' }}>
-                  {formatDate(activity.timestamp)}
+                  {formatDate(activity.logged_at)}
                 </td>
                 <td className="td-bold">{activity.username || 'System'}</td>
                 <td>

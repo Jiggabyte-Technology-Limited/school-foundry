@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
+import { useAuth } from '../lib/auth-context';
 
 interface AcademicYear {
   id: number;
@@ -32,6 +33,7 @@ interface FeeStructure {
 }
 
 const FeeStructureManager: React.FC = () => {
+  const { user } = useAuth();
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -100,10 +102,10 @@ const FeeStructureManager: React.FC = () => {
 
   const addYear = async () => {
     if (!yearLabel.trim()) return;
-    await db.run('INSERT INTO academic_years (label) VALUES (?)', [yearLabel]);
+    const result = await db.run('INSERT INTO academic_years (label) VALUES (?)', [yearLabel]);
     await db.run(
-      'INSERT INTO activity_log (action, details) VALUES (?, ?)',
-      ['year_added', `Added academic year: ${yearLabel}`]
+      'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+      [user?.id ?? null, user?.username ?? 'System', 'year_added', 'academic_years', result.lastInsertRowid || result.lastID, `Added academic year: ${yearLabel}`]
     );
     setYearLabel('');
     loadData();
@@ -111,10 +113,10 @@ const FeeStructureManager: React.FC = () => {
 
   const addGrade = async () => {
     if (!gradeLabel.trim()) return;
-    await db.run('INSERT INTO grades (label) VALUES (?)', [gradeLabel]);
+    const result = await db.run('INSERT INTO grades (label) VALUES (?)', [gradeLabel]);
     await db.run(
-      'INSERT INTO activity_log (action, details) VALUES (?, ?)',
-      ['grade_added', `Added grade: ${gradeLabel}`]
+      'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+      [user?.id ?? null, user?.username ?? 'System', 'grade_added', 'grades', result.lastInsertRowid || result.lastID, `Added grade: ${gradeLabel}`]
     );
     setGradeLabel('');
     loadData();
@@ -122,13 +124,13 @@ const FeeStructureManager: React.FC = () => {
 
   const addTerm = async () => {
     if (!selectedYear || !termForm.term_number || !termForm.label) return;
-    await db.run(
+    const result = await db.run(
       'INSERT INTO terms (year_id, term_number, label) VALUES (?, ?, ?)',
       [selectedYear, termForm.term_number, termForm.label]
     );
     await db.run(
-      'INSERT INTO activity_log (action, details) VALUES (?, ?)',
-      ['term_added', `Added term: ${termForm.label}`]
+      'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+      [user?.id ?? null, user?.username ?? 'System', 'term_added', 'terms', result.lastInsertRowid || result.lastID, `Added term: ${termForm.label}`]
     );
     setTermForm({ term_number: '', label: '' });
     loadTerms(selectedYear);
@@ -142,15 +144,15 @@ const FeeStructureManager: React.FC = () => {
     try {
       const amountCents = Math.round(parseFloat(feeForm.amount) * 100);
       
-      await db.run(`
+      const result = await db.run(`
         INSERT INTO fee_structure (year_id, term_id, grade_id, fee_type, amount_cents)
         VALUES (?, ?, ?, ?, ?)
       `, [feeForm.year_id, feeForm.term_id, feeForm.grade_id, feeForm.fee_type, amountCents]);
       
       const grade = grades.find(g => g.id === Number(feeForm.grade_id));
       await db.run(
-        'INSERT INTO activity_log (action, details) VALUES (?, ?)',
-        ['fee_added', `Added ${feeForm.fee_type} fee of $${feeForm.amount} for ${grade?.label}`]
+        'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+        [user?.id ?? null, user?.username ?? 'System', 'fee_added', 'fee_structure', result.lastInsertRowid || result.lastID, `Added ${feeForm.fee_type} fee of $${feeForm.amount} for ${grade?.label}`]
       );
       
       setShowFeeModal(false);

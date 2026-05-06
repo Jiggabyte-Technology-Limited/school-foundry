@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { db } from '../lib/db-client';
+import { useAuth } from '../lib/auth-context';
 
 const BackupManager: React.FC = () => {
+  const { user } = useAuth();
   const [loading, setLoading] = useState<'backup' | 'restore' | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -13,8 +15,8 @@ const BackupManager: React.FC = () => {
       if (success) {
         setMessage({ type: 'success', text: 'Backup created successfully! The file has been saved to your documents folder.' });
         await db.run(
-          'INSERT INTO activity_log (action, details) VALUES (?, ?)',
-          ['database_backup', 'Database backup created']
+          'INSERT INTO activity_log (user_id, username, action, entity, details) VALUES (?, ?, ?, ?, ?)',
+          [user?.id ?? null, user?.username ?? 'System', 'database_backup', 'app_settings', 'Database backup created']
         );
       } else {
         setMessage({ type: 'error', text: 'Backup failed. Please try again.' });

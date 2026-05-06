@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
+import { useAuth } from '../lib/auth-context';
 
 interface StudentWizardProps {
   onClose: () => void;
@@ -10,7 +11,7 @@ interface StudentWizardProps {
 
 type Step = 'details' | 'guardian' | 'enrollment' | 'confirm';
 
-const STEPS: { id: Step; label: string; icon: JSX.Element }[] = [
+const STEPS: { id: Step; label: string; icon: React.ReactElement }[] = [
   { 
     id: 'details', 
     label: 'Student Details',
@@ -39,6 +40,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
   currentYearId,
   preSelectedGrade 
 }) => {
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState<Step>('details');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -149,8 +151,8 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
       }
 
       await db.run(
-        'INSERT INTO activity_log (action, details) VALUES (?, ?)',
-        ['student_added', `Added new student: ${form.full_name}`]
+        'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+        [user?.id ?? null, user?.username ?? 'System', 'student_added', 'students', result.lastInsertRowid || result.lastID, `Added new student: ${form.full_name}`]
       );
 
       onSuccess();

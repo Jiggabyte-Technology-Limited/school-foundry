@@ -1,18 +1,28 @@
-import React from 'react';
+import React, { JSX } from 'react';
+import { useAuth } from '../lib/auth-context';
 
 interface SidebarProps {
   activeView: string;
   onViewChange: (view: string) => void;
 }
 
-const navItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'grid' },
-  { id: 'statements', label: 'Financial Statements', icon: 'file-text' },
-  { id: 'students', label: 'Enrolled Students', icon: 'users' },
-  { id: 'fees', label: 'Fee Structure', icon: 'dollar' },
-  { id: 'payments', label: 'Payments', icon: 'credit-card' },
-  { id: 'logs', label: 'Activity Logs', icon: 'list' },
-  { id: 'backup', label: 'Backup & Restore', icon: 'database' },
+type RoleAccess = 'admin' | 'bursar' | 'viewer';
+
+interface NavItem {
+  id: string;
+  label: string;
+  icon: string;
+  roles: RoleAccess[];
+}
+
+const allNavItems: NavItem[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: 'grid', roles: ['admin', 'bursar', 'viewer'] },
+  { id: 'statements', label: 'Financial Statements', icon: 'file-text', roles: ['admin', 'bursar', 'viewer'] },
+  { id: 'students', label: 'Enrolled Students', icon: 'users', roles: ['admin', 'bursar'] },
+  { id: 'fees', label: 'Fee Structure', icon: 'dollar', roles: ['admin'] },
+  { id: 'payments', label: 'Payments', icon: 'credit-card', roles: ['admin', 'bursar'] },
+  { id: 'logs', label: 'Activity Logs', icon: 'list', roles: ['admin'] },
+  { id: 'backup', label: 'Backup & Restore', icon: 'database', roles: ['admin'] },
 ];
 
 const iconPaths: Record<string, JSX.Element> = {
@@ -68,6 +78,10 @@ const iconPaths: Record<string, JSX.Element> = {
 };
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
+  const { user } = useAuth();
+  const role = (user?.role as RoleAccess) || 'viewer';
+  const navItems = allNavItems.filter(item => item.roles.includes(role));
+
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -82,7 +96,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
           <span className="sidebar-title-sub">Manager</span>
         </div>
       </div>
-      
+
       <nav className="sidebar-nav">
         {navItems.map((item) => (
           <button

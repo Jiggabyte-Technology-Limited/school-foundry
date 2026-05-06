@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import bcryptjs from 'bcryptjs';
 import { db } from '../lib/db-client';
 
 interface SetupWizardProps {
@@ -32,6 +33,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
 
   // Form data
   const [schoolName, setSchoolName] = useState('');
+  const [adminFullName, setAdminFullName] = useState('');
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -53,6 +55,10 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
         }
         break;
       case 'admin':
+        if (!adminFullName.trim()) {
+          setError('Please enter your full name');
+          return false;
+        }
         if (!adminUsername.trim()) {
           setError('Please enter a username');
           return false;
@@ -140,7 +146,11 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       await db.run('INSERT INTO app_settings (key, value) VALUES (?, ?)', ['school_name', schoolName]);
 
       // 2. Create admin user
-      await db.run('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', [adminUsername, adminPassword, 'admin']);
+      const passwordHash = await bcryptjs.hash(adminPassword, 10);
+      await db.run(
+        'INSERT INTO users (full_name, username, password_hash, role) VALUES (?, ?, ?, ?)',
+        [adminFullName, adminUsername, passwordHash, 'admin']
+      );
 
       // 3. Create academic year
       const yearResult = await db.run('INSERT INTO academic_years (label) VALUES (?)', [academicYear]);
@@ -159,8 +169,9 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       }
 
       // 6. Log setup completion
-      await db.run('INSERT INTO activity_log (action, details) VALUES (?, ?)', 
-        ['system_setup', `Initial setup completed for ${schoolName}`]
+      await db.run(
+        'INSERT INTO activity_log (action, entity, details) VALUES (?, ?, ?)',
+        ['system_setup', 'app_settings', `Initial setup completed for ${schoolName}`]
       );
 
       setCurrentStep('complete');
@@ -243,13 +254,22 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
             
             <div className="wizard-form">
               <div className="wizard-field">
+                <label>Full Name <span className="required">*</span></label>
+                <input
+                  type="text"
+                  value={adminFullName}
+                  onChange={(e) => setAdminFullName(e.target.value)}
+                  placeholder="e.g., John Smith"
+                  autoFocus
+                />
+              </div>
+              <div className="wizard-field">
                 <label>Username <span className="required">*</span></label>
                 <input
                   type="text"
                   value={adminUsername}
                   onChange={(e) => setAdminUsername(e.target.value)}
                   placeholder="Enter admin username"
-                  autoFocus
                 />
               </div>
               <div className="wizard-field">

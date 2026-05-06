@@ -7,7 +7,7 @@ interface LogEntry {
   username: string | null;
   action: string;
   details: string | null;
-  timestamp: string;
+  logged_at: string;
 }
 
 const ActivityLog: React.FC = () => {
@@ -35,7 +35,7 @@ const ActivityLog: React.FC = () => {
       SELECT al.*, u.username
       FROM activity_log al
       LEFT JOIN users u ON al.user_id = u.id
-      ORDER BY al.timestamp DESC
+      ORDER BY al.logged_at DESC
     `);
     setLogs(data);
     
@@ -62,12 +62,12 @@ const ActivityLog: React.FC = () => {
     }
     
     if (dateFrom) {
-      filtered = filtered.filter((l) => l.timestamp >= dateFrom);
+      filtered = filtered.filter((l) => l.logged_at >= dateFrom);
     }
     
     if (dateTo) {
       const toDateEnd = dateTo + 'T23:59:59';
-      filtered = filtered.filter((l) => l.timestamp <= toDateEnd);
+      filtered = filtered.filter((l) => l.logged_at <= toDateEnd);
     }
     
     setFilteredLogs(filtered);
@@ -80,8 +80,8 @@ const ActivityLog: React.FC = () => {
     setDateTo('');
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString('en-US', {
+  const formatLoggedAt = (logged_at: string) => {
+    return new Date(logged_at).toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -179,7 +179,7 @@ const ActivityLog: React.FC = () => {
         <table>
           <thead>
             <tr>
-              <th style={{ width: 160 }}>Timestamp</th>
+              <th style={{ width: 160 }}>Date &amp; Time</th>
               <th style={{ width: 100 }}>User</th>
               <th style={{ width: 140 }}>Action</th>
               <th>Details</th>
@@ -189,7 +189,7 @@ const ActivityLog: React.FC = () => {
             {filteredLogs.map((log) => (
               <tr key={log.id}>
                 <td style={{ fontSize: '13px', color: 'var(--color-sage-placeholder)' }}>
-                  {formatTimestamp(log.timestamp)}
+                  {formatLoggedAt(log.logged_at)}
                 </td>
                 <td className="td-bold">{log.username || 'System'}</td>
                 <td>

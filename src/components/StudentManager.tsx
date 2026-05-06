@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
+import { useAuth } from '../lib/auth-context';
 import StudentWizard from './StudentWizard';
 
 interface Student {
@@ -37,6 +38,7 @@ interface FinancialHistory {
 }
 
 const StudentManager: React.FC = () => {
+  const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
@@ -248,8 +250,8 @@ const StudentManager: React.FC = () => {
         }
         
         await db.run(
-          'INSERT INTO activity_log (action, details) VALUES (?, ?)',
-          ['student_updated', `Updated student: ${form.full_name}`]
+          'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+          [user?.id ?? null, user?.username ?? 'System', 'student_updated', 'students', editingStudent.id, `Updated student: ${form.full_name}`]
         );
       } else {
         // Add new student
@@ -272,8 +274,8 @@ const StudentManager: React.FC = () => {
         }
         
         await db.run(
-          'INSERT INTO activity_log (action, details) VALUES (?, ?)',
-          ['student_added', `Added new student: ${form.full_name}`]
+          'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+          [user?.id ?? null, user?.username ?? 'System', 'student_added', 'students', result.lastInsertRowid || result.lastID, `Added new student: ${form.full_name}`]
         );
       }
       
