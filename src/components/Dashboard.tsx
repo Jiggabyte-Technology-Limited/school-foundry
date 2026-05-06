@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
+import PaymentWizard from './PaymentWizard';
 
 interface GradeCount {
   label: string;
@@ -234,7 +235,7 @@ const Dashboard: React.FC = () => {
     <div className="dashboard">
       {/* Metrics Row */}
       <div className="metrics-row">
-        <div className="metric-card">
+        <div className="metric-card metric-card-info">
           <div className="metric-header">
             <span className="metric-title">Total Students</span>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -257,7 +258,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="metric-card">
+        <div className="metric-card metric-card-amber">
           <div className="metric-header">
             <span className="metric-title">Year&apos;s Fees</span>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -357,9 +358,9 @@ const Dashboard: React.FC = () => {
         </table>
       </div>
 
-      {/* Payment Modal */}
+      {/* Payment Wizard */}
       {showPaymentModal && (
-        <PaymentModal 
+        <PaymentWizard 
           onClose={() => setShowPaymentModal(false)} 
           onSuccess={() => {
             setShowPaymentModal(false);
@@ -367,191 +368,6 @@ const Dashboard: React.FC = () => {
           }}
         />
       )}
-    </div>
-  );
-};
-
-// Quick Payment Modal Component
-const PaymentModal: React.FC<{ onClose: () => void; onSuccess: () => void }> = ({ onClose, onSuccess }) => {
-  const [students, setStudents] = useState<any[]>([]);
-  const [years, setYears] = useState<any[]>([]);
-  const [terms, setTerms] = useState<any[]>([]);
-  const [form, setForm] = useState({
-    student_id: '',
-    year_id: '',
-    term_id: '',
-    amount: '',
-    receipt_number: '',
-  });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    if (form.year_id) {
-      loadTerms(Number(form.year_id));
-    }
-  }, [form.year_id]);
-
-  const loadData = async () => {
-    const [studentList, yearList] = await Promise.all([
-      db.all('SELECT id, full_name FROM students WHERE is_active = 1 ORDER BY full_name'),
-      db.all('SELECT id, label FROM academic_years ORDER BY label DESC'),
-    ]);
-    setStudents(studentList);
-    setYears(yearList);
-    
-    if (yearList.length > 0) {
-      setForm(f => ({ ...f, year_id: String(yearList[0].id) }));
-    }
-    
-    // Generate receipt number
-    const lastPayment = await db.get('SELECT receipt_number FROM payments ORDER BY id DESC LIMIT 1');
-    const nextNum = lastPayment 
-      ? String(parseInt(lastPayment.receipt_number.replace(/\D/g, '') || '0') + 1).padStart(6, '0')
-      : '000001';
-    setForm(f => ({ ...f, receipt_number: `RCP${nextNum}` }));
-  };
-
-  const loadTerms = async (yearId: number) => {
-    const termList = await db.all('SELECT id, label FROM terms WHERE year_id = ? ORDER BY term_number', [yearId]);
-    setTerms(termList);
-    if (termList.length > 0) {
-      setForm(f => ({ ...f, term_id: String(termList[0].id) }));
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    
-    if (!form.student_id || !form.year_id || !form.term_id || !form.amount) {
-      setError('Please fill in all required fields');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const amountCents = Math.round(parseFloat(form.amount) * 100);
-      
-      await db.run(`
-        INSERT INTO payments (student_id, year_id, term_id, receipt_number, amount_paid_cents)
-        VALUES (?, ?, ?, ?, ?)
-      `, [form.student_id, form.year_id, form.term_id, form.receipt_number, amountCents]);
-
-      const student = students.find(s => s.id === Number(form.student_id));
-      await db.run(`
-        INSERT INTO activity_log (action, details)
-        VALUES (?, ?)
-      `, ['payment_recorded', `Payment of $${form.amount} recorded for ${student?.full_name} (${form.receipt_number})`]);
-
-      onSuccess();
-    } catch (err: any) {
-      setError(err.message || 'Failed to record payment');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Record Payment</h2>
-          <button className="modal-close" onClick={onClose}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="modal-body">
-          {error && <div className="error-message mb-2">{error}</div>}
-
-          <div className="flex-col gap-4">
-            <div>
-              <label className="settings-label">Student *</label>
-              <select
-                className="input-default"
-                value={form.student_id}
-                onChange={e => setForm({ ...form, student_id: e.target.value })}
-                required
-              >
-                <option value="">Select Student</option>
-                {students.map(s => (
-                  <option key={s.id} value={s.id}>{s.full_name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex-row gap-2">
-              <div className="flex-1">
-                <label className="settings-label">Academic Year *</label>
-                <select
-                  className="input-default"
-                  value={form.year_id}
-                  onChange={e => setForm({ ...form, year_id: e.target.value })}
-                  required
-                >
-                  {years.map(y => (
-                    <option key={y.id} value={y.id}>{y.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="settings-label">Term *</label>
-                <select
-                  className="input-default"
-                  value={form.term_id}
-                  onChange={e => setForm({ ...form, term_id: e.target.value })}
-                  required
-                >
-                  {terms.map(t => (
-                    <option key={t.id} value={t.id}>{t.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex-row gap-2">
-              <div className="flex-1">
-                <label className="settings-label">Amount ($) *</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  className="input-default"
-                  value={form.amount}
-                  onChange={e => setForm({ ...form, amount: e.target.value })}
-                  placeholder="0.00"
-                  required
-                />
-              </div>
-              <div className="flex-1">
-                <label className="settings-label">Receipt Number</label>
-                <input
-                  type="text"
-                  className="input-default"
-                  value={form.receipt_number}
-                  onChange={e => setForm({ ...form, receipt_number: e.target.value })}
-                  readOnly
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex-row gap-2" style={{ marginTop: 24, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-sage" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Saving...' : 'Record Payment'}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 };
