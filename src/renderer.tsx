@@ -14,6 +14,7 @@ import FinancialStatements from './components/FinancialStatements';
 import ActivityLog from './components/ActivityLog';
 import BackupManager from './components/BackupManager';
 import SettingsModal from './components/SettingsModal';
+import { ToastProvider } from './components/Toast';
 
 const pageTitles: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -30,6 +31,7 @@ const App = () => {
   const [user, setUser] = useState<{ id: number; username: string; role: string } | null>(null);
   const [view, setView] = useState('dashboard');
   const [schoolName, setSchoolName] = useState('');
+  const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {

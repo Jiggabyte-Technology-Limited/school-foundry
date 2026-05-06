@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
+import StudentWizard from './StudentWizard';
 
 interface Student {
   id: number;
@@ -53,6 +54,7 @@ const StudentManager: React.FC = () => {
   
   // Modal
   const [showModal, setShowModal] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [form, setForm] = useState({
     full_name: '',
@@ -183,19 +185,8 @@ const StudentManager: React.FC = () => {
   };
 
   const openAddModal = () => {
-    setEditingStudent(null);
-    setForm({
-      full_name: '',
-      date_of_birth: '',
-      gender: '',
-      guardian_name: '',
-      guardian_contact: '',
-      guardian_name_2: '',
-      guardian_contact_2: '',
-      guardian_email: '',
-      grade_id: selectedGradeFilter ? String(selectedGradeFilter) : '',
-    });
-    setShowModal(true);
+    // Use wizard for adding new students
+    setShowWizard(true);
   };
 
   const openEditModal = (student: Student) => {
@@ -667,6 +658,19 @@ const StudentManager: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Add Student Wizard */}
+      {showWizard && (
+        <StudentWizard 
+          onClose={() => setShowWizard(false)} 
+          onSuccess={() => {
+            setShowWizard(false);
+            loadStudents();
+          }}
+          currentYearId={currentYear?.id}
+          preSelectedGrade={selectedGradeFilter || undefined}
+        />
       )}
     </div>
   );
