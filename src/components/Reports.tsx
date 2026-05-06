@@ -23,28 +23,48 @@ const Reports = () => {
   };
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <h1>Reports</h1>
+    <div>
+      <h1 className="mb-4">Reports</h1>
       
-      <h3>Individual Statement</h3>
-      <select onChange={(e) => setSelectedStudentId(e.target.value)} value={selectedStudentId}>
-        <option value="">Select Student</option>
-        {students.map((s: any) => (
-          <option key={s.id} value={s.id}>{s.full_name}</option>
-        ))}
-      </select>
-      <button onClick={generateStatement}>View Statement</button>
+      <div className="card mb-4 card-surface">
+        <h3 className="mb-2">Individual Statement</h3>
+        <div className="flex-row gap-4">
+          <select className="input-default" style={{ maxWidth: '300px' }} onChange={(e) => setSelectedStudentId(e.target.value)} value={selectedStudentId}>
+            <option value="">Select Student</option>
+            {students.map((s: any) => (
+              <option key={s.id} value={s.id}>{s.full_name}</option>
+            ))}
+          </select>
+          <button className="btn btn-primary" onClick={generateStatement}>View Statement</button>
+        </div>
+      </div>
 
       {statement && (
-        <div style={{ marginTop: '1rem', border: '1px solid #ccc', padding: '1rem' }}>
-          <h4>Payments for Student</h4>
-          <ul>
-            {statement.map((p: any) => (
-              <li key={p.id}>
-                Date: {p.payment_date} | Amount: ${p.amount_paid_cents / 100} | Receipt: {p.receipt_number}
-              </li>
-            ))}
-          </ul>
+        <div className="card">
+          <h4 className="mb-4">Payments for Student</h4>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Receipt</th>
+              </tr>
+            </thead>
+            <tbody>
+              {statement.map((p: any) => (
+                <tr key={p.id}>
+                  <td>{p.payment_date}</td>
+                  <td className="td-amount">${(p.amount_paid_cents / 100).toFixed(2)}</td>
+                  <td>{p.receipt_number}</td>
+                </tr>
+              ))}
+              {statement.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="table-empty">No payments found for this student.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

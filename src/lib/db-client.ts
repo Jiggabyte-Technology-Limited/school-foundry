@@ -10,10 +10,20 @@ declare global {
   }
 }
 
+const getApi = () => {
+  if (typeof window === 'undefined' || !window.api) {
+    throw new Error(
+      "Electron Database API (window.api) is not available. " +
+      "This usually means the preload script failed to load or you are running the app in a web browser instead of Electron."
+    );
+  }
+  return window.api;
+};
+
 export const db = {
-  all: (sql: string, params: any[] = []) => window.api.dbQuery(sql, params),
-  run: (sql: string, params: any[] = []) => window.api.dbRun(sql, params),
-  get: (sql: string, params: any[] = []) => window.api.dbGet(sql, params),
-  backup: () => window.api.fsBackup(),
-  restore: () => window.api.fsRestore(),
+  all: (sql: string, params: any[] = []) => getApi().dbQuery(sql, params),
+  run: (sql: string, params: any[] = []) => getApi().dbRun(sql, params),
+  get: (sql: string, params: any[] = []) => getApi().dbGet(sql, params),
+  backup: () => getApi().fsBackup(),
+  restore: () => getApi().fsRestore(),
 };

@@ -31,17 +31,30 @@ const PaymentManager = () => {
   };
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <h1>Record Payment</h1>
-      <select onChange={(e) => setSelectedStudentId(e.target.value)} value={selectedStudentId}>
-        <option value="">Select Student</option>
-        {students.map((s: any) => (
-          <option key={s.id} value={s.id}>{s.full_name}</option>
-        ))}
-      </select>
-      <input placeholder="Receipt Number" value={receiptNumber} onChange={(e) => setReceiptNumber(e.target.value)} />
-      <input type="number" placeholder="Amount ($)" value={amount} onChange={(e) => setAmount(e.target.value)} />
-      <button onClick={recordPayment}>Save Payment</button>
+    <div>
+      <h1 className="mb-4">Record Payment</h1>
+      <div className="card login-card" style={{ maxWidth: '600px' }}>
+        <div className="flex-col gap-4 mb-4">
+          <div>
+            <label className="mb-1 td-bold" style={{ display: 'block' }}>Student</label>
+            <select className="input-default" onChange={(e) => setSelectedStudentId(e.target.value)} value={selectedStudentId}>
+              <option value="">Select Student</option>
+              {students.map((s: any) => (
+                <option key={s.id} value={s.id}>{s.full_name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 td-bold" style={{ display: 'block' }}>Receipt Number</label>
+            <input className="input-default" placeholder="Receipt Number" value={receiptNumber} onChange={(e) => setReceiptNumber(e.target.value)} />
+          </div>
+          <div>
+            <label className="mb-1 td-bold" style={{ display: 'block' }}>Amount ($)</label>
+            <input className="input-default" type="number" placeholder="Amount ($)" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </div>
+        </div>
+        <button className="btn btn-primary" onClick={recordPayment}>Save Payment</button>
+      </div>
     </div>
   );
 };

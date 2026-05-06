@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
+import './index.css';
 import { db } from './lib/db-client';
 import SetupWizard from './components/SetupWizard';
 import LoginScreen from './components/LoginScreen';
@@ -24,33 +25,39 @@ const App = () => {
     checkSetup();
   }, []);
 
-  if (!isSetup) {
-    return <SetupWizard onComplete={() => setIsSetup(true)} />;
-  }
-
-  if (!user) {
-    return <LoginScreen onLoginSuccess={setUser} />;
-  }
-
   return (
-    <div>
-      <nav style={{ padding: '1rem', borderBottom: '1px solid #ccc' }}>
-        <button onClick={() => setView('dashboard')}>Dashboard</button>
-        <button onClick={() => setView('students')}>Students</button>
-        <button onClick={() => setView('fees')}>Fees</button>
-        <button onClick={() => setView('payments')}>Payments</button>
-        <button onClick={() => setView('reports')}>Reports</button>
-        <button onClick={() => setView('logs')}>Logs</button>
-        <button onClick={() => setView('backup')}>Backup/Restore</button>
-      </nav>
-
-      {view === 'dashboard' && <Dashboard />}
-      {view === 'students' && <StudentManager />}
-      {view === 'fees' && <FeeStructureManager />}
-      {view === 'payments' && <PaymentManager />}
-      {view === 'reports' && <Reports />}
-      {view === 'logs' && <ActivityLog />}
-      {view === 'backup' && <BackupManager />}
+    <div className="layout-wrapper">
+      {!isSetup ? (
+        <div className="centered-card-container">
+          <SetupWizard onComplete={() => setIsSetup(true)} />
+        </div>
+      ) : !user ? (
+        <div className="centered-card-container">
+          <LoginScreen onLoginSuccess={setUser} />
+        </div>
+      ) : (
+        <>
+          <nav className="navbar">
+            <button className={view === 'dashboard' ? 'active' : ''} onClick={() => setView('dashboard')}>Dashboard</button>
+            <button className={view === 'students' ? 'active' : ''} onClick={() => setView('students')}>Students</button>
+            <button className={view === 'fees' ? 'active' : ''} onClick={() => setView('fees')}>Fees</button>
+            <button className={view === 'payments' ? 'active' : ''} onClick={() => setView('payments')}>Payments</button>
+            <button className={view === 'reports' ? 'active' : ''} onClick={() => setView('reports')}>Reports</button>
+            <button className={view === 'logs' ? 'active' : ''} onClick={() => setView('logs')}>Logs</button>
+            <button className={view === 'backup' ? 'active' : ''} onClick={() => setView('backup')}>Backup/Restore</button>
+          </nav>
+          
+          <div className="page-container">
+            {view === 'dashboard' && <Dashboard />}
+            {view === 'students' && <StudentManager />}
+            {view === 'fees' && <FeeStructureManager />}
+            {view === 'payments' && <PaymentManager />}
+            {view === 'reports' && <Reports />}
+            {view === 'logs' && <ActivityLog />}
+            {view === 'backup' && <BackupManager />}
+          </div>
+        </>
+      )}
     </div>
   );
 };

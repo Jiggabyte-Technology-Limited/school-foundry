@@ -32,25 +32,55 @@ const FeeStructureManager = () => {
   };
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <h1>Fee Structure Management</h1>
+    <div>
+      <h1 className="mb-4">Fee Structure Management</h1>
       
-      <div>
-        <input placeholder="Year (e.g. 2026)" value={yearLabel} onChange={(e) => setYearLabel(e.target.value)} />
-        <button onClick={addYear}>Add Year</button>
+      <div className="flex-row gap-4 mb-4">
+        <div className="card-surface flex-1">
+          <h3 className="mb-2">Add Academic Year</h3>
+          <div className="flex-row gap-2">
+            <input className="input-default" placeholder="Year (e.g. 2026)" value={yearLabel} onChange={(e) => setYearLabel(e.target.value)} />
+            <button className="btn btn-primary" onClick={addYear}>Add Year</button>
+          </div>
+        </div>
+
+        <div className="card-surface flex-1">
+          <h3 className="mb-2">Add Grade Level</h3>
+          <div className="flex-row gap-2">
+            <input className="input-default" placeholder="Grade (e.g. Grade 7)" value={gradeLabel} onChange={(e) => setGradeLabel(e.target.value)} />
+            <button className="btn btn-primary" onClick={addGrade}>Add Grade</button>
+          </div>
+        </div>
       </div>
 
-      <div>
-        <input placeholder="Grade (e.g. Grade 7)" value={gradeLabel} onChange={(e) => setGradeLabel(e.target.value)} />
-        <button onClick={addGrade}>Add Grade</button>
+      <div className="card">
+        <h3 className="mb-4">Current Fees</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Academic Year</th>
+              <th>Grade</th>
+              <th>Fee Type</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fees.map((f: any) => (
+              <tr key={f.id}>
+                <td>{f.year}</td>
+                <td>{f.grade}</td>
+                <td>{f.fee_type}</td>
+                <td className="td-amount">${(f.amount_cents / 100).toFixed(2)}</td>
+              </tr>
+            ))}
+            {fees.length === 0 && (
+              <tr>
+                <td colSpan={4} className="table-empty">No fee structures defined.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
-
-      <h3>Current Fees</h3>
-      <ul>
-        {fees.map((f: any) => (
-          <li key={f.id}>{f.year} - {f.grade} - {f.fee_type}: ${f.amount_cents / 100}</li>
-        ))}
-      </ul>
     </div>
   );
 };

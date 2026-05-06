@@ -13,10 +13,15 @@ const BackupManager = () => {
   };
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <h1>Backup & Restore</h1>
-      <button onClick={handleBackup} style={{ marginRight: '1rem' }}>Backup Database</button>
-      <button onClick={handleRestore}>Restore Database</button>
+    <div>
+      <h1 className="mb-4">Backup & Restore</h1>
+      <div className="card login-card" style={{ maxWidth: '500px' }}>
+        <p className="mb-4">Create a secure backup of your school's database, or restore from a previous backup file.</p>
+        <div className="flex-row gap-4">
+          <button className="btn btn-primary flex-1" onClick={handleBackup}>Backup Database</button>
+          <button className="btn btn-danger flex-1" onClick={handleRestore}>Restore Database</button>
+        </div>
+      </div>
     </div>
   );
 };
