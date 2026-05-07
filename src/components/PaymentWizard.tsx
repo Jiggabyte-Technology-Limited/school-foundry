@@ -95,16 +95,42 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
       setForm(f => ({ ...f, receipt_number: `RCP${nextNum}` }));
 
       if (preSelectedStudent) {
-        loadStudentDetails(preSelectedStudent);
+        const student = studentList.find(s => s.id === preSelectedStudent);
+        if (student) {
+          setSelectedStudent(student);
+        } else {
+          const studentData = await db.get(`
+            SELECT s.id, s.full_name, g.label as grade_label,
+              COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
+              COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as balance
+            FROM students s
+            JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
+            JOIN grades g ON sye.grade_id = g.id
+            WHERE s.id = ?
+          `, [yearData.id, yearData.id, yearData.id, preSelectedStudent]);
+          if (studentData) setSelectedStudent(studentData);
+        }
       }
     }
   };
 
   const loadStudentDetails = async (studentId: number) => {
+    // Try to find in current students list first
     const student = students.find(s => s.id === studentId);
     if (student) {
       setSelectedStudent(student);
-    } else if (currentYear) {
+      return;
+    }
+
+    // If not found (or list empty), fetch from DB
+    // Use currentYear if available, otherwise fetch latest year
+    let yearId = currentYear?.id;
+    if (!yearId) {
+        const yearData = await db.get('SELECT id FROM academic_years ORDER BY label DESC LIMIT 1');
+        yearId = yearData?.id;
+    }
+
+    if (yearId) {
       const studentData = await db.get(`
         SELECT s.id, s.full_name, g.label as grade_label,
           COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
@@ -113,8 +139,8 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
         JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
         JOIN grades g ON sye.grade_id = g.id
         WHERE s.id = ?
-      `, [currentYear.id, currentYear.id, currentYear.id, studentId]);
-      setSelectedStudent(studentData);
+      `, [yearId, yearId, yearId, studentId]);
+      if (studentData) setSelectedStudent(studentData);
     }
   };
 
@@ -159,29 +185,61 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
   };
 
   const handleSubmit = async () => {
+    if (!selectedStudent || !currentYear) return;
     setIsLoading(true);
     setError('');
 
     try {
       const amountCents = Math.round(parseFloat(form.amount) * 100);
       
+      // Get the student's current grade for this year
+      const enrollment = await db.get(
+        'SELECT grade_id FROM student_year_enrollment WHERE student_id = ? AND year_id = ?',
+        [selectedStudent.id, currentYear.id]
+      );
+
+      if (!enrollment) {
+        throw new Error('Student is not enrolled for the selected academic year.');
+      }
+
       const result = await db.run(`
-        INSERT INTO payments (student_id, year_id, term_id, receipt_number, amount_paid_cents, payment_date)
-        VALUES (?, ?, ?, ?, ?, datetime('now'))
-      `, [selectedStudentId, currentYear?.id, form.term_id, form.receipt_number, amountCents]);
+        INSERT INTO payments (
+            student_id, 
+            year_id, 
+            term_id, 
+            grade_id,
+            receipt_number, 
+            amount_paid_cents, 
+            payment_date, 
+            payment_method,
+            notes,
+            recorded_by
+        )
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?)
+      `, [
+          selectedStudent.id, 
+          currentYear.id, 
+          form.term_id, 
+          enrollment.grade_id,
+          form.receipt_number, 
+          amountCents, 
+          form.payment_method,
+          form.notes,
+          user?.id || 1 // Fallback to 1 if no user (should not happen with auth)
+      ]);
 
       const paymentDetails = {
         receipt_number: form.receipt_number,
-        student_name: selectedStudent?.full_name || '',
+        student_name: selectedStudent.full_name,
         amount_paid_cents: amountCents,
         payment_date: new Date().toISOString(),
-        year_label: currentYear?.label || '',
+        year_label: currentYear.label,
         term_label: getSelectedTermLabel()
       };
 
       await db.run(
         'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
-        [user?.id ?? null, user?.username ?? 'System', 'payment_recorded', 'payments', result.lastInsertRowid || result.lastID, `Payment of $${form.amount} recorded for ${selectedStudent?.full_name} (${form.receipt_number})`]
+        [user?.id ?? null, user?.username ?? 'System', 'payment_recorded', 'payments', result.lastInsertRowid || result.lastID, `Payment of $${form.amount} recorded for ${selectedStudent.full_name} (${form.receipt_number})`]
       );
 
       setShowReceipt(paymentDetails);
@@ -288,7 +346,18 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
               Enter the payment information.
             </p>
 
-            {selectedStudent && (
+            {!selectedStudent ? (
+              <div style={{ 
+                backgroundColor: 'var(--color-sage-cream)', 
+                padding: '24px', 
+                borderRadius: 'var(--border-radius-md)',
+                marginBottom: 20,
+                textAlign: 'center',
+                color: 'var(--color-sage-placeholder)'
+              }}>
+                Loading student records...
+              </div>
+            ) : (
               <div style={{ 
                 backgroundColor: 'var(--color-sage-cream)', 
                 padding: 16, 
@@ -393,10 +462,9 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                     onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
                   >
                     <option value="cash">Cash</option>
-                    <option value="check">Check</option>
-                    <option value="transfer">Bank Transfer</option>
-                    <option value="card">Card</option>
-                    <option value="other">Other</option>
+                    <option value="ecocash">EcoCash / Mobile</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="other">Other Method</option>
                   </select>
                 </div>
               </div>
