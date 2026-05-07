@@ -132,15 +132,15 @@ const FinancialStatements: React.FC = () => {
 
       {step === 3 && statementData && (
         <div className="card print-only" style={{ padding: '40px', backgroundColor: 'white' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px' }}>
-                <div style={{ width: 80, height: 80, border: '1px solid #eee', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Logo</div>
-                <div style={{ textAlign: 'right' }}><h1>{schoolName}</h1><p>Generated: {statementData.generatedAt}</p></div>
+            <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                <h1 style={{ margin: '0 0 16px 0' }}>{schoolName}</h1>
+                <p style={{ margin: '0', fontSize: '12px', color: '#666' }}>Generated: {statementData.generatedAt}</p>
             </div>
             
             {statementData.type === 'individual' ? (
                 <div>
                     <h3>{statementData.student.full_name} (Grade: {statementData.student.grade_label})</h3>
-                    <p><strong>Guardian:</strong> {statementData.student.guardian_name} | <strong>Phone:</strong> {statementData.student.guardian_contact}</p>
+                    <p><strong>Guardian:</strong> {statementData.student.guardian_name}{statementData.student.guardian_name_2 ? `, ${statementData.student.guardian_name_2}` : ''} | <strong>Phone:</strong> {statementData.student.guardian_contact}{statementData.student.guardian_contact_2 ? `, ${statementData.student.guardian_contact_2}` : ''}</p>
                     <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 20 }}>
                         <thead><tr style={{ borderBottom: '2px solid #333' }}><th style={{ padding: '10px', textAlign: 'left' }}>Date</th><th style={{ padding: '10px', textAlign: 'left' }}>Description</th><th style={{ padding: '10px', textAlign: 'right' }}>Amount</th></tr></thead>
                         <tbody>

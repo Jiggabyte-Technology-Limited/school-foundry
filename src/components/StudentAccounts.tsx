@@ -320,6 +320,11 @@ const StudentAccounts: React.FC = () => {
                 ) : statementData ? (
                     <>
                         <div style={{ textAlign: 'center', borderBottom: '2px solid rgba(249, 115, 22, 0.1)', paddingBottom: '32px', marginBottom: '32px' }}>
+                            {selectedStudent?.school_logo && (
+                                <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'center' }}>
+                                    <img src={selectedStudent.school_logo} alt="School Logo" style={{ maxHeight: '80px', maxWidth: '200px' }} />
+                                </div>
+                            )}
                             <h2 style={{ fontSize: '28px', fontWeight: 800, margin: '0 0 4px 0', letterSpacing: '-0.02em' }} className="text-display">{schoolName}</h2>
                             <div className="metric-label" style={{ margin: 0, opacity: 0.5 }}>Statement of Account • {statementData.generatedAt}</div>
                         </div>
@@ -338,23 +343,13 @@ const StudentAccounts: React.FC = () => {
                                 </div>
                                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }} className="text-display">
                                     <div style={{ marginBottom: '4px' }}>
-                                        <span className="metric-label" style={{ fontSize: '10px', marginRight: '8px' }}>Primary Guardian</span>
-                                        <span style={{ fontWeight: 600 }}>{statementData.student.guardian_name}</span>
+                                        <span className="metric-label" style={{ fontSize: '10px', marginRight: '8px' }}>Guardian</span>
+                                        <span style={{ fontWeight: 600 }}>{statementData.student.guardian_name}
+                                        {statementData.student.guardian_name_2 && `, ${statementData.student.guardian_name_2}`}</span>
                                         <span style={{ margin: '0 8px', opacity: 0.3 }}>|</span>
-                                        <span className="text-mono">{statementData.student.guardian_contact}</span>
+                                        <span className="text-mono">{statementData.student.guardian_contact}
+                                        {statementData.student.guardian_contact_2 && `, ${statementData.student.guardian_contact_2}`}</span>
                                     </div>
-                                    {statementData.student.guardian_name_2 && (
-                                        <div style={{ marginBottom: '4px' }}>
-                                            <span className="metric-label" style={{ fontSize: '10px', marginRight: '8px' }}>Secondary Guardian</span>
-                                            <span style={{ fontWeight: 600 }}>{statementData.student.guardian_name_2}</span>
-                                            {statementData.student.guardian_contact_2 && (
-                                                <>
-                                                    <span style={{ margin: '0 8px', opacity: 0.3 }}>|</span>
-                                                    <span className="text-mono">{statementData.student.guardian_contact_2}</span>
-                                                </>
-                                            )}
-                                        </div>
-                                    )}
                                     {statementData.student.guardian_email && (
                                         <div>
                                             <span className="metric-label" style={{ fontSize: '10px', marginRight: '8px' }}>Email Address</span>
@@ -457,30 +452,26 @@ const StudentAccounts: React.FC = () => {
 
                         {statementData.upcoming && statementData.upcoming.length > 0 && (
                             <div style={{ marginTop: '40px' }}>
-                                <div className="metric-label" style={{ marginBottom: '16px', opacity: 0.5 }}>Upcoming Academic Schedule</div>
-                                <div style={{ backgroundColor: 'var(--secondary)', borderRadius: '16px', padding: '24px', border: '1px solid var(--border)' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <div className="metric-label" style={{ marginBottom: '16px', opacity: 0.5 }}>Upcoming Fees</div>
+                                <div style={{ backgroundColor: 'var(--secondary)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border)' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                                         <thead>
                                             <tr>
-                                                <th style={{ background: 'transparent', padding: '0 0 12px 0' }}>Term</th>
-                                                <th style={{ background: 'transparent', padding: '0 0 12px 0' }}>Expected Start</th>
-                                                <th style={{ background: 'transparent', padding: '0 0 12px 0', textAlign: 'right' }}>Projected Fee</th>
+                                                <th style={{ background: 'transparent', padding: '0 0 8px 0', textAlign: 'left', fontWeight: 700 }}>Term</th>
+                                                <th style={{ background: 'transparent', padding: '0 0 8px 0', textAlign: 'left', fontWeight: 700 }}>Expected Start</th>
+                                                <th style={{ background: 'transparent', padding: '0 0 8px 0', textAlign: 'right', fontWeight: 700 }}>Fees</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {statementData.upcoming.map((u: any, i: number) => (
                                                 <tr key={`up-${i}`}>
-                                                    <td style={{ padding: '12px 0', fontWeight: 700 }} className="text-display">{u.term_label}</td>
-                                                    <td style={{ padding: '12px 0' }} className="text-mono">{u.start_date || 'TBA'}</td>
-                                                    <td style={{ padding: '12px 0', textAlign: 'right', fontWeight: 700 }} className="text-mono">${(u.amount/100).toFixed(2)}</td>
+                                                    <td style={{ padding: '6px 0', fontWeight: 600 }} className="text-display">{u.term_label}</td>
+                                                    <td style={{ padding: '6px 0' }} className="text-mono">{u.start_date || 'TBA'}</td>
+                                                    <td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 700 }} className="text-mono">${(u.amount/100).toFixed(2)}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                     </table>
-                                    <div style={{ marginTop: '16px', padding: '12px', backgroundColor: 'rgba(249, 115, 22, 0.05)', borderRadius: '8px', fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '8px' }}>
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                                        <span>Projections based on current approved fee structure for this academic year.</span>
-                                    </div>
                                 </div>
                             </div>
                         )}
