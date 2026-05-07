@@ -20,6 +20,8 @@ const StudentAccounts: React.FC = () => {
   const [schoolName, setSchoolName] = useState('School Management');
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [overviewData, setOverviewData] = useState<any>(null);
+  const [isOverviewLoading, setIsOverviewLoading] = useState(false);
 
   useEffect(() => { loadInitialData(); }, []);
 
@@ -59,8 +61,51 @@ const StudentAccounts: React.FC = () => {
 
   // Load students whenever year changes
   useEffect(() => { 
-    if (selectedYear) loadStudents(selectedGrade); 
+    if (selectedYear) {
+        loadStudents(selectedGrade); 
+        if (!selectedStudent) {
+            loadOverview(selectedYear, selectedGrade);
+        }
+    }
   }, [selectedYear, selectedGrade]);
+
+  const loadOverview = async (yearId: number, gradeId: number | null) => {
+    setIsOverviewLoading(true);
+    try {
+        let invoicedQuery = `
+            SELECT SUM(fs.amount_cents) as total
+            FROM fee_structure fs
+            JOIN student_year_enrollment sye ON fs.year_id = sye.year_id AND fs.grade_id = sye.grade_id
+            WHERE fs.year_id = ?`;
+        let paidQuery = `SELECT SUM(amount_paid_cents) as total FROM payments WHERE year_id = ? AND is_voided = 0`;
+        const params: any[] = [yearId];
+
+        if (gradeId) {
+            invoicedQuery += ` AND fs.grade_id = ?`;
+            paidQuery += ` AND grade_id = ?`;
+            params.push(gradeId);
+        }
+
+        const [invoicedResult, paidResult] = await Promise.all([
+            db.get(invoicedQuery, params),
+            db.get(paidQuery, params)
+        ]);
+
+        const totalInvoiced = invoicedResult?.total || 0;
+        const totalPaid = paidResult?.total || 0;
+        
+        setOverviewData({
+            totalInvoiced,
+            totalPaid,
+            balance: totalInvoiced - totalPaid,
+            isGrade: !!gradeId
+        });
+    } catch (err) {
+        console.error('Error loading overview:', err);
+    } finally {
+        setIsOverviewLoading(false);
+    }
+  };
 
   // Keep loadStudents as it was, but remove the second useEffect call.
 
@@ -119,8 +164,21 @@ const StudentAccounts: React.FC = () => {
         <div className="card mb-4">
           <label className="settings-label">Filter by Grade/Form</label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '16px' }}>
-             <button className={`btn ${selectedGrade === null ? 'btn-primary' : 'btn-sage'}`} onClick={() => setSelectedGrade(null)}>All</button>
-             {grades.map(g => <button key={g.id} className={`btn ${selectedGrade === g.id ? 'btn-primary' : 'btn-sage'}`} onClick={() => setSelectedGrade(g.id)}>{g.label}</button>)}
+             <button 
+                className={`btn ${selectedGrade === null ? 'btn-primary' : 'btn-sage'}`} 
+                onClick={() => { setSelectedGrade(null); setSelectedStudent(null); setShowPrintView(false); }}
+            >
+                All
+            </button>
+             {grades.map(g => (
+                <button 
+                    key={g.id} 
+                    className={`btn ${selectedGrade === g.id ? 'btn-primary' : 'btn-sage'}`} 
+                    onClick={() => { setSelectedGrade(g.id); setSelectedStudent(null); setShowPrintView(false); }}
+                >
+                    {g.label}
+                </button>
+            ))}
           </div>
           <input className="input-default" placeholder="Search by name or ID..." onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
@@ -156,10 +214,11 @@ const StudentAccounts: React.FC = () => {
         </div>
       </div>
 
-      {/* RIGHT: Statement Preview */}
+      {/* RIGHT: Statement Preview OR Dashboard Overview */}
       <div>
           {showPrintView && selectedStudent ? (
             <div className="card" style={{ padding: '32px', backgroundColor: 'white', minHeight: '400px', position: 'relative' }}>
+                {/* ... (Existing Student Statement UI) ... */}
                 {isLoadingDetail && (
                     <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
                         <div className="flex-col items-center">
@@ -259,6 +318,79 @@ const StudentAccounts: React.FC = () => {
                     </div>
                 )}
             </div>
+          ) : overviewData ? (
+            <div className="card" style={{ padding: '32px', backgroundColor: 'white', minHeight: '400px', position: 'relative' }}>
+                <div style={{ textAlign: 'center', borderBottom: '2px solid var(--color-deep-olive)', paddingBottom: 20, marginBottom: 24 }}>
+                    <h2 style={{ fontSize: 24, marginBottom: 4 }}>{schoolName}</h2>
+                    <p style={{ color: 'var(--color-sage-placeholder)', fontSize: 14 }}>
+                        {overviewData.isGrade ? `Grade: ${grades.find(g => g.id === selectedGrade)?.label}` : 'School Financial Overview'} | {new Date().toLocaleDateString()}
+                    </p>
+                </div>
+
+                {/* Summary Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 32 }}>
+                    <div className="card-surface" style={{ padding: 16 }}>
+                        <p style={{ fontSize: 12, color: 'var(--color-sage-placeholder)', margin: '0 0 4px' }}>Total Invoiced</p>
+                        <p style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>${(overviewData.totalInvoiced/100).toFixed(2)}</p>
+                    </div>
+                    <div className="card-surface" style={{ padding: 16 }}>
+                        <p style={{ fontSize: 12, color: 'var(--color-sage-placeholder)', margin: '0 0 4px' }}>Total Paid</p>
+                        <p style={{ fontSize: 20, fontWeight: 700, margin: 0, color: 'var(--color-accent-emerald)' }}>${(overviewData.totalPaid/100).toFixed(2)}</p>
+                    </div>
+                    <div className="card-surface" style={{ padding: 16, border: '1px solid var(--color-sage-border)' }}>
+                        <p style={{ fontSize: 12, color: 'var(--color-sage-placeholder)', margin: '0 0 4px' }}>Outstanding</p>
+                        <p style={{ fontSize: 20, fontWeight: 700, margin: 0, color: overviewData.balance > 0 ? 'var(--color-posthog-orange)' : 'var(--color-accent-emerald)' }}>
+                            ${(overviewData.balance/100).toFixed(2)}
+                        </p>
+                    </div>
+                </div>
+
+                <h4 style={{ fontSize: 16, marginBottom: 12 }}>
+                    {overviewData.isGrade ? 'Student Payment Status' : 'Grade-wise Breakdown'}
+                </h4>
+                <div style={{ maxHeight: '50vh', overflowY: 'auto' }}>
+                    <table style={{ width: '100%' }}>
+                        <thead>
+                            <tr style={{ background: 'var(--color-sage-cream)' }}>
+                                <th>{overviewData.isGrade ? 'Student Name' : 'Grade'}</th>
+                                <th style={{ textAlign: 'right' }}>{overviewData.isGrade ? 'Balance' : 'Outstanding'}</th>
+                                <th style={{ textAlign: 'center', width: 100 }}>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {overviewData.isGrade ? (
+                                students.map(s => (
+                                    <tr key={s.id} onClick={() => viewStatement(s)} style={{ cursor: 'pointer' }}>
+                                        <td style={{ fontSize: 14 }}>{s.full_name}</td>
+                                        <td style={{ textAlign: 'right', fontSize: 14, fontWeight: 600 }}>${(s.balance/100).toFixed(2)}</td>
+                                        <td style={{ textAlign: 'center' }}>
+                                            <span className={`status-badge ${s.balance > 0 ? 'status-outstanding' : 'status-paid'}`} style={{ fontSize: 11 }}>
+                                                {s.balance > 0 ? 'Owing' : 'Paid'}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                grades.map(g => {
+                                    const gradeStudents = students.filter(s => s.grade_id === g.id);
+                                    const gradeOutstanding = gradeStudents.reduce((sum, s) => sum + s.balance, 0);
+                                    return (
+                                        <tr key={g.id}>
+                                            <td style={{ fontSize: 14 }}>{g.label}</td>
+                                            <td style={{ textAlign: 'right', fontSize: 14, fontWeight: 600 }}>${(gradeOutstanding/100).toFixed(2)}</td>
+                                            <td style={{ textAlign: 'center' }}>
+                                                <span className={`status-badge ${gradeOutstanding > 0 ? 'status-outstanding' : 'status-paid'}`} style={{ fontSize: 11 }}>
+                                                    {gradeOutstanding > 0 ? 'Owing' : 'Cleared'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
           ) : (
             <div className="card" style={{ padding: '40px', textAlign: 'center', color: '#999', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3 }}>
@@ -267,7 +399,7 @@ const StudentAccounts: React.FC = () => {
                     <line x1="7" y1="15" x2="7.01" y2="15" />
                     <line x1="11" y1="15" x2="11.01" y2="15" />
                 </svg>
-                Select a student to view their detailed financial account
+                Loading overview...
             </div>
           )}
       </div>
