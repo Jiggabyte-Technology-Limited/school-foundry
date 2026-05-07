@@ -1,12 +1,55 @@
 :root {
+  /* Primary Colors */
   --primary: #F97316;
   --secondary: #F5F4EF;
   --background: #F5F4EF;
   --surface: #FFFFFF;
+  
+  /* Text Colors */
   --text-primary: #111827;
   --text-secondary: #4B5563;
+  
+  /* Border */
   --border: #E5E7EB;
-  --font-display: 'Inter', sans-serif;
-  --font-body: 'Inter', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  
+  /* Typography */
+  --font-display: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'Source Code Pro', monospace;
+  
+  /* Accent Colors - Teal */
+  --color-accent-teal: #14B8A6;
+  --color-accent-teal-light: #CCFBF1;
+  
+  /* Accent Colors - Amber */
+  --color-accent-amber: #F59E0B;
+  --color-accent-amber-light: #FEF3C7;
+  
+  /* Accent Colors - Blue */
+  --color-accent-blue: #3B82F6;
+  --color-accent-blue-light: #DBEAFE;
+  
+  /* Accent Colors - Emerald */
+  --color-accent-emerald: #10B981;
+  --color-accent-emerald-light: #D1FAE5;
+  
+  /* General Accent */
+  --color-accent: #F97316;
+  
+  /* Sage/Olive Colors */
+  --color-sage-cream: #F5F4EF;
+  --color-sage-border: #E5E7EB;
+  --color-olive-ink: #4B5563;
+  --color-sage-placeholder: #9CA3AF;
+  --color-light-sage: #F9FAFB;
+  --color-deep-olive: #374151;
+  
+  /* PostHog Orange (for delete actions) */
+  --color-posthog-orange: #EF4444;
+  
+  /* Border Radius */
+  --border-radius-sm: 6px;
+  --border-radius-md: 12px;
+  --border-radius-lg: 16px;
+  --border-radius-xl: 20px;
 }
