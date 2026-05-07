@@ -39,7 +39,7 @@ const FinancialStatements: React.FC = () => {
     if (!selectedYear) return;
     let query = `
       SELECT s.id, s.full_name, g.label as grade_label, g.id as grade_id, s.guardian_name, s.guardian_contact,
-        COALESCE((SELECT SUM(amount_cents) FROM fee_structure WHERE year_id = ? AND grade_id = sye.grade_id), 0) -
+        COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
         COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as balance
       FROM students s
       JOIN student_year_enrollment sye ON s.id = sye.student_id
@@ -62,8 +62,8 @@ const FinancialStatements: React.FC = () => {
     if (statementType === 'individual' && selectedStudent) {
         const student = students.find(s => s.id === selectedStudent);
         const [payments, fees] = await Promise.all([
-            db.all('SELECT payment_date as date, receipt_number as ref, amount_paid_cents as amount, "Payment" as type FROM payments WHERE student_id = ? ORDER BY payment_date', [selectedStudent]),
-            db.all('SELECT description, amount_cents as amount, "Fee" as type FROM fee_structure WHERE grade_id = ? AND year_id = ?', [student?.grade_id, selectedYear])
+            db.all('SELECT payment_date as date, receipt_number as ref, amount_paid_cents as amount, "Payment" as type FROM payments WHERE student_id = ? AND year_id = ? ORDER BY payment_date', [selectedStudent, selectedYear]),
+            db.all('SELECT fs.description, fs.amount_cents as amount, "Fee" as type FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.grade_id = ? AND fs.year_id = ? AND (t.start_date IS NULL OR t.start_date <= date('now'))', [student?.grade_id, selectedYear])
         ]);
         setStatementData({ type: 'individual', student, payments, fees, generatedAt: new Date().toLocaleDateString() });
     } else if (statementType === 'class') {

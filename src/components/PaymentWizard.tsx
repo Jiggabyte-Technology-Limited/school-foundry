@@ -69,7 +69,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
       const [studentList, termList] = await Promise.all([
         db.all(`
           SELECT s.id, s.full_name, g.label as grade_label,
-            COALESCE((SELECT SUM(amount_cents) FROM fee_structure WHERE year_id = ? AND grade_id = sye.grade_id), 0) -
+            COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
             COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as balance
           FROM students s
           JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
@@ -107,7 +107,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
     } else if (currentYear) {
       const studentData = await db.get(`
         SELECT s.id, s.full_name, g.label as grade_label,
-          COALESCE((SELECT SUM(amount_cents) FROM fee_structure WHERE year_id = ? AND grade_id = sye.grade_id), 0) -
+          COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
           COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as balance
         FROM students s
         JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?

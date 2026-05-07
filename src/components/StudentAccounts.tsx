@@ -42,7 +42,7 @@ const StudentAccounts: React.FC = () => {
     // Using LEFT JOIN to ensure students are at least listed even if something is slightly off with enrollment
     let query = `
       SELECT s.id, s.full_name, g.label as grade_label, g.id as grade_id, s.guardian_name, s.guardian_contact,
-        COALESCE((SELECT SUM(amount_cents) FROM fee_structure WHERE year_id = ? AND grade_id = sye.grade_id), 0) -
+        COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
         COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as balance
       FROM students s
       LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
@@ -76,7 +76,8 @@ const StudentAccounts: React.FC = () => {
             SELECT SUM(fs.amount_cents) as total
             FROM fee_structure fs
             JOIN student_year_enrollment sye ON fs.year_id = sye.year_id AND fs.grade_id = sye.grade_id
-            WHERE fs.year_id = ?`;
+            JOIN terms t ON fs.term_id = t.id
+            WHERE fs.year_id = ? AND (t.start_date IS NULL OR t.start_date <= date('now'))`;
         let paidQuery = `SELECT SUM(amount_paid_cents) as total FROM payments WHERE year_id = ? AND is_voided = 0`;
         const params: any[] = [yearId];
 
@@ -107,9 +108,6 @@ const StudentAccounts: React.FC = () => {
     }
   };
 
-  // Keep loadStudents as it was, but remove the second useEffect call.
-
-
   const viewStatement = async (student: Student) => {
     setSelectedStudent(student);
     setIsLoadingDetail(true);
@@ -130,7 +128,8 @@ const StudentAccounts: React.FC = () => {
                        t.label as term_label, fs.fee_type
                 FROM fee_structure fs
                 LEFT JOIN terms t ON fs.term_id = t.id
-                WHERE fs.grade_id = ? AND fs.year_id = ?`, [student.grade_id, selectedYear])
+                WHERE fs.grade_id = ? AND fs.year_id = ?
+                AND (t.start_date IS NULL OR t.start_date <= date('now'))`, [student.grade_id, selectedYear])
         ]);
         
         const totalFees = fees.reduce((sum: number, f: any) => sum + f.amount, 0);
