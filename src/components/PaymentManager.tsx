@@ -26,6 +26,12 @@ interface PaymentStats {
   yearTotal: number;
   todayCount: number;
   weekCount: number;
+  expectedTermTotal: number;
+  paidTermTotal: number;
+  expectedYearTotal: number;
+  paidYearTotal: number;
+  outstandingTerm: number;
+  outstandingYear: number;
 }
 
 const PaymentManager: React.FC = () => {
@@ -43,6 +49,12 @@ const PaymentManager: React.FC = () => {
     yearTotal: 0,
     todayCount: 0,
     weekCount: 0,
+    expectedTermTotal: 0,
+    paidTermTotal: 0,
+    expectedYearTotal: 0,
+    paidYearTotal: 0,
+    outstandingTerm: 0,
+    outstandingYear: 0,
   });
   
   // Filters for activity table
@@ -120,12 +132,31 @@ const PaymentManager: React.FC = () => {
     const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const yearStart = `${new Date().getFullYear()}-01-01`;
 
-    const [todayStats, weekStats, monthStats, yearStats] = await Promise.all([
+    // Get current term
+    const currentTerm = await db.get(`SELECT id FROM terms WHERE year_id = (SELECT id FROM academic_years ORDER BY label DESC LIMIT 1) ORDER BY term_number LIMIT 1`);
+    const currentYear = await db.get(`SELECT id FROM academic_years ORDER BY label DESC LIMIT 1`);
+
+    const [todayStats, weekStats, monthStats, yearStats, termFees, termPayments, yearFees, yearPayments] = await Promise.all([
       db.get(`SELECT SUM(amount_paid_cents) as total, COUNT(*) as count FROM payments WHERE date(payment_date) = ?`, [today]),
       db.get(`SELECT SUM(amount_paid_cents) as total, COUNT(*) as count FROM payments WHERE date(payment_date) >= ?`, [weekAgo]),
       db.get(`SELECT SUM(amount_paid_cents) as total FROM payments WHERE date(payment_date) >= ?`, [monthAgo]),
       db.get(`SELECT SUM(amount_paid_cents) as total FROM payments WHERE date(payment_date) >= ?`, [yearStart]),
+      // Expected fees for current term
+      db.get(`SELECT COALESCE(SUM(fs.amount_cents), 0) as total FROM fee_structure fs WHERE fs.year_id = ? AND fs.term_id = ?`, [currentYear?.id || 0, currentTerm?.id || 0]),
+      // Paid for current term
+      db.get(`SELECT COALESCE(SUM(p.amount_paid_cents), 0) as total FROM payments p WHERE p.year_id = ? AND p.term_id = ?`, [currentYear?.id || 0, currentTerm?.id || 0]),
+      // Expected fees for current year
+      db.get(`SELECT COALESCE(SUM(fs.amount_cents), 0) as total FROM fee_structure fs WHERE fs.year_id = ?`, [currentYear?.id || 0]),
+      // Paid for current year
+      db.get(`SELECT COALESCE(SUM(p.amount_paid_cents), 0) as total FROM payments p WHERE p.year_id = ?`, [currentYear?.id || 0]),
     ]);
+
+    const expectedTermTotal = termFees?.total || 0;
+    const paidTermTotal = termPayments?.total || 0;
+    const expectedYearTotal = yearFees?.total || 0;
+    const paidYearTotal = yearPayments?.total || 0;
+    const outstandingTerm = Math.max(0, expectedTermTotal - paidTermTotal);
+    const outstandingYear = Math.max(0, expectedYearTotal - paidYearTotal);
 
     setStats({
       todayTotal: todayStats?.total || 0,
@@ -134,6 +165,12 @@ const PaymentManager: React.FC = () => {
       yearTotal: yearStats?.total || 0,
       todayCount: todayStats?.count || 0,
       weekCount: weekStats?.count || 0,
+      expectedTermTotal,
+      paidTermTotal,
+      expectedYearTotal,
+      paidYearTotal,
+      outstandingTerm,
+      outstandingYear,
     });
   };
 
@@ -336,6 +373,38 @@ const PaymentManager: React.FC = () => {
         <div className="payment-stat-card"><span className="stat-label">This Week</span><span className="stat-value">{formatCurrency(stats.weekTotal)}</span></div>
         <div className="payment-stat-card"><span className="stat-label">This Month</span><span className="stat-value">{formatCurrency(stats.monthTotal)}</span></div>
         <div className="payment-stat-card stat-highlight"><span className="stat-label">This Year</span><span className="stat-value">{formatCurrency(stats.yearTotal)}</span></div>
+      </div>
+
+      <div className="payment-stats-row mb-4">
+        <div className="payment-stat-card">
+          <span className="stat-label">Current Term Expected</span>
+          <span className="stat-value">{formatCurrency(stats.expectedTermTotal)}</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
+            Paid: {formatCurrency(stats.paidTermTotal)}
+          </span>
+        </div>
+        
+        <div className="payment-stat-card">
+          <span className="stat-label">Year Expected</span>
+          <span className="stat-value">{formatCurrency(stats.expectedYearTotal)}</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
+            Paid: {formatCurrency(stats.paidYearTotal)}
+          </span>
+        </div>
+        
+        <div className="payment-stat-card">
+          <span className="stat-label">Outstanding This Term</span>
+          <span className="stat-value" style={{ color: stats.outstandingTerm > 0 ? '#ef4444' : '#16a34a' }}>
+            {formatCurrency(stats.outstandingTerm)}
+          </span>
+        </div>
+        
+        <div className="payment-stat-card stat-highlight">
+          <span className="stat-label">Outstanding This Year</span>
+          <span className="stat-value" style={{ color: stats.outstandingYear > 0 ? '#ef4444' : '#16a34a' }}>
+            {formatCurrency(stats.outstandingYear)}
+          </span>
+        </div>
       </div>
 
       {/* CORE FUNCTIONALITY: Record Payment - Centered at Top */}
