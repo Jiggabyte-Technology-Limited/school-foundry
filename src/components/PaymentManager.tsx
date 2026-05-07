@@ -12,6 +12,7 @@ interface Payment {
   amount_paid_cents: number;
   payment_date: string;
   received_by: number | null;
+  recorded_by_name: string;
   student_name: string;
   year_label: string;
   term_label: string;
@@ -75,6 +76,10 @@ const PaymentManager: React.FC = () => {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [showVoidModal, setShowVoidModal] = useState(false);
+  const [voidingPayment, setVoidingPayment] = useState<Payment | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidComment, setVoidComment] = useState('');
 
   useEffect(() => {
     loadData();
@@ -115,15 +120,34 @@ const PaymentManager: React.FC = () => {
 
   const loadPayments = async () => {
     const paymentList = await db.all(`
-      SELECT p.*, s.full_name as student_name, s.guardian_name, s.guardian_contact, y.label as year_label, t.label as term_label
+      SELECT p.*, s.full_name as student_name, s.guardian_name, s.guardian_contact, y.label as year_label, t.label as term_label, u.username as recorded_by_name
       FROM payments p
       JOIN students s ON p.student_id = s.id
       JOIN academic_years y ON p.year_id = y.id
       JOIN terms t ON p.term_id = t.id
+      LEFT JOIN users u ON p.received_by = u.id
       ORDER BY p.payment_date DESC
       LIMIT 100
     `);
     setPayments(paymentList);
+  };
+
+  const handleVoidPayment = async () => {
+    if (!voidingPayment || !voidReason) return;
+    try {
+      await db.run(
+        'UPDATE payments SET amount_paid_cents = 0, receipt_number = receipt_number || \'_VOID\', notes = ? WHERE id = ?',
+        [`Voided: ${voidReason}${voidComment ? ' - ' + voidComment : ''}`, voidingPayment.id]
+      );
+      setShowVoidModal(false);
+      setVoidingPayment(null);
+      setVoidReason('');
+      setVoidComment('');
+      loadPayments();
+      loadStats();
+    } catch (err: any) {
+      setError(err.message || 'Failed to void payment');
+    }
   };
 
   const loadStats = async () => {
@@ -368,27 +392,181 @@ const PaymentManager: React.FC = () => {
         <h2 style={{ margin: 0 }}>Payments</h2>
       </div>
 
-      <div className="payment-stats-row mb-4">
+      {/* Record Payment - First Row */}
+      <div className="card no-print" style={{ marginBottom: 24, background: 'linear-gradient(135deg, var(--primary) 0%, #f97316 100%)', color: 'white' }}>
+        <h3 className="mb-4" style={{ color: 'white' }}>Record Payment</h3>
+        
+        {!form.student_id ? (
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="Start typing student name or ID..."
+              value={studentSearchQuery}
+              onChange={(e) => { setStudentSearchQuery(e.target.value); setShowStudentDropdown(true); }}
+              onFocus={() => setShowStudentDropdown(true)}
+              className="input-default"
+              style={{ 
+                padding: '16px 20px', 
+                fontSize: '16px', 
+                borderRadius: '12px',
+                border: '3px solid rgba(255,255,255,0.3)',
+                background: 'rgba(255,255,255,0.95)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                color: '#1f2937'
+              }}
+            />
+            {showStudentDropdown && studentSearchQuery.length > 0 && (
+              <div style={{ 
+                position: 'absolute', 
+                top: '100%', 
+                left: 0, 
+                right: 0, 
+                backgroundColor: 'white', 
+                borderRadius: '12px', 
+                marginTop: 8, 
+                maxHeight: 280, 
+                overflowY: 'auto', 
+                zIndex: 20, 
+                boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+                color: 'var(--text-primary)'
+              }}>
+                {getFilteredStudents().slice(0, 10).map((s) => (
+                  <div
+                    key={s.id}
+                    onClick={() => handleSelectStudent(s.id)}
+                    style={{ 
+                      padding: '12px 16px', 
+                      borderBottom: '1px solid var(--border)', 
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--secondary)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{s.full_name}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>ID: {s.id} - {s.grade_label}</div>
+                    </div>
+                  </div>
+                ))}
+                {getFilteredStudents().length === 0 && (
+                  <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                    No students found
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <div style={{ 
+              background: 'rgba(255,255,255,0.15)', 
+              borderRadius: '12px', 
+              padding: '20px',
+              backdropFilter: 'blur(10px)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div>
+                  <div style={{ fontSize: '12px', opacity: 0.8 }}>Recording payment for</div>
+                  <div style={{ fontSize: '20px', fontWeight: 700 }}>{students.find(s => s.id === Number(form.student_id))?.full_name}</div>
+                  <div style={{ fontSize: '13px', opacity: 0.8 }}>{students.find(s => s.id === Number(form.student_id))?.grade_label}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm({ ...form, student_id: '' });
+                    setStudentSearchQuery('');
+                    setShowStudentDropdown(false);
+                  }}
+                  style={{ 
+                    background: 'rgba(255,255,255,0.2)', 
+                    border: 'none', 
+                    color: 'white', 
+                    cursor: 'pointer', 
+                    fontSize: '14px',
+                    padding: '8px 16px',
+                    borderRadius: '8px'
+                  }}
+                >
+                  Change Student
+                </button>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>YEAR</label>
+                  <select 
+                    className="input-default" 
+                    value={form.year_id} 
+                    onChange={(e) => setForm({ ...form, year_id: e.target.value })}
+                    style={{ background: 'white' }}
+                  >
+                    {years.map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>TERM</label>
+                  <select 
+                    className="input-default" 
+                    value={form.term_id} 
+                    onChange={(e) => setForm({ ...form, term_id: e.target.value })}
+                    style={{ background: 'white' }}
+                  >
+                    {terms.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>AMOUNT ($)</label>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    min="0.01" 
+                    className="input-default" 
+                    value={form.amount} 
+                    onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                    placeholder="0.00"
+                    style={{ background: 'white', fontWeight: 700, fontSize: '16px' }}
+                  />
+                </div>
+              </div>
+              
+              <button 
+                type="submit" 
+                className="btn" 
+                style={{ 
+                  marginTop: '16px', 
+                  width: '100%',
+                  background: 'white',
+                  color: 'var(--primary)',
+                  fontWeight: 700,
+                  fontSize: '16px',
+                  padding: '14px'
+                }} 
+                disabled={saving || !form.amount}
+              >
+                {saving ? 'Recording...' : 'Record Payment'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
+      {/* Stats Row: Today, This Week, This Month */}
+      <div className="payment-stats-row mb-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
         <div className="payment-stat-card"><span className="stat-label">Today</span><span className="stat-value">{formatCurrency(stats.todayTotal)}</span></div>
         <div className="payment-stat-card"><span className="stat-label">This Week</span><span className="stat-value">{formatCurrency(stats.weekTotal)}</span></div>
         <div className="payment-stat-card"><span className="stat-label">This Month</span><span className="stat-value">{formatCurrency(stats.monthTotal)}</span></div>
-        <div className="payment-stat-card stat-highlight"><span className="stat-label">This Year</span><span className="stat-value">{formatCurrency(stats.yearTotal)}</span></div>
       </div>
 
+      {/* Second Row: Current Term + Outstanding + Year + Outstanding */}
       <div className="payment-stats-row mb-4">
-        <div className="payment-stat-card">
-          <span className="stat-label">Current Term Expected</span>
-          <span className="stat-value">{formatCurrency(stats.expectedTermTotal)}</span>
-          <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
-            Paid: {formatCurrency(stats.paidTermTotal)}
-          </span>
-        </div>
-        
-        <div className="payment-stat-card">
-          <span className="stat-label">Year Expected</span>
-          <span className="stat-value">{formatCurrency(stats.expectedYearTotal)}</span>
-          <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
-            Paid: {formatCurrency(stats.paidYearTotal)}
+        <div className="payment-stat-card stat-highlight">
+          <span className="stat-label">Current Term Received</span>
+          <span className="stat-value">{formatCurrency(stats.paidTermTotal)}</span>
+          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', marginTop: '4px', display: 'block' }}>
+            Expected: {formatCurrency(stats.expectedTermTotal)}
           </span>
         </div>
         
@@ -400,103 +578,19 @@ const PaymentManager: React.FC = () => {
         </div>
         
         <div className="payment-stat-card stat-highlight">
+          <span className="stat-label">Year Received</span>
+          <span className="stat-value">{formatCurrency(stats.paidYearTotal)}</span>
+          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)', marginTop: '4px', display: 'block' }}>
+            Expected: {formatCurrency(stats.expectedYearTotal)}
+          </span>
+        </div>
+        
+        <div className="payment-stat-card">
           <span className="stat-label">Outstanding This Year</span>
           <span className="stat-value" style={{ color: stats.outstandingYear > 0 ? '#ef4444' : '#16a34a' }}>
             {formatCurrency(stats.outstandingYear)}
           </span>
         </div>
-      </div>
-
-      {/* CORE FUNCTIONALITY: Record Payment - Centered at Top */}
-      <div className="card no-print" style={{ marginBottom: 32 }}>
-        <h3 className="mb-4">Record New Payment</h3>
-        {error && <div className="error-message mb-4">{error}</div>}
-        <form onSubmit={handleSubmit}>
-          <div className="flex-col gap-4">
-            <div>
-              <label className="settings-label">Student *</label>
-              <div style={{ position: 'relative' }}>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                  <input
-                    type="text"
-                    placeholder="Search student by name or ID..."
-                    value={studentSearchQuery}
-                    onChange={(e) => setStudentSearchQuery(e.target.value)}
-                    onFocus={() => setShowStudentDropdown(true)}
-                    className="input-default"
-                    style={{ flex: 1 }}
-                  />
-                  <select 
-                    value={selectedGradeFilter} 
-                    onChange={(e) => setSelectedGradeFilter(e.target.value)}
-                    className="input-default"
-                    style={{ minWidth: 150 }}
-                  >
-                    <option value="all">All Grades</option>
-                    {grades.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
-                  </select>
-                </div>
-                
-                {showStudentDropdown && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'white', border: '1px solid var(--border)', borderRadius: 'var(--border-radius-md)', marginTop: 4, maxHeight: 300, overflowY: 'auto', zIndex: 10, boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-                    {getFilteredStudents().length > 0 ? (
-                      getFilteredStudents().map((s) => (
-                        <div
-                          key={s.id}
-                          onClick={() => handleSelectStudent(s.id)}
-                          style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--secondary)')}
-                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 600 }}>{s.full_name}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>ID: {s.id} {s.grade_label ? `• ${s.grade_label}` : ''}</div>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-secondary)' }}>No students found</div>
-                    )}
-                  </div>
-                )}
-              </div>
-              
-              {form.student_id && (
-                <div style={{ padding: '12px', backgroundColor: 'var(--secondary)', borderRadius: 'var(--border-radius-md)', marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>{students.find(s => s.id === Number(form.student_id))?.full_name}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setForm({ ...form, student_id: '' });
-                      setShowStudentDropdown(false);
-                    }}
-                    style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '16px' }}
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="flex-row gap-2">
-              <div className="flex-1"><label className="settings-label">Year *</label>
-                <select className="input-default" value={form.year_id} onChange={(e) => setForm({ ...form, year_id: e.target.value })} required>
-                  {years.map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}
-                </select>
-              </div>
-              <div className="flex-1"><label className="settings-label">Term *</label>
-                <select className="input-default" value={form.term_id} onChange={(e) => setForm({ ...form, term_id: e.target.value })} required>
-                  {terms.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="flex-row gap-2">
-              <div className="flex-1"><label className="settings-label">Amount ($) *</label>
-                <input type="number" step="0.01" min="0.01" className="input-default" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
-              </div>
-            </div>
-          </div>
-          <button type="submit" className="btn btn-primary w-full" style={{ marginTop: 24 }} disabled={saving || !form.student_id}>{saving ? '...' : 'Record Payment'}</button>
-        </form>
       </div>
 
       {/* ACTIVITY TABLE: Recent Activity Below */}
@@ -512,42 +606,38 @@ const PaymentManager: React.FC = () => {
           </button>
         </div>
         
-        {/* Filters for Activity */}
-        <div className="flex-row gap-2 mb-4" style={{ flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)', alignSelf: 'center' }}>Filter by:</span>
-            
-            <div style={{ display: 'flex', gap: 4 }}>
-              <span style={{ fontSize: 11, color: 'var(--text-secondary)', alignSelf: 'center' }}>Activity Type:</span>
-              <select 
-                value={activityTypeFilter} 
-                onChange={(e) => setActivityTypeFilter(e.target.value)}
-                style={{ padding: '6px 12px', fontSize: 12, borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border)' }}
-              >
-                <option value="all">All</option>
-                <option value="payments">Payments</option>
-                <option value="recent">Recent Only</option>
-              </select>
-            </div>
-
-            <div style={{ display: 'flex', gap: 4 }}>
-              <span style={{ fontSize: 11, color: 'var(--text-secondary)', alignSelf: 'center' }}>Time Period:</span>
-              <select 
-                value={timePeriodFilter} 
-                onChange={(e) => setTimePeriodFilter(e.target.value)}
-                style={{ padding: '6px 12px', fontSize: 12, borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border)' }}
-              >
-                <option value="all">All</option>
-                <option value="week">Last Week</option>
-                <option value="month">Last Month</option>
-                <option value="term">This Term</option>
-              </select>
-            </div>
-          </div>
+        {/* Filters for Activity - Buttons */}
+        <div className="flex-row gap-2 mb-4" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginRight: 4 }}>Time:</span>
+          {[
+            { value: 'all', label: 'All' },
+            { value: 'week', label: 'Last Week' },
+            { value: 'month', label: 'Last Month' },
+            { value: 'term', label: 'This Term' }
+          ].map((option) => (
+            <button
+              key={option.value}
+              onClick={() => setTimePeriodFilter(option.value)}
+              style={{
+                padding: '6px 14px',
+                fontSize: 12,
+                borderRadius: '20px',
+                border: '1px solid',
+                borderColor: timePeriodFilter === option.value ? 'var(--primary)' : 'var(--border)',
+                backgroundColor: timePeriodFilter === option.value ? 'var(--primary)' : 'transparent',
+                color: timePeriodFilter === option.value ? 'white' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontWeight: 600,
+                transition: 'all 0.2s'
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
 
         <table>
-          <thead><tr><th>Receipt</th><th>Student</th><th>Term</th><th>Date</th><th>Amount</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Receipt</th><th>Student</th><th>Term</th><th>Date</th><th>Amount</th><th>Recorded By</th><th>Actions</th></tr></thead>
           <tbody>
             {getFilteredPayments().map((p) => (
               <tr key={p.id}>
@@ -556,12 +646,26 @@ const PaymentManager: React.FC = () => {
                 <td>{p.term_label}</td>
                 <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{formatDate(p.payment_date)}</td>
                 <td className="td-amount" style={{ color: '#16a34a' }}>{formatCurrency(p.amount_paid_cents)}</td>
-                <td><button className="btn btn-sage" onClick={() => setSelectedReceipt(p)}>View</button></td>
+                <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{p.recorded_by_name || '-'}</td>
+                <td>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button className="btn btn-sage" onClick={() => setSelectedReceipt(p)}>View</button>
+                    {user?.role === 'admin' && p.amount_paid_cents > 0 && (
+                      <button 
+                        className="btn" 
+                        onClick={() => { setVoidingPayment(p); setShowVoidModal(true); }}
+                        style={{ background: '#ef4444', color: 'white', padding: '6px 10px', fontSize: '11px' }}
+                      >
+                        Void
+                      </button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
             {getFilteredPayments().length === 0 && (
               <tr>
-                <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)' }}>
                   No payments found for the selected filters
                 </td>
               </tr>
@@ -571,6 +675,71 @@ const PaymentManager: React.FC = () => {
       </div>
 
       {selectedReceipt && <Receipt payment={selectedReceipt} onClose={() => setSelectedReceipt(null)} />}
+
+      {/* Void Payment Modal */}
+      {showVoidModal && voidingPayment && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50
+        }} onClick={() => setShowVoidModal(false)}>
+          <div style={{
+            backgroundColor: 'white', borderRadius: '12px', padding: '24px', maxWidth: '400px', width: '90%', boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0, marginBottom: '16px' }}>Void Payment</h3>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '14px' }}>
+              Receipt: <strong>{voidingPayment.receipt_number}</strong><br/>
+              Student: <strong>{voidingPayment.student_name}</strong><br/>
+              Amount: <strong>{formatCurrency(voidingPayment.amount_paid_cents)}</strong>
+            </p>
+            
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>Reason *</label>
+              <select 
+                value={voidReason} 
+                onChange={(e) => setVoidReason(e.target.value)}
+                className="input-default"
+                style={{ width: '100%' }}
+              >
+                <option value="">Select a reason...</option>
+                <option value="Mistake">Mistake</option>
+                <option value="Wrong student">Wrong student</option>
+                <option value="Wrong amount">Wrong amount</option>
+                <option value="Duplicate payment">Duplicate payment</option>
+                <option value="Customer request">Customer request</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>Comment (optional)</label>
+              <textarea 
+                value={voidComment}
+                onChange={(e) => setVoidComment(e.target.value)}
+                className="input-default"
+                style={{ width: '100%', minHeight: '60px', resize: 'vertical' }}
+                placeholder="Additional details..."
+              />
+            </div>
+            
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                className="btn btn-outline" 
+                onClick={() => setShowVoidModal(false)}
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn" 
+                onClick={handleVoidPayment}
+                disabled={!voidReason}
+                style={{ flex: 1, background: '#ef4444', color: 'white' }}
+              >
+                Void Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

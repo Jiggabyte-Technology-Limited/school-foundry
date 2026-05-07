@@ -18,8 +18,8 @@ interface NavItem {
 const allNavItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid', roles: ['admin', 'bursar', 'viewer'] },
   { id: 'accounts', label: 'Student Accounts', icon: 'file-text', roles: ['admin', 'bursar', 'viewer'] },
-  { id: 'fees', label: 'Fee Structure', icon: 'dollar', roles: ['admin'] },
   { id: 'payments', label: 'Payments', icon: 'credit-card', roles: ['admin', 'bursar'] },
+  { id: 'fees', label: 'Fee Structure', icon: 'dollar', roles: ['admin'] },
   { id: 'logs', label: 'Logs', icon: 'list', roles: ['admin'] },
   { id: 'backup', label: 'Backup', icon: 'database', roles: ['admin'] },
 ];
@@ -137,9 +137,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
               {iconPaths[item.icon]}
             </svg>
             <span className="text-display">{item.label}</span>
-            {activeView === item.id && (
-              <div style={{ marginLeft: 'auto', width: '4px', height: '16px', backgroundColor: 'white', borderRadius: '2px' }} />
-            )}
           </button>
         ))}
       </nav>

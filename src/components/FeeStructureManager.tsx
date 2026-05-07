@@ -20,7 +20,6 @@ const FeeStructureManager: React.FC = () => {
   const [terms, setTerms] = useState<Term[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
-  const [selectedFeeType, setSelectedFeeType] = useState<string>('tuition');
   const [showConfig, setShowConfig] = useState(false);
   
   // Matrix State: [gradeId][termId] = MatrixCell
@@ -33,7 +32,7 @@ const FeeStructureManager: React.FC = () => {
   const [editingTermId, setEditingTermId] = useState<number | null>(null);
 
   useEffect(() => { loadInitialData(); }, []);
-  useEffect(() => { if (selectedYear) loadYearData(selectedYear); }, [selectedYear, selectedFeeType]);
+  useEffect(() => { if (selectedYear) loadYearData(selectedYear); }, [selectedYear]);
 
   const loadInitialData = async () => {
     const [yearList, gradeList] = await Promise.all([
@@ -48,7 +47,7 @@ const FeeStructureManager: React.FC = () => {
   const loadYearData = async (yearId: number) => {
     const [termList, feeList] = await Promise.all([
       db.all('SELECT * FROM terms WHERE year_id = ? ORDER BY term_number', [yearId]),
-      db.all('SELECT * FROM fee_structure WHERE year_id = ? AND fee_type = ?', [yearId, selectedFeeType])
+      db.all('SELECT * FROM fee_structure WHERE year_id = ?', [yearId])
     ]);
     setTerms(termList);
     
@@ -94,8 +93,8 @@ const FeeStructureManager: React.FC = () => {
         await db.run('UPDATE fee_structure SET amount_cents = ?, updated_at = datetime("now") WHERE id = ?', [amountCents, cell.id]);
       } else {
         const result = await db.run(
-          'INSERT INTO fee_structure (year_id, term_id, grade_id, fee_type, amount_cents) VALUES (?, ?, ?, ?, ?)',
-          [selectedYear, termId, gradeId, selectedFeeType, amountCents]
+          'INSERT INTO fee_structure (year_id, term_id, grade_id, amount_cents) VALUES (?, ?, ?, ?)',
+          [selectedYear, termId, gradeId, amountCents]
         );
         handleMatrixChange(gradeId, termId, cell.amount); // Triggers update to cell ID
         setMatrix(prev => ({
@@ -174,20 +173,6 @@ const FeeStructureManager: React.FC = () => {
           <p style={{ color: 'var(--color-sage-placeholder)', margin: 0 }}>Manage and automate tuition fees across all grades.</p>
         </div>
         <div className="flex-row gap-3">
-          <div className="flex-row gap-2" style={{ backgroundColor: 'white', padding: '4px 12px', borderRadius: 'var(--border-radius-lg)', border: '1px solid var(--color-sage-border)' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-sage-placeholder)' }}>FEE TYPE:</span>
-            <select 
-              value={selectedFeeType} 
-              onChange={(e) => setSelectedFeeType(e.target.value)}
-              style={{ border: 'none', fontWeight: 700, color: 'var(--color-accent-teal)', outline: 'none', cursor: 'pointer', textTransform: 'uppercase', fontSize: 13 }}
-            >
-              <option value="tuition">Tuition</option>
-              <option value="registration">Registration</option>
-              <option value="levy">Levy</option>
-              <option value="exam">Exam</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
           <div className="flex-row gap-2" style={{ backgroundColor: 'white', padding: '4px 12px', borderRadius: 'var(--border-radius-lg)', border: '1px solid var(--color-sage-border)' }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-sage-placeholder)' }}>YEAR:</span>
             <select 

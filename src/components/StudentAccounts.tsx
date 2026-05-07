@@ -256,16 +256,6 @@ const StudentAccounts: React.FC = () => {
             <h2 style={{ margin: 0, fontSize: '28px', fontWeight: 600 }} className="text-display">Student Accounts</h2>
             <div style={{ display: 'flex', gap: '12px' }}>
                 <button 
-                  className="btn btn-outline" 
-                  onClick={() => setShowPaymentWizard(true)}
-                  style={{ borderColor: 'var(--primary)', color: 'var(--primary)' }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
-                  </svg>
-                  Record Payment
-                </button>
-                <button 
                   className="btn btn-primary" 
                   onClick={() => setShowWizard(true)}
                 >
@@ -331,6 +321,15 @@ const StudentAccounts: React.FC = () => {
             </div>
             <button 
                 className="btn btn-outline" 
+                onClick={() => window.print()}
+                disabled={filteredStudents.length === 0}
+                style={{ whiteSpace: 'nowrap' }}
+            >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                Print Overview
+            </button>
+            <button 
+                className="btn btn-outline" 
                 onClick={printAllStatements}
                 disabled={isPrintingAll || filteredStudents.length === 0}
                 style={{ whiteSpace: 'nowrap' }}
@@ -390,6 +389,33 @@ const StudentAccounts: React.FC = () => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {showPrintView && selectedStudent ? (
             <>
+                {statementData && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                        <button 
+                            className="btn btn-outline" 
+                            onClick={() => { setShowPrintView(false); setSelectedStudent(null); }}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            Exit
+                        </button>
+                        <button 
+                            className="btn btn-outline" 
+                            onClick={() => window.print()}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                            Print Statement
+                        </button>
+                        <button 
+                            className="btn btn-primary" 
+                            onClick={() => setShowPaymentWizard(true)}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
+                            </svg>
+                            Record Payment
+                        </button>
+                    </div>
+                )}
                 <div className="card-surface" style={{ padding: '32px', minHeight: '500px', position: 'relative', border: '1px solid var(--border)', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05)' }}>
                 {isLoadingDetail && (
                     <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255, 255, 255, 0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20, backdropFilter: 'blur(4px)', borderRadius: '16px' }}>
@@ -494,15 +520,6 @@ const StudentAccounts: React.FC = () => {
                             </div>
                         </div>
 
-                        <div style={{ backgroundColor: 'rgba(249, 115, 22, 0.03)', padding: '16px 24px', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div className="text-display" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                                Total Remaining Financial Commitment for {selectedYear ? academicYears.find(y => y.id === selectedYear)?.label : 'Year'}
-                            </div>
-                            <div className="text-mono" style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                                ${( (statementData.balance + (statementData.upcoming?.reduce((s:any,u:any)=>s+u.amount,0) || 0)) / 100 ).toFixed(2)}
-                            </div>
-                        </div>
-
                         <div className="metric-label" style={{ marginBottom: '16px', opacity: 0.5 }}>Financial History</div>
                         <div style={{ maxHeight: '35vh', overflowY: 'auto', paddingRight: '8px' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -567,10 +584,6 @@ const StudentAccounts: React.FC = () => {
                             </div>
                         )}
 
-                        <div style={{ marginTop: '32px', display: 'flex', gap: '16px' }} className="no-print">
-                            <button className="btn btn-primary" style={{ flex: 1, padding: '16px' }} onClick={() => window.print()}>Print Statement</button>
-                            <button className="btn btn-outline" style={{ padding: '0 32px' }} onClick={() => { setShowPrintView(false); setSelectedStudent(null); }}>Exit</button>
-                        </div>
                     </>
                 ) : (
                     <div style={{ textAlign: 'center', padding: '96px 0', color: 'var(--text-secondary)', opacity: 0.4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }} className="text-display">
