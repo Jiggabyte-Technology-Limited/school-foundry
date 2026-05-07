@@ -29,6 +29,7 @@ interface PaymentStats {
 const PaymentManager: React.FC = () => {
   const { user } = useAuth();
   const [students, setStudents] = useState<any[]>([]);
+  const [grades, setGrades] = useState<any[]>([]);
   const [years, setYears] = useState<any[]>([]);
   const [terms, setTerms] = useState<any[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -45,6 +46,11 @@ const PaymentManager: React.FC = () => {
   // Filters for activity table
   const [activityTypeFilter, setActivityTypeFilter] = useState('all');
   const [timePeriodFilter, setTimePeriodFilter] = useState('all');
+  
+  // Student selection filters
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [selectedGradeFilter, setSelectedGradeFilter] = useState<string>('all');
+  const [showStudentDropdown, setShowStudentDropdown] = useState(false);
   
   const [form, setForm] = useState({
     student_id: '',
@@ -69,11 +75,13 @@ const PaymentManager: React.FC = () => {
   }, [form.year_id]);
 
   const loadData = async () => {
-    const [studentList, yearList] = await Promise.all([
-      db.all('SELECT id, full_name FROM students WHERE is_active = 1 ORDER BY full_name'),
+    const [studentList, gradeList, yearList] = await Promise.all([
+      db.all('SELECT s.id, s.full_name, g.label as grade_label, sye.grade_id FROM students s LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = (SELECT id FROM academic_years ORDER BY label DESC LIMIT 1) LEFT JOIN grades g ON sye.grade_id = g.id WHERE s.is_active = 1 ORDER BY s.full_name'),
+      db.all('SELECT id, label FROM grades ORDER BY id'),
       db.all('SELECT id, label FROM academic_years ORDER BY label DESC'),
     ]);
     setStudents(studentList);
+    setGrades(gradeList);
     setYears(yearList);
     
     if (yearList.length > 0) {
@@ -211,6 +219,33 @@ const PaymentManager: React.FC = () => {
     return filtered;
   };
 
+  const getFilteredStudents = (): any[] => {
+    let filtered = students;
+
+    // Filter by grade
+    if (selectedGradeFilter !== 'all') {
+      filtered = filtered.filter(s => s.grade_id === Number(selectedGradeFilter));
+    }
+
+    // Filter by search query
+    if (studentSearchQuery.trim()) {
+      const query = studentSearchQuery.toLowerCase();
+      filtered = filtered.filter(s => 
+        s.full_name.toLowerCase().includes(query) || 
+        s.id.toString().includes(query)
+      );
+    }
+
+    return filtered;
+  };
+
+  const handleSelectStudent = (studentId: number) => {
+    setForm({ ...form, student_id: String(studentId) });
+    setShowStudentDropdown(false);
+    setStudentSearchQuery('');
+    setSelectedGradeFilter('all');
+  };
+
   return (
     <div>
       <div className="flex-between mb-4 no-print">
@@ -230,11 +265,69 @@ const PaymentManager: React.FC = () => {
         {error && <div className="error-message mb-4">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="flex-col gap-4">
-            <div><label className="settings-label">Student *</label>
-              <select className="input-default" value={form.student_id} onChange={(e) => setForm({ ...form, student_id: e.target.value })} required>
-                <option value="">Select Student</option>
-                {students.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
-              </select>
+            <div>
+              <label className="settings-label">Student *</label>
+              <div style={{ position: 'relative' }}>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <input
+                    type="text"
+                    placeholder="Search student by name or ID..."
+                    value={studentSearchQuery}
+                    onChange={(e) => setStudentSearchQuery(e.target.value)}
+                    onFocus={() => setShowStudentDropdown(true)}
+                    className="input-default"
+                    style={{ flex: 1 }}
+                  />
+                  <select 
+                    value={selectedGradeFilter} 
+                    onChange={(e) => setSelectedGradeFilter(e.target.value)}
+                    className="input-default"
+                    style={{ minWidth: 150 }}
+                  >
+                    <option value="all">All Grades</option>
+                    {grades.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+                  </select>
+                </div>
+                
+                {showStudentDropdown && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'white', border: '1px solid var(--border)', borderRadius: 'var(--border-radius-md)', marginTop: 4, maxHeight: 300, overflowY: 'auto', zIndex: 10, boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                    {getFilteredStudents().length > 0 ? (
+                      getFilteredStudents().map((s) => (
+                        <div
+                          key={s.id}
+                          onClick={() => handleSelectStudent(s.id)}
+                          style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--secondary)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{s.full_name}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>ID: {s.id} {s.grade_label ? `• ${s.grade_label}` : ''}</div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-secondary)' }}>No students found</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              {form.student_id && (
+                <div style={{ padding: '12px', backgroundColor: 'var(--secondary)', borderRadius: 'var(--border-radius-md)', marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>{students.find(s => s.id === Number(form.student_id))?.full_name}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm({ ...form, student_id: '' });
+                      setShowStudentDropdown(false);
+                    }}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '16px' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
             </div>
             <div className="flex-row gap-2">
               <div className="flex-1"><label className="settings-label">Year *</label>
@@ -254,7 +347,7 @@ const PaymentManager: React.FC = () => {
               </div>
             </div>
           </div>
-          <button type="submit" className="btn btn-primary w-full" style={{ marginTop: 24 }} disabled={saving}>{saving ? '...' : 'Record Payment'}</button>
+          <button type="submit" className="btn btn-primary w-full" style={{ marginTop: 24 }} disabled={saving || !form.student_id}>{saving ? '...' : 'Record Payment'}</button>
         </form>
       </div>
 
