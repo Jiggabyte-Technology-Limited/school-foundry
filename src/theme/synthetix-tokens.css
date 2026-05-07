@@ -1,0 +1,12 @@
+:root {
+  --primary: #F97316;
+  --secondary: #F5F4EF;
+  --background: #F5F4EF;
+  --surface: #FFFFFF;
+  --text-primary: #111827;
+  --text-secondary: #4B5563;
+  --border: #E5E7EB;
+  --font-display: 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}

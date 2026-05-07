@@ -248,7 +248,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 600, color: 'var(--color-deep-olive)' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--primary)' }}>
                         {student.full_name}
                       </div>
                       <div style={{ fontSize: 13, color: 'var(--color-sage-placeholder)' }}>

@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './index.css';
 import { db } from './lib/db-client';
 import { AuthProvider, useAuth } from './lib/auth-context';
 import SetupWizard from './components/SetupWizard';
-import LoginScreen from './components/LoginScreen';
+import { Welcome } from './components/auth/Welcome';
+import { Login } from './components/auth/Login';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import FeeStructureManager from './components/FeeStructureManager';
@@ -49,58 +51,54 @@ function AppInner() {
 
   const handleLogout = () => {
     logout();
-    setView('dashboard');
   };
 
   const handleSchoolNameUpdate = (name: string) => {
     setSchoolName(name);
   };
 
+  if (!isSetup) return <SetupWizard onComplete={() => setIsSetup(true)} />;
+
   return (
-    <div className="layout-wrapper">
-      {!isSetup ? (
-        <div className="centered-card-container">
-          <SetupWizard onComplete={() => setIsSetup(true)} />
-        </div>
-      ) : !user ? (
-        <div className="centered-card-container">
-          <LoginScreen onLoginSuccess={login} />
-        </div>
-      ) : (
-        <div className="app-layout">
-          <Sidebar activeView={view} onViewChange={setView} />
-
-          <main className="main-content">
-            <TopBar
-              pageTitle={pageTitles[view] || 'Dashboard'}
-              schoolName={schoolName}
-              userName={user.full_name || user.username}
-              userRole={user.role}
-              onSettingsClick={() => setShowSettings(true)}
-              onLogout={handleLogout}
-            />
-
-            <div className="page-content">
-              {view === 'dashboard' && <Dashboard />}
-              {view === 'accounts' && <StudentAccounts />}
-              {view === 'fees' && <FeeStructureManager />}
-              {view === 'payments' && <PaymentManager />}
-              {view === 'logs' && <ActivityLog />}
-              {view === 'backup' && <BackupManager />}
+    <Router>
+      <Routes>
+        <Route path="/" element={<Welcome />} />
+        <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
+        <Route path="/dashboard" element={
+          user ? (
+            <div className="app-layout">
+              <Sidebar activeView={view} onViewChange={setView} />
+              <main className="main-content">
+                <TopBar
+                  pageTitle={pageTitles[view] || 'Dashboard'}
+                  schoolName={schoolName}
+                  userName={user.full_name || user.username}
+                  userRole={user.role}
+                  onSettingsClick={() => setShowSettings(true)}
+                  onLogout={handleLogout}
+                />
+                <div className="page-content">
+                  {view === 'dashboard' && <Dashboard />}
+                  {view === 'accounts' && <StudentAccounts />}
+                  {view === 'fees' && <FeeStructureManager />}
+                  {view === 'payments' && <PaymentManager />}
+                  {view === 'logs' && <ActivityLog />}
+                  {view === 'backup' && <BackupManager />}
+                </div>
+              </main>
+              {showSettings && (
+                <SettingsModal
+                  user={user}
+                  schoolName={schoolName}
+                  onSchoolNameUpdate={handleSchoolNameUpdate}
+                  onClose={() => setShowSettings(false)}
+                />
+              )}
             </div>
-          </main>
-
-          {showSettings && (
-            <SettingsModal
-              user={user}
-              schoolName={schoolName}
-              onSchoolNameUpdate={handleSchoolNameUpdate}
-              onClose={() => setShowSettings(false)}
-            />
-          )}
-        </div>
-      )}
-    </div>
+          ) : <Navigate to="/login" />
+        } />
+      </Routes>
+    </Router>
   );
 }
 

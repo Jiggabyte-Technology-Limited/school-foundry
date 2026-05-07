@@ -1,22 +1,22 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import bcryptjs from 'bcryptjs';
-import { db } from '../lib/db-client';
-import { User } from '../lib/auth-context';
-
-interface LoginScreenProps {
-  onLoginSuccess: (user: User) => void;
-}
+import { db } from '../../lib/db-client';
+import { useAuth } from '../../lib/auth-context';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 5;
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
+export const Login: React.FC = () => {
+  const navigate = useNavigate();
+  const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async () => {
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!username || !password) {
       setError('Please enter both username and password.');
       return;
@@ -68,12 +68,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
           [user.id, user.username, 'USER_LOGIN', 'users', user.id, 'Successful login']
         );
-        onLoginSuccess({
+        login({
           id: user.id,
           full_name: user.full_name || user.username,
           username: user.username,
           role: user.role,
         });
+        navigate('/dashboard');
       } else {
         const newCount = (user.failed_login_count || 0) + 1;
         let lockUntil: string | null = null;
@@ -104,18 +105,48 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="card login-card">
-      <h1>Login</h1>
-      {error && <p style={{ color: '#dc2626', marginBottom: '1rem', fontSize: '14px' }}>{error}</p>}
-      <div className="flex-col gap-4 mb-4">
-        <input className="input-default" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} disabled={isLoading} />
-        <input className="input-default" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} disabled={isLoading} />
+    <div className="flex items-center justify-center min-h-screen bg-[var(--background)] p-4">
+      <div className="w-full max-w-sm bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8 shadow-sm">
+        <h2 className="text-2xl font-semibold text-[var(--text-primary)] mb-6" style={{ fontFamily: 'var(--font-display)' }}>
+          Admin Sign In
+        </h2>
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg">
+            {error}
+          </div>
+        )}
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Username</label>
+            <input 
+              type="text" 
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+              disabled={isLoading}
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Password</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+              disabled={isLoading}
+              required
+            />
+          </div>
+          <button 
+            type="submit" 
+            disabled={isLoading}
+            className="w-full py-2.5 bg-[var(--primary)] text-white font-medium rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {isLoading ? 'Signing In...' : 'Sign In'}
+          </button>
+        </form>
       </div>
-      <button className="btn btn-primary w-full" onClick={handleLogin} disabled={isLoading}>
-        {isLoading ? 'Logging in...' : 'Login'}
-      </button>
     </div>
   );
 };
-
-export default LoginScreen;

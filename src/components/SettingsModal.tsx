@@ -312,7 +312,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
                     <div style={{ 
-                      borderTop: '2px solid var(--color-deep-olive)', 
+                      borderTop: '2px solid var(--primary)',
+ 
                       paddingTop: 12,
                       fontSize: 13,
                       color: 'var(--color-sage-placeholder)',

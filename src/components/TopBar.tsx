@@ -54,7 +54,7 @@ const TopBar: React.FC<TopBarProps> = ({
           </svg>
         </button>
         
-        <button className="topbar-btn topbar-btn-logout" onClick={onLogout} title="Logout">
+        <button className="topbar-btn" onClick={onLogout} title="Logout">
           <svg
             width="20"
             height="20"

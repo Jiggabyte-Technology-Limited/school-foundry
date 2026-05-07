@@ -63,7 +63,7 @@ const FinancialStatements: React.FC = () => {
         const student = students.find(s => s.id === selectedStudent);
         const [payments, fees] = await Promise.all([
             db.all('SELECT payment_date as date, receipt_number as ref, amount_paid_cents as amount, "Payment" as type FROM payments WHERE student_id = ? AND year_id = ? ORDER BY payment_date', [selectedStudent, selectedYear]),
-            db.all('SELECT fs.description, fs.amount_cents as amount, "Fee" as type FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.grade_id = ? AND fs.year_id = ? AND (t.start_date IS NULL OR t.start_date <= date('now'))', [student?.grade_id, selectedYear])
+            db.all(`SELECT fs.description, fs.amount_cents as amount, "Fee" as type FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.grade_id = ? AND fs.year_id = ? AND (t.start_date IS NULL OR t.start_date <= date('now'))`, [student?.grade_id, selectedYear])
         ]);
         setStatementData({ type: 'individual', student, payments, fees, generatedAt: new Date().toLocaleDateString() });
     } else if (statementType === 'class') {

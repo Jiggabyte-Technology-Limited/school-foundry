@@ -86,7 +86,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
       <div className="sidebar-header">
         <div className="sidebar-logo">
           <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="32" height="32" rx="6" fill="var(--color-deep-olive)" />
+            <rect width="32" height="32" rx="6" fill="var(--primary)" />
             <text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="white" fontSize="16" fontWeight="700">$</text>
           </svg>
         </div>
