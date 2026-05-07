@@ -85,14 +85,34 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-logo">
-          <svg width="40" height="40" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="32" height="32" rx="8" fill="var(--primary)" />
-            <path d="M16 8V24M10 12H16C18.2091 12 20 13.7909 20 16C20 18.2091 18.2091 20 16 20H12C9.79086 20 8 18.2091 8 16C8 13.7909 9.79086 12 12 12M12 20H18C20.2091 20 22 21.7909 22 24" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+          <svg width="40" height="40" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* Focus ring (outer) */}
+            <circle cx="32" cy="32" r="28" fill="none" stroke="white" strokeWidth="1.5"/>
+            
+            {/* Focus ring (middle) */}
+            <circle cx="32" cy="32" r="23" fill="none" stroke="white" strokeWidth="1" opacity="0.5"/>
+            
+            {/* Letter F */}
+            <g fill="white">
+              {/* Vertical bar */}
+              <rect x="20" y="14" width="4.5" height="29" rx="1"/>
+              
+              {/* Top horizontal bar */}
+              <rect x="20" y="14" width="13" height="4" rx="1"/>
+              
+              {/* Middle horizontal bar */}
+              <rect x="20" y="31" width="10" height="3.5" rx="1"/>
+            </g>
+            
+            {/* Clarity crosshair center */}
+            <circle cx="32" cy="32" r="2" fill="white"/>
+            <line x1="32" y1="26" x2="32" y2="38" stroke="white" strokeWidth="1" strokeLinecap="round"/>
+            <line x1="26" y1="32" x2="38" y2="32" stroke="white" strokeWidth="1" strokeLinecap="round"/>
           </svg>
         </div>
         <div className="sidebar-title">
-          <span className="sidebar-title-text">Synthetix</span>
-          <span className="sidebar-title-sub">Finance</span>
+          <span className="sidebar-title-text">FeeFocus</span>
+          <span className="sidebar-title-sub">Fee Management</span>
         </div>
       </div>
 

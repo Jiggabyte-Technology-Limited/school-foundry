@@ -1,0 +1,33 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="256" height="256" fill="white"/>
+  
+  <!-- Main logo group -->
+  <g>
+    <!-- Focus ring (outer circle) -->
+    <circle cx="128" cy="128" r="110" fill="none" stroke="#f97316" stroke-width="4"/>
+    
+    <!-- Focus ring (middle circle) -->
+    <circle cx="128" cy="128" r="90" fill="none" stroke="#f97316" stroke-width="2" opacity="0.5"/>
+    
+    <!-- Focus ring (inner circle) -->
+    <circle cx="128" cy="128" r="70" fill="#f97316" opacity="0.1"/>
+    
+    <!-- Letter F with geometric design -->
+    <g>
+      <!-- Vertical bar of F -->
+      <rect x="85" y="70" width="18" height="116" fill="#f97316" rx="4"/>
+      
+      <!-- Top horizontal bar of F -->
+      <rect x="85" y="70" width="50" height="16" fill="#f97316" rx="4"/>
+      
+      <!-- Middle horizontal bar of F -->
+      <rect x="85" y="138" width="40" height="14" fill="#f97316" rx="3"/>
+      
+      <!-- Clarity indicator - small crosshair in the middle -->
+      <circle cx="128" cy="128" r="8" fill="none" stroke="#f97316" stroke-width="2"/>
+      <line x1="128" y1="115" x2="128" y2="141" stroke="#f97316" stroke-width="2" stroke-linecap="round"/>
+      <line x1="115" y1="128" x2="141" y2="128" stroke="#f97316" stroke-width="2" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>
