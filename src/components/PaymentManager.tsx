@@ -42,6 +42,10 @@ const PaymentManager: React.FC = () => {
     weekCount: 0,
   });
   
+  // Filters for activity table
+  const [activityTypeFilter, setActivityTypeFilter] = useState('all');
+  const [timePeriodFilter, setTimePeriodFilter] = useState('all');
+  
   const [form, setForm] = useState({
     student_id: '',
     year_id: '',
@@ -95,7 +99,7 @@ const PaymentManager: React.FC = () => {
       JOIN academic_years y ON p.year_id = y.id
       JOIN terms t ON p.term_id = t.id
       ORDER BY p.payment_date DESC
-      LIMIT 20
+      LIMIT 100
     `);
     setPayments(paymentList);
   };
@@ -170,6 +174,43 @@ const PaymentManager: React.FC = () => {
 
   const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+  const filterPaymentsByPeriod = (paymentList: Payment[]): Payment[] => {
+    if (timePeriodFilter === 'all') return paymentList;
+
+    const now = new Date();
+    let filterDate = new Date();
+
+    if (timePeriodFilter === 'week') {
+      filterDate.setDate(now.getDate() - 7);
+    } else if (timePeriodFilter === 'month') {
+      filterDate.setMonth(now.getMonth() - 1);
+    } else if (timePeriodFilter === 'term') {
+      // Filter by current or recent term
+      const currentTermStart = new Date(now.getFullYear(), now.getMonth() - (now.getMonth() % 4), 1);
+      filterDate = currentTermStart;
+    }
+
+    return paymentList.filter(p => new Date(p.payment_date) >= filterDate);
+  };
+
+  const getFilteredPayments = (): Payment[] => {
+    let filtered = payments;
+
+    // Filter by activity type
+    if (activityTypeFilter === 'payments') {
+      // Already showing payments, keep all
+    } else if (activityTypeFilter === 'recent') {
+      // Show only today's payments
+      const today = new Date().toISOString().split('T')[0];
+      filtered = filtered.filter(p => p.payment_date.startsWith(today));
+    }
+
+    // Filter by time period
+    filtered = filterPaymentsByPeriod(filtered);
+
+    return filtered;
+  };
+
   return (
     <div>
       <div className="flex-between mb-4 no-print">
@@ -183,58 +224,104 @@ const PaymentManager: React.FC = () => {
         <div className="payment-stat-card stat-highlight"><span className="stat-label">This Year</span><span className="stat-value">{formatCurrency(stats.yearTotal)}</span></div>
       </div>
 
-      <div className="payment-layout">
-        <div className="card no-print">
-          <h3 className="mb-4">Record New Payment</h3>
-          {error && <div className="error-message mb-4">{error}</div>}
-          <form onSubmit={handleSubmit}>
-            <div className="flex-col gap-4">
-              <div><label className="settings-label">Student *</label>
-                <select className="input-default" value={form.student_id} onChange={(e) => setForm({ ...form, student_id: e.target.value })} required>
-                  <option value="">Select Student</option>
-                  {students.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+      {/* CORE FUNCTIONALITY: Record Payment - Centered at Top */}
+      <div className="card no-print" style={{ marginBottom: 32 }}>
+        <h3 className="mb-4">Record New Payment</h3>
+        {error && <div className="error-message mb-4">{error}</div>}
+        <form onSubmit={handleSubmit}>
+          <div className="flex-col gap-4">
+            <div><label className="settings-label">Student *</label>
+              <select className="input-default" value={form.student_id} onChange={(e) => setForm({ ...form, student_id: e.target.value })} required>
+                <option value="">Select Student</option>
+                {students.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+              </select>
+            </div>
+            <div className="flex-row gap-2">
+              <div className="flex-1"><label className="settings-label">Year *</label>
+                <select className="input-default" value={form.year_id} onChange={(e) => setForm({ ...form, year_id: e.target.value })} required>
+                  {years.map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}
                 </select>
               </div>
-              <div className="flex-row gap-2">
-                <div className="flex-1"><label className="settings-label">Year *</label>
-                  <select className="input-default" value={form.year_id} onChange={(e) => setForm({ ...form, year_id: e.target.value })} required>
-                    {years.map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}
-                  </select>
-                </div>
-                <div className="flex-1"><label className="settings-label">Term *</label>
-                  <select className="input-default" value={form.term_id} onChange={(e) => setForm({ ...form, term_id: e.target.value })} required>
-                    {terms.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="flex-row gap-2">
-                <div className="flex-1"><label className="settings-label">Amount ($) *</label>
-                  <input type="number" step="0.01" min="0.01" className="input-default" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
-                </div>
+              <div className="flex-1"><label className="settings-label">Term *</label>
+                <select className="input-default" value={form.term_id} onChange={(e) => setForm({ ...form, term_id: e.target.value })} required>
+                  {terms.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                </select>
               </div>
             </div>
-            <button type="submit" className="btn btn-primary w-full" style={{ marginTop: 24 }} disabled={saving}>{saving ? '...' : 'Record Payment'}</button>
-          </form>
+            <div className="flex-row gap-2">
+              <div className="flex-1"><label className="settings-label">Amount ($) *</label>
+                <input type="number" step="0.01" min="0.01" className="input-default" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+              </div>
+            </div>
+          </div>
+          <button type="submit" className="btn btn-primary w-full" style={{ marginTop: 24 }} disabled={saving}>{saving ? '...' : 'Record Payment'}</button>
+        </form>
+      </div>
+
+      {/* ACTIVITY TABLE: Recent Activity Below */}
+      <div className="card">
+        <div className="flex-between mb-4">
+          <h3 style={{ margin: 0 }}>Recent Activity</h3>
+        </div>
+        
+        {/* Filters for Activity */}
+        <div className="flex-row gap-2 mb-4" style={{ flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)', alignSelf: 'center' }}>Filter by:</span>
+            
+            <div style={{ display: 'flex', gap: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', alignSelf: 'center' }}>Activity Type:</span>
+              <select 
+                value={activityTypeFilter} 
+                onChange={(e) => setActivityTypeFilter(e.target.value)}
+                style={{ padding: '6px 12px', fontSize: 12, borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border)' }}
+              >
+                <option value="all">All</option>
+                <option value="payments">Payments</option>
+                <option value="recent">Recent Only</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', alignSelf: 'center' }}>Time Period:</span>
+              <select 
+                value={timePeriodFilter} 
+                onChange={(e) => setTimePeriodFilter(e.target.value)}
+                style={{ padding: '6px 12px', fontSize: 12, borderRadius: 'var(--border-radius-md)', border: '1px solid var(--border)' }}
+              >
+                <option value="all">All</option>
+                <option value="week">Last Week</option>
+                <option value="month">Last Month</option>
+                <option value="term">This Term</option>
+              </select>
+            </div>
+          </div>
         </div>
 
-        <div className="card">
-          <h3 className="mb-4">Recent Payments</h3>
-          <table>
-            <thead><tr><th>Receipt</th><th>Student</th><th>Term</th><th>Amount</th><th>Actions</th></tr></thead>
-            <tbody>
-              {payments.map((p) => (
-                <tr key={p.id}>
-                  <td className="td-id">{p.receipt_number}</td>
-                  <td className="td-bold">{p.student_name}</td>
-                  <td>{p.term_label}</td>
-                  <td className="td-amount" style={{ color: '#16a34a' }}>{formatCurrency(p.amount_paid_cents)}</td>
-                  <td><button className="btn btn-sage" onClick={() => setSelectedReceipt(p)}>View</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <table>
+          <thead><tr><th>Receipt</th><th>Student</th><th>Term</th><th>Date</th><th>Amount</th><th>Actions</th></tr></thead>
+          <tbody>
+            {getFilteredPayments().map((p) => (
+              <tr key={p.id}>
+                <td className="td-id">{p.receipt_number}</td>
+                <td className="td-bold">{p.student_name}</td>
+                <td>{p.term_label}</td>
+                <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{formatDate(p.payment_date)}</td>
+                <td className="td-amount" style={{ color: '#16a34a' }}>{formatCurrency(p.amount_paid_cents)}</td>
+                <td><button className="btn btn-sage" onClick={() => setSelectedReceipt(p)}>View</button></td>
+              </tr>
+            ))}
+            {getFilteredPayments().length === 0 && (
+              <tr>
+                <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)' }}>
+                  No payments found for the selected filters
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
+
       {selectedReceipt && <Receipt payment={selectedReceipt} onClose={() => setSelectedReceipt(null)} />}
     </div>
   );
