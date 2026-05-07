@@ -17,13 +17,12 @@ interface NavItem {
 
 const allNavItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid', roles: ['admin', 'bursar', 'viewer'] },
-  { id: 'statements', label: 'Financial Statements', icon: 'file-text', roles: ['admin', 'bursar', 'viewer'] },
-  { id: 'students', label: 'Enrolled Students', icon: 'users', roles: ['admin', 'bursar'] },
+  { id: 'accounts', label: 'Student Accounts', icon: 'file-text', roles: ['admin', 'bursar', 'viewer'] },
   { id: 'fees', label: 'Fee Structure', icon: 'dollar', roles: ['admin'] },
   { id: 'payments', label: 'Payments', icon: 'credit-card', roles: ['admin', 'bursar'] },
-  { id: 'logs', label: 'Activity Logs', icon: 'list', roles: ['admin'] },
-  { id: 'backup', label: 'Backup & Restore', icon: 'database', roles: ['admin'] },
-];
+  { id: 'logs', label: 'Logs', icon: 'list', roles: ['admin'] },
+  { id: 'backup', label: 'Backup', icon: 'database', roles: ['admin'] },
+  ];
 
 const iconPaths: Record<string, JSX.Element> = {
   grid: (

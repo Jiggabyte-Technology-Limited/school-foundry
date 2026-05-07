@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
+import Receipt from './Receipt';
 
 interface Payment {
   id: number;
@@ -31,6 +32,7 @@ const PaymentManager: React.FC = () => {
   const [years, setYears] = useState<any[]>([]);
   const [terms, setTerms] = useState<any[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [selectedReceipt, setSelectedReceipt] = useState<Payment | null>(null);
   const [stats, setStats] = useState<PaymentStats>({
     todayTotal: 0,
     weekTotal: 0,
@@ -74,7 +76,6 @@ const PaymentManager: React.FC = () => {
       setForm(f => ({ ...f, year_id: String(yearList[0].id) }));
     }
     
-    // Generate receipt number
     await generateReceiptNumber();
   };
 
@@ -154,7 +155,6 @@ const PaymentManager: React.FC = () => {
         [user?.id ?? null, user?.username ?? 'System', 'payment_recorded', 'payments', result.lastInsertRowid || result.lastID, `Payment of $${form.amount} recorded for ${student?.full_name} (${form.receipt_number})`]
       );
 
-      // Reset form and reload
       setForm({ student_id: '', year_id: form.year_id, term_id: form.term_id, amount: '', receipt_number: '' });
       await generateReceiptNumber();
       loadPayments();
@@ -166,152 +166,61 @@ const PaymentManager: React.FC = () => {
     }
   };
 
-  const formatCurrency = (cents: number) => {
-    return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  const formatCurrency = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
+  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   return (
     <div>
       <div className="flex-between mb-4 no-print">
         <h2 style={{ margin: 0 }}>Payments</h2>
-        <button className="btn btn-sage" onClick={handlePrint}>Print</button>
       </div>
 
-      {/* Stats Cards */}
       <div className="payment-stats-row mb-4">
-        <div className="payment-stat-card">
-          <span className="stat-label">Today</span>
-          <span className="stat-value">{formatCurrency(stats.todayTotal)}</span>
-          <span className="stat-sub">{stats.todayCount} payment{stats.todayCount !== 1 ? 's' : ''}</span>
-        </div>
-        <div className="payment-stat-card">
-          <span className="stat-label">This Week</span>
-          <span className="stat-value">{formatCurrency(stats.weekTotal)}</span>
-          <span className="stat-sub">{stats.weekCount} payment{stats.weekCount !== 1 ? 's' : ''}</span>
-        </div>
-        <div className="payment-stat-card">
-          <span className="stat-label">This Month</span>
-          <span className="stat-value">{formatCurrency(stats.monthTotal)}</span>
-        </div>
-        <div className="payment-stat-card stat-highlight">
-          <span className="stat-label">This Year</span>
-          <span className="stat-value">{formatCurrency(stats.yearTotal)}</span>
-        </div>
+        <div className="payment-stat-card"><span className="stat-label">Today</span><span className="stat-value">{formatCurrency(stats.todayTotal)}</span></div>
+        <div className="payment-stat-card"><span className="stat-label">This Week</span><span className="stat-value">{formatCurrency(stats.weekTotal)}</span></div>
+        <div className="payment-stat-card"><span className="stat-label">This Month</span><span className="stat-value">{formatCurrency(stats.monthTotal)}</span></div>
+        <div className="payment-stat-card stat-highlight"><span className="stat-label">This Year</span><span className="stat-value">{formatCurrency(stats.yearTotal)}</span></div>
       </div>
 
       <div className="payment-layout">
-        {/* Record Payment Form */}
         <div className="card no-print">
           <h3 className="mb-4">Record New Payment</h3>
-          
           {error && <div className="error-message mb-4">{error}</div>}
-          
           <form onSubmit={handleSubmit}>
             <div className="flex-col gap-4">
-              <div>
-                <label className="settings-label">Student *</label>
-                <select
-                  className="input-default"
-                  value={form.student_id}
-                  onChange={(e) => setForm({ ...form, student_id: e.target.value })}
-                  required
-                >
+              <div><label className="settings-label">Student *</label>
+                <select className="input-default" value={form.student_id} onChange={(e) => setForm({ ...form, student_id: e.target.value })} required>
                   <option value="">Select Student</option>
-                  {students.map((s) => (
-                    <option key={s.id} value={s.id}>{s.full_name}</option>
-                  ))}
+                  {students.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
                 </select>
               </div>
-
               <div className="flex-row gap-2">
-                <div className="flex-1">
-                  <label className="settings-label">Academic Year *</label>
-                  <select
-                    className="input-default"
-                    value={form.year_id}
-                    onChange={(e) => setForm({ ...form, year_id: e.target.value })}
-                    required
-                  >
-                    {years.map((y) => (
-                      <option key={y.id} value={y.id}>{y.label}</option>
-                    ))}
+                <div className="flex-1"><label className="settings-label">Year *</label>
+                  <select className="input-default" value={form.year_id} onChange={(e) => setForm({ ...form, year_id: e.target.value })} required>
+                    {years.map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}
                   </select>
                 </div>
-                <div className="flex-1">
-                  <label className="settings-label">Term *</label>
-                  <select
-                    className="input-default"
-                    value={form.term_id}
-                    onChange={(e) => setForm({ ...form, term_id: e.target.value })}
-                    required
-                  >
-                    {terms.map((t) => (
-                      <option key={t.id} value={t.id}>{t.label}</option>
-                    ))}
+                <div className="flex-1"><label className="settings-label">Term *</label>
+                  <select className="input-default" value={form.term_id} onChange={(e) => setForm({ ...form, term_id: e.target.value })} required>
+                    {terms.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                   </select>
                 </div>
               </div>
-
               <div className="flex-row gap-2">
-                <div className="flex-1">
-                  <label className="settings-label">Amount ($) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    className="input-default"
-                    value={form.amount}
-                    onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-                <div className="flex-1">
-                  <label className="settings-label">Receipt Number</label>
-                  <input
-                    type="text"
-                    className="input-default"
-                    value={form.receipt_number}
-                    readOnly
-                    style={{ backgroundColor: 'var(--color-light-sage)' }}
-                  />
+                <div className="flex-1"><label className="settings-label">Amount ($) *</label>
+                  <input type="number" step="0.01" min="0.01" className="input-default" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
                 </div>
               </div>
             </div>
-
-            <button type="submit" className="btn btn-primary w-full" style={{ marginTop: 24 }} disabled={saving}>
-              {saving ? 'Recording...' : 'Record Payment'}
-            </button>
+            <button type="submit" className="btn btn-primary w-full" style={{ marginTop: 24 }} disabled={saving}>{saving ? '...' : 'Record Payment'}</button>
           </form>
         </div>
 
-        {/* Recent Payments */}
         <div className="card">
           <h3 className="mb-4">Recent Payments</h3>
           <table>
-            <thead>
-              <tr>
-                <th>Receipt #</th>
-                <th>Student</th>
-                <th>Term</th>
-                <th>Amount</th>
-                <th>Date</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Receipt</th><th>Student</th><th>Term</th><th>Amount</th><th>Actions</th></tr></thead>
             <tbody>
               {payments.map((p) => (
                 <tr key={p.id}>
@@ -319,20 +228,14 @@ const PaymentManager: React.FC = () => {
                   <td className="td-bold">{p.student_name}</td>
                   <td>{p.term_label}</td>
                   <td className="td-amount" style={{ color: '#16a34a' }}>{formatCurrency(p.amount_paid_cents)}</td>
-                  <td style={{ fontSize: '13px', color: 'var(--color-sage-placeholder)' }}>
-                    {formatDate(p.payment_date)}
-                  </td>
+                  <td><button className="btn btn-sage" onClick={() => setSelectedReceipt(p)}>View</button></td>
                 </tr>
               ))}
-              {payments.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="table-empty">No payments recorded yet</td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
       </div>
+      {selectedReceipt && <Receipt payment={selectedReceipt} onClose={() => setSelectedReceipt(null)} />}
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
+import Receipt from './Receipt';
 
 interface PaymentWizardProps {
   onClose: () => void;
@@ -31,6 +32,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
   const [currentStep, setCurrentStep] = useState<Step>(preSelectedStudent ? 'payment' : 'student');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showReceipt, setShowReceipt] = useState<any>(null);
 
   // Data
   const [students, setStudents] = useState<Student[]>([]);
@@ -164,16 +166,25 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
       const amountCents = Math.round(parseFloat(form.amount) * 100);
       
       const result = await db.run(`
-        INSERT INTO payments (student_id, year_id, term_id, receipt_number, amount_paid_cents)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO payments (student_id, year_id, term_id, receipt_number, amount_paid_cents, payment_date)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
       `, [selectedStudentId, currentYear?.id, form.term_id, form.receipt_number, amountCents]);
+
+      const paymentDetails = {
+        receipt_number: form.receipt_number,
+        student_name: selectedStudent?.full_name || '',
+        amount_paid_cents: amountCents,
+        payment_date: new Date().toISOString(),
+        year_label: currentYear?.label || '',
+        term_label: getSelectedTermLabel()
+      };
 
       await db.run(
         'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
         [user?.id ?? null, user?.username ?? 'System', 'payment_recorded', 'payments', result.lastInsertRowid || result.lastID, `Payment of $${form.amount} recorded for ${selectedStudent?.full_name} (${form.receipt_number})`]
       );
 
-      onSuccess();
+      setShowReceipt(paymentDetails);
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Failed to record payment. Please try again.');
@@ -493,84 +504,87 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content modal-lg" onClick={e => e.stopPropagation()} style={{ maxWidth: 550 }}>
-        <div className="modal-header">
-          <h2>Record Payment</h2>
-          <button className="modal-close" onClick={onClose}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
+    <>
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-content modal-lg" onClick={e => e.stopPropagation()} style={{ maxWidth: 550 }}>
+          <div className="modal-header">
+            <h2>Record Payment</h2>
+            <button className="modal-close" onClick={onClose}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
 
-        <div className="modal-body">
-          {error && (
-            <div className="error-message mb-4">
-              {error}
-            </div>
-          )}
-          
-          {renderStepContent()}
-
-          {/* Actions */}
-          <div className="wizard-actions" style={{ marginTop: 24, paddingTop: 20 }}>
-            {currentStep === 'student' ? (
-              <>
-                <button className="btn btn-outline" onClick={onClose}>
-                  Cancel
-                </button>
-                <button className="btn btn-primary" onClick={goNext} disabled={!selectedStudentId}>
-                  Continue
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 8 }}>
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                </button>
-              </>
-            ) : currentStep === 'payment' ? (
-              <>
-                <button className="btn btn-outline" onClick={preSelectedStudent ? onClose : goBack}>
-                  {preSelectedStudent ? 'Cancel' : (
-                    <>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
-                        <polyline points="15 18 9 12 15 6" />
-                      </svg>
-                      Back
-                    </>
-                  )}
-                </button>
-                <button className="btn btn-primary" onClick={goNext}>
-                  Continue
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 8 }}>
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                </button>
-              </>
-            ) : (
-              <>
-                <button className="btn btn-outline" onClick={goBack}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
-                    <polyline points="15 18 9 12 15 6" />
-                  </svg>
-                  Back
-                </button>
-                <button 
-                  className="btn btn-success btn-lg" 
-                  onClick={handleSubmit}
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Recording...' : 'Confirm Payment'}
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 8 }}>
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </button>
-              </>
+          <div className="modal-body">
+            {error && (
+              <div className="error-message mb-4">
+                {error}
+              </div>
             )}
+            
+            {renderStepContent()}
+
+            {/* Actions */}
+            <div className="wizard-actions" style={{ marginTop: 24, paddingTop: 20 }}>
+              {currentStep === 'student' ? (
+                <>
+                  <button className="btn btn-outline" onClick={onClose}>
+                    Cancel
+                  </button>
+                  <button className="btn btn-primary" onClick={goNext} disabled={!selectedStudentId}>
+                    Continue
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 8 }}>
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+                </>
+              ) : currentStep === 'payment' ? (
+                <>
+                  <button className="btn btn-outline" onClick={preSelectedStudent ? onClose : goBack}>
+                    {preSelectedStudent ? 'Cancel' : (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
+                          <polyline points="15 18 9 12 15 6" />
+                        </svg>
+                        Back
+                      </>
+                    )}
+                  </button>
+                  <button className="btn btn-primary" onClick={goNext}>
+                    Continue
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 8 }}>
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button className="btn btn-outline" onClick={goBack}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
+                      <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                    Back
+                  </button>
+                  <button 
+                    className="btn btn-success btn-lg" 
+                    onClick={handleSubmit}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Recording...' : 'Confirm Payment'}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 8 }}>
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+      {showReceipt && <Receipt payment={showReceipt} onClose={() => { setShowReceipt(null); onSuccess(); }} />}
+    </>
   );
 };
 

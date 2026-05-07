@@ -166,9 +166,61 @@ const migrations: MigrationStep[] = [
       for (const sql of indexes) {
         try { await runSql(db, sql); } catch (e) { console.warn('Index creation warning:', e); }
       }
+      
+      // ── fee_structure columns (ensuring description exists) ──
+      const feeCols = [
+        `ALTER TABLE fee_structure ADD COLUMN description TEXT;`,
+        `ALTER TABLE fee_structure ADD COLUMN created_by INTEGER REFERENCES users(id) ON DELETE SET NULL;`,
+        `ALTER TABLE fee_structure ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'));`,
+        `ALTER TABLE fee_structure ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'));`,
+      ];
+      for (const sql of feeCols) {
+        try { await runSql(db, sql); } catch (e) { /* already exists */ }
+      }
 
       // ── update schema version ──
       await runSql(db, `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '1.1', datetime('now'));`);
+    },
+  },
+  {
+    version: '1.2',
+    description: 'Ensure missing columns in fee_structure and payments are added (fix for v1.1 gaps)',
+    run: async (db) => {
+      // ── fee_structure ──
+      const feeCols = [
+        `ALTER TABLE fee_structure ADD COLUMN description TEXT;`,
+        `ALTER TABLE fee_structure ADD COLUMN created_by INTEGER REFERENCES users(id) ON DELETE SET NULL;`,
+        `ALTER TABLE fee_structure ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'));`,
+        `ALTER TABLE fee_structure ADD COLUMN updated_at TEXT NOT NULL DEFAULT (datetime('now'));`,
+      ];
+      for (const sql of feeCols) {
+        try { await runSql(db, sql); } catch (e) { /* already exists */ }
+      }
+
+      // ── payments ──
+      const paymentCols = [
+        `ALTER TABLE payments ADD COLUMN grade_id INTEGER REFERENCES grades(id) ON DELETE RESTRICT;`,
+        `ALTER TABLE payments ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'cash' CHECK(payment_method IN ('cash', 'ecocash', 'bank_transfer', 'other'));`,
+        `ALTER TABLE payments ADD COLUMN is_voided INTEGER NOT NULL DEFAULT 0 CHECK(is_voided IN (0, 1));`,
+        `ALTER TABLE payments ADD COLUMN voided_by INTEGER REFERENCES users(id) ON DELETE SET NULL;`,
+        `ALTER TABLE payments ADD COLUMN voided_at TEXT;`,
+        `ALTER TABLE payments ADD COLUMN void_reason TEXT;`,
+        `ALTER TABLE payments ADD COLUMN recorded_by INTEGER REFERENCES users(id) ON DELETE RESTRICT;`,
+        `ALTER TABLE payments ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'));`,
+      ];
+      for (const sql of paymentCols) {
+        try { await runSql(db, sql); } catch (e) { /* already exists */ }
+      }
+
+      // ── activity_log ──
+      try {
+        await runSql(db, `ALTER TABLE activity_log RENAME COLUMN timestamp TO logged_at;`);
+      } catch (e) { /* already exists or not supported */ }
+      try {
+        await runSql(db, `ALTER TABLE activity_log ADD COLUMN logged_at TEXT NOT NULL DEFAULT (datetime('now'));`);
+      } catch (e) { /* already exists */ }
+
+      await runSql(db, `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '1.2', datetime('now'));`);
     },
   },
 ];

@@ -7,19 +7,17 @@ import SetupWizard from './components/SetupWizard';
 import LoginScreen from './components/LoginScreen';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
-import StudentManager from './components/StudentManager';
 import FeeStructureManager from './components/FeeStructureManager';
 import PaymentManager from './components/PaymentManager';
 import Dashboard from './components/Dashboard';
-import FinancialStatements from './components/FinancialStatements';
+import StudentAccounts from './components/StudentAccounts';
 import ActivityLog from './components/ActivityLog';
 import BackupManager from './components/BackupManager';
 import SettingsModal from './components/SettingsModal';
 
 const pageTitles: Record<string, string> = {
   dashboard: 'Dashboard',
-  statements: 'Financial Statements',
-  students: 'Enrolled Students',
+  accounts: 'Student Accounts',
   fees: 'Fee Structure',
   payments: 'Payments',
   logs: 'Activity Logs',
@@ -31,7 +29,6 @@ function AppInner() {
   const [isSetup, setIsSetup] = useState(false);
   const [view, setView] = useState('dashboard');
   const [schoolName, setSchoolName] = useState('');
-  const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
@@ -85,10 +82,9 @@ function AppInner() {
 
             <div className="page-content">
               {view === 'dashboard' && <Dashboard />}
-              {view === 'students' && <StudentManager />}
+              {view === 'accounts' && <StudentAccounts />}
               {view === 'fees' && <FeeStructureManager />}
               {view === 'payments' && <PaymentManager />}
-              {view === 'statements' && <FinancialStatements />}
               {view === 'logs' && <ActivityLog />}
               {view === 'backup' && <BackupManager />}
             </div>
