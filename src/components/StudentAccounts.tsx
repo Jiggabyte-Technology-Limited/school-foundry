@@ -194,73 +194,85 @@ const StudentAccounts: React.FC = () => {
   };
 
   return (
-    <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 bg-background min-h-full">
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold font-display text-text-primary">Student Accounts</h2>
+    <div className="page-content" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', background: 'var(--background)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div className="flex-between">
+            <h2 style={{ margin: 0, fontSize: '28px', fontWeight: 600 }} className="text-display">Student Accounts</h2>
             <button 
-              className="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:opacity-90 transition-opacity shadow-sm" 
+              className="btn btn-primary" 
               onClick={() => setShowWizard(true)}
             >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
               Add Student
             </button>
         </div>
         
-        <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
-          <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider mb-3">Filter by Grade/Form</label>
-          <div className="grid grid-cols-4 gap-2 mb-6">
+        <div className="card-surface">
+          <div className="metric-label">Filter by Grade/Form</div>
+          <div className="chip-list mb-4">
              <button
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${selectedGrade === null ? 'bg-primary text-white shadow-md' : 'bg-secondary text-text-primary hover:bg-border'}`}
-                onClick={() => { setSelectedGrade(null); setSelectedStudent(null); setShowPrintView(false); }}    
+                className={`chip text-display ${selectedGrade === null ? 'chip-active' : ''}`}
+                onClick={() => { setSelectedGrade(null); setSelectedStudent(null); setShowPrintView(false); }}
+                style={{ border: 'none', cursor: 'pointer' }}
             >
                 All
             </button>
              {grades.map(g => (
                 <button
                     key={g.id}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${selectedGrade === g.id ? 'bg-primary text-white shadow-md' : 'bg-secondary text-text-primary hover:bg-border'}`}
+                    className={`chip text-display ${selectedGrade === g.id ? 'chip-active' : ''}`}
                     onClick={() => { setSelectedGrade(g.id); setSelectedStudent(null); setShowPrintView(false); }}
+                    style={{ border: 'none', cursor: 'pointer' }}
                 >
                     {g.label}
                 </button>
             ))}
           </div>
-          <div className="relative">
+          <div style={{ position: 'relative' }}>
             <input 
-              className="w-full pl-10 pr-4 py-2 bg-secondary/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all" 
+              className="input-default text-display" 
               placeholder="Search by name or ID..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)} 
+              style={{ paddingLeft: '40px' }}
             />
-            <div className="absolute left-3 top-2.5 text-text-secondary opacity-50">
+            <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, display: 'flex' }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             </div>
           </div>
         </div>
 
-        <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-            <table className="w-full text-left border-collapse">
-                <thead className="bg-secondary/80 text-text-secondary text-[10px] uppercase font-bold tracking-widest sticky top-0 z-10 backdrop-blur-md">
+        <div className="card-surface" style={{ padding: 0, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                   <tr>
-                    <th className="px-6 py-4">ID</th>
-                    <th className="px-6 py-4">Name</th>
-                    <th className="px-6 py-4">Grade</th>
-                    <th className="px-6 py-4 text-right">Balance</th>
+                    <th style={{ width: '60px' }}>ID</th>
+                    <th>Name</th>
+                    <th>Grade</th>
+                    <th style={{ textAlign: 'right' }}>Balance</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody>
                     {students.filter(s => s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || String(s.id).includes(searchQuery)).map(s => {
                         const isSelected = selectedStudent?.id === s.id;
                         return (
                             <tr
                                 key={s.id}
                                 onClick={() => viewStatement(s)}
-                                className={`group cursor-pointer transition-all hover:bg-primary/5 ${isSelected ? 'bg-primary/10 border-l-4 border-primary' : 'border-l-4 border-transparent'}`}
+                                style={{ 
+                                    cursor: 'pointer', 
+                                    backgroundColor: isSelected ? 'rgba(249, 115, 22, 0.08)' : 'transparent',
+                                    borderLeft: isSelected ? '4px solid var(--primary)' : '4px solid transparent',
+                                    transition: 'all 0.2s ease'
+                                }}
+                                className="hover:bg-secondary"
                             >
-                                <td className="px-6 py-4 text-sm font-mono opacity-60">{s.id}</td>
-                                <td className="px-6 py-4 text-sm font-semibold text-text-primary">{s.full_name}</td>
-                                <td className="px-6 py-4 text-sm text-text-secondary">{s.grade_label}</td>
-                                <td className={`px-6 py-4 text-sm font-mono font-bold text-right ${s.balance > 0 ? 'text-primary' : 'text-emerald-500'}`}>
+                                <td className="text-mono" style={{ opacity: 0.6, fontSize: '12px' }}>{s.id}</td>
+                                <td style={{ fontWeight: 600 }} className="text-display">{s.full_name}</td>
+                                <td style={{ fontSize: '14px', color: 'var(--text-secondary)' }} className="text-display">{s.grade_label}</td>
+                                <td className="text-mono" style={{ fontWeight: 700, textAlign: 'right', color: s.balance > 0 ? 'var(--primary)' : '#10B981' }}>
                                     ${(s.balance/100).toFixed(2)}
                                 </td>
                             </tr>
@@ -268,7 +280,9 @@ const StudentAccounts: React.FC = () => {
                     })}
                     {students.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-6 py-12 text-center text-text-secondary italic opacity-60">No students found for this selection</td>
+                        <td colSpan={4} style={{ textAlign: 'center', padding: '48px', color: 'var(--text-secondary)', fontStyle: 'italic' }} className="text-display">
+                          No students found for this selection
+                        </td>
                       </tr>
                     )}
                 </tbody>
@@ -276,189 +290,225 @@ const StudentAccounts: React.FC = () => {
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {showPrintView && selectedStudent ? (
-            <div className="bg-white border border-border rounded-xl p-8 shadow-xl min-h-[500px] relative animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="card-surface" style={{ padding: '32px', minHeight: '500px', position: 'relative', border: '1px solid var(--border)', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05)' }}>
                 {isLoadingDetail && (
-                    <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-20 backdrop-blur-sm rounded-xl">
-                        <div className="flex flex-col items-center">
-                            <div className="w-12 h-12 border-4 border-secondary border-t-primary rounded-full animate-spin" />
-                            <p className="mt-4 font-bold text-text-primary tracking-tight">Accessing records...</p>
+                    <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255, 255, 255, 0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20, backdropFilter: 'blur(4px)', borderRadius: '16px' }}>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ width: '48px', height: '48px', border: '4px solid var(--secondary)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                            <p style={{ marginTop: '16px', fontWeight: 700, color: 'var(--text-primary)' }} className="text-display">Accessing records...</p>
                         </div>
                     </div>
                 )}
 
                 {detailError ? (
-                    <div className="text-center py-20">
-                        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <div style={{ textAlign: 'center', padding: '80px 0' }}>
+                        <div style={{ width: '64px', height: '64px', backgroundColor: '#FEE2E2', color: '#EF4444', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
                           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                         </div>
-                        <p className="text-text-primary font-medium mb-6">{detailError}</p>
-                        <button className="px-6 py-2 bg-primary text-white rounded-lg font-bold shadow-lg shadow-primary/20" onClick={() => viewStatement(selectedStudent)}>Retry Connection</button>
+                        <p style={{ fontWeight: 500, marginBottom: '24px' }} className="text-display">{detailError}</p>
+                        <button className="btn btn-primary" onClick={() => viewStatement(selectedStudent)}>Retry Connection</button>
                     </div>
                 ) : statementData ? (
                     <>
-                        <div className="text-center border-b-2 border-primary/20 pb-8 mb-8">
-                            <h2 className="text-3xl font-black font-display text-text-primary uppercase tracking-tighter mb-1">{schoolName}</h2>
-                            <p className="text-text-secondary text-xs font-bold uppercase tracking-[0.2em] opacity-60">Statement of Account • {statementData.generatedAt}</p>
+                        <div style={{ textAlign: 'center', borderBottom: '2px solid rgba(249, 115, 22, 0.1)', paddingBottom: '32px', marginBottom: '32px' }}>
+                            <h2 style={{ fontSize: '28px', fontWeight: 800, margin: '0 0 4px 0', letterSpacing: '-0.02em' }} className="text-display">{schoolName}</h2>
+                            <div className="metric-label" style={{ margin: 0, opacity: 0.5 }}>Statement of Account • {statementData.generatedAt}</div>
                         </div>
 
-                        <div className="flex justify-between items-start mb-8">      
-                            <div className="space-y-1">
-                                <h3 className="text-xl font-black text-text-primary tracking-tight">{statementData.student.full_name}</h3>
-                                <div className="flex gap-4 items-center">
-                                  <p className="text-xs text-text-secondary font-bold uppercase"><span className="opacity-50">Grade:</span> {statementData.student.grade_label}</p>
-                                  <p className="text-xs text-text-secondary font-bold uppercase"><span className="opacity-50">ID:</span> {statementData.student.id}</p>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>      
+                            <div>
+                                <h3 style={{ fontSize: '20px', fontWeight: 800, margin: '0 0 8px 0', tracking: '-0.02em' }} className="text-display">{statementData.student.full_name}</h3>
+                                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '8px' }}>
+                                  <div style={{ display: 'flex', gap: '4px' }}>
+                                    <span className="metric-label" style={{ fontSize: '10px', margin: 0 }}>Grade</span>
+                                    <span className="text-display" style={{ fontSize: '12px', fontWeight: 700 }}>{statementData.student.grade_label}</span>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '4px' }}>
+                                    <span className="metric-label" style={{ fontSize: '10px', margin: 0 }}>ID</span>
+                                    <span className="text-mono" style={{ fontSize: '12px', fontWeight: 700 }}>{statementData.student.id}</span>
+                                  </div>
                                 </div>
-                                <p className="text-xs text-text-secondary font-medium"><span className="opacity-50 font-bold uppercase mr-1">Guardian:</span> {statementData.student.guardian_name} ({statementData.student.guardian_contact})</p>
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }} className="text-display">
+                                    <span className="metric-label" style={{ fontSize: '10px', marginRight: '8px' }}>Guardian</span>
+                                    <span style={{ fontWeight: 600 }}>{statementData.student.guardian_name}</span>
+                                    <span style={{ margin: '0 8px', opacity: 0.3 }}>|</span>
+                                    <span className="text-mono">{statementData.student.guardian_contact}</span>
+                                </div>
                             </div>
-                            <div className="text-right">
-                                <span className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-widest border-2 ${statementData.balance > 0 ? 'bg-orange-50 border-primary text-primary' : 'bg-emerald-50 border-emerald-500 text-emerald-600'}`}>
+                            <div style={{ textAlign: 'right' }}>
+                                <span style={{ 
+                                    padding: '6px 12px', 
+                                    borderRadius: '8px', 
+                                    fontSize: '10px', 
+                                    fontWeight: 800, 
+                                    textTransform: 'uppercase', 
+                                    letterSpacing: '0.05em',
+                                    border: '1.5px solid',
+                                    backgroundColor: statementData.balance > 0 ? 'rgba(249, 115, 22, 0.05)' : 'rgba(16, 185, 129, 0.05)',
+                                    borderColor: statementData.balance > 0 ? 'var(--primary)' : '#10B981',
+                                    color: statementData.balance > 0 ? 'var(--primary)' : '#059669'
+                                }} className="text-display">
                                     {statementData.balance > 0 ? 'Payment Required' : 'Account Cleared'}
                                 </span>
                             </div>
                         </div>
 
-                        <div className="mb-10 p-6 border-2 border-dashed border-border rounded-xl bg-secondary/20">
-                          <h4 className="text-xs font-black text-text-primary mb-4 uppercase tracking-widest">Record New Transaction</h4>
-                          <div className="grid grid-cols-2 gap-3 mb-3">
-                            <div className="relative">
-                              <input type="number" step="0.01" min="0.01" placeholder="Amount ($)" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="w-full pl-8 pr-4 py-2.5 bg-white border border-border rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20" />
-                              <span className="absolute left-3 top-2.5 text-text-secondary font-bold">$</span>
+                        <div style={{ marginBottom: '40px', padding: '24px', border: '2px dashed var(--border)', borderRadius: '16px', backgroundColor: 'var(--secondary)' }}>
+                          <div className="metric-label" style={{ marginBottom: '16px' }}>Record New Transaction</div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                            <div style={{ position: 'relative' }}>
+                              <input type="number" step="0.01" min="0.01" placeholder="Amount ($)" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="input-default text-mono" style={{ paddingLeft: '28px', fontWeight: 700 }} />
+                              <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontWeight: 700 }}>$</span>
                             </div>
-                            <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="w-full px-4 py-2.5 bg-white border border-border rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none">
+                            <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="input-default text-display" style={{ fontWeight: 600 }}>
                               <option value="cash">Cash Payment</option>
                               <option value="ecocash">EcoCash / Mobile</option>
                               <option value="bank_transfer">Direct Deposit</option>
                               <option value="other">Other Method</option>
                             </select>
                           </div>
-                          <div className="flex gap-3">
-                            <select value={paymentTermId || ''} onChange={e => setPaymentTermId(Number(e.target.value) || null)} className="flex-1 px-4 py-2.5 bg-white border border-border rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 appearance-none">
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                            <select value={paymentTermId || ''} onChange={e => setPaymentTermId(Number(e.target.value) || null)} className="input-default text-display" style={{ flex: 1, fontWeight: 600 }}>
                               <option value="">Allocate to Term...</option>
                               {termsList.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                             </select>
                             <button 
-                              className="px-8 py-2.5 bg-primary text-white rounded-lg text-sm font-black uppercase tracking-widest hover:opacity-90 disabled:opacity-30 disabled:grayscale transition-all shadow-lg shadow-primary/20" 
+                              className="btn btn-primary" 
                               onClick={addPayment} 
                               disabled={!paymentAmount || !paymentTermId}
+                              style={{ padding: '0 32px' }}
                             >
                               Post
                             </button>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-4 mb-10">
-                            <div className="bg-secondary/40 p-5 rounded-2xl border border-border group hover:border-primary/30 transition-colors">
-                                <p className="text-[10px] uppercase font-black text-text-secondary mb-2 tracking-widest opacity-60">Invoiced</p>
-                                <p className="text-2xl font-black font-mono text-text-primary tracking-tighter">${(statementData.totalFees/100).toFixed(2)}</p>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '40px' }}>
+                            <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                                <div className="metric-label" style={{ margin: '0 0 8px 0', fontSize: '10px' }}>Invoiced</div>
+                                <div className="metric-value" style={{ fontSize: '24px' }}>${(statementData.totalFees/100).toFixed(2)}</div>
                             </div>
-                            <div className="bg-secondary/40 p-5 rounded-2xl border border-border group hover:border-emerald-500/30 transition-colors">
-                                <p className="text-[10px] uppercase font-black text-text-secondary mb-2 tracking-widest opacity-60">Payments</p>
-                                <p className="text-2xl font-black font-mono text-emerald-500 tracking-tighter">${(statementData.totalPaid/100).toFixed(2)}</p>
+                            <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                                <div className="metric-label" style={{ margin: '0 0 8px 0', fontSize: '10px' }}>Payments</div>
+                                <div className="metric-value" style={{ fontSize: '24px', color: '#10B981' }}>${(statementData.totalPaid/100).toFixed(2)}</div>
                             </div>
-                            <div className="bg-secondary/40 p-5 rounded-2xl border-2 border-primary shadow-lg shadow-primary/5">
-                                <p className="text-[10px] uppercase font-black text-text-secondary mb-2 tracking-widest opacity-60">Balance</p>
-                                <p className={`text-2xl font-black font-mono tracking-tighter ${statementData.balance > 0 ? 'text-primary' : 'text-emerald-500'}`}>
+                            <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1.5px solid var(--primary)', boxShadow: '0 4px 12px rgba(249, 115, 22, 0.08)' }}>
+                                <div className="metric-label" style={{ margin: '0 0 8px 0', fontSize: '10px' }}>Balance</div>
+                                <div className="metric-value" style={{ fontSize: '24px', color: 'var(--primary)' }}>
                                     ${(statementData.balance/100).toFixed(2)}
-                                </p>
+                                </div>
                             </div>
                         </div>
 
-                        <h4 className="text-[10px] font-black text-text-primary mb-4 uppercase tracking-[0.3em] opacity-40">Financial History</h4>
-                        <div className="overflow-y-auto pr-2 custom-scrollbar" style={{ maxHeight: '35vh' }}>
-                            <table className="w-full text-left">
-                                <thead className="bg-secondary/50 text-text-secondary text-[9px] uppercase font-black tracking-widest">
+                        <div className="metric-label" style={{ marginBottom: '16px', opacity: 0.5 }}>Financial History</div>
+                        <div style={{ maxHeight: '35vh', overflowY: 'auto', paddingRight: '8px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
                                     <tr>
-                                        <th className="px-4 py-2 rounded-l-lg">Date / Term</th>
-                                        <th className="px-4 py-2">Details</th>
-                                        <th className="px-4 py-2 text-right rounded-r-lg">Amount</th>
+                                        <th>Date / Term</th>
+                                        <th>Details</th>
+                                        <th style={{ textAlign: 'right' }}>Amount</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-border/50">
+                                <tbody>
                                     {statementData.fees.map((item:any, i:any) => (
-                                        <tr key={`fee-${i}`} className="hover:bg-secondary/20">
-                                            <td className="px-4 py-4 text-[11px] font-bold text-text-secondary uppercase">{item.term_label || 'Term -'}</td>       
-                                            <td className="px-4 py-4 text-xs font-semibold text-text-primary">
+                                        <tr key={`fee-${i}`} className="hover:bg-secondary">
+                                            <td className="text-display" style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{item.term_label || 'Term -'}</td>       
+                                            <td className="text-display" style={{ fontSize: '13px', fontWeight: 600 }}>
                                               {item.description} 
-                                              <span className="ml-2 px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded text-[9px] font-black border border-amber-200 uppercase tracking-tighter">Debit</span>
+                                              <span style={{ marginLeft: '8px', padding: '2px 6px', backgroundColor: '#FEF3C7', color: '#92400E', borderRadius: '4px', fontSize: '9px', fontWeight: 800, border: '1px solid #FDE68A', textTransform: 'uppercase' }}>Debit</span>
                                             </td>    
-                                            <td className="px-4 py-4 text-sm font-mono font-black text-right text-text-primary">${(item.amount/100).toFixed(2)}</td>
+                                            <td className="text-mono" style={{ fontSize: '14px', fontWeight: 700, textAlign: 'right' }}>${(item.amount/100).toFixed(2)}</td>
                                         </tr>
                                     ))}
                                     {statementData.payments.map((item:any, i:any) => (
-                                        <tr key={`pay-${i}`} className="hover:bg-secondary/20">
-                                            <td className="px-4 py-4 text-[11px] font-bold text-text-secondary">{item.date}</td>
-                                            <td className="px-4 py-4 text-xs font-semibold text-text-primary">
+                                        <tr key={`pay-${i}`} className="hover:bg-secondary">
+                                            <td className="text-mono" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{item.date}</td>
+                                            <td className="text-display" style={{ fontSize: '13px', fontWeight: 600 }}>
                                                 Credit Receipt #{item.ref.split('-')[1]?.substring(0,6) || item.ref}
-                                                <span className="ml-2 px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded text-[9px] font-black border border-emerald-200 uppercase tracking-tighter">Credit</span>
+                                                <span style={{ marginLeft: '8px', padding: '2px 6px', backgroundColor: '#D1FAE5', color: '#065F46', borderRadius: '4px', fontSize: '9px', fontWeight: 800, border: '1px solid #A7F3D0', textTransform: 'uppercase' }}>Credit</span>
                                             </td>
-                                            <td className="px-4 py-4 text-sm font-mono font-black text-right text-emerald-500">-${(item.amount/100).toFixed(2)}</td>
+                                            <td className="text-mono" style={{ fontSize: '14px', fontWeight: 700, textAlign: 'right', color: '#10B981' }}>-${(item.amount/100).toFixed(2)}</td>
                                         </tr>
                                     ))}
                                     {statementData.fees.length === 0 && statementData.payments.length === 0 && (  
-                                        <tr><td colSpan={3} className="px-4 py-16 text-center text-sm text-text-secondary italic opacity-40 font-medium tracking-tight">No transactional records exist for this student account</td></tr>
+                                        <tr><td colSpan={3} style={{ textAlign: 'center', padding: '64px', color: 'var(--text-secondary)', fontStyle: 'italic', opacity: 0.5 }} className="text-display">No transactional records exist for this student account</td></tr>
                                     )}
                                 </tbody>
                             </table>
                         </div>
-                        <div className="mt-8 flex gap-4 no-print">
-                            <button className="flex-1 px-6 py-3 bg-primary text-white rounded-xl font-black uppercase tracking-widest hover:opacity-90 transition-all shadow-xl shadow-primary/20 active:scale-[0.98]" onClick={() => window.print()}>Print Statement</button>
-                            <button className="px-6 py-3 bg-secondary text-text-primary rounded-xl font-black uppercase tracking-widest hover:bg-border transition-all active:scale-[0.98]" onClick={() => { setShowPrintView(false); setSelectedStudent(null); }}>Exit</button>
+                        <div style={{ marginTop: '32px', display: 'flex', gap: '16px' }} className="no-print">
+                            <button className="btn btn-primary" style={{ flex: 1, padding: '16px' }} onClick={() => window.print()}>Print Statement</button>
+                            <button className="btn btn-outline" style={{ padding: '0 32px' }} onClick={() => { setShowPrintView(false); setSelectedStudent(null); }}>Exit</button>
                         </div>
                     </>
                 ) : (
-                    <div className="text-center py-24 text-text-secondary opacity-40 font-bold uppercase tracking-widest text-sm">
+                    <div style={{ textAlign: 'center', padding: '96px 0', color: 'var(--text-secondary)', opacity: 0.4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }} className="text-display">
                       Record Entry Pending
                     </div>
                 )}
             </div>
           ) : overviewData ? (
-            <div className="bg-surface border border-border rounded-xl p-10 shadow-sm min-h-[500px] relative animate-in fade-in duration-500">
-                <div className="text-center border-b-2 border-primary/20 pb-8 mb-10">
-                    <h2 className="text-2xl font-black font-display text-text-primary tracking-tighter uppercase">{schoolName}</h2>
-                    <p className="text-text-secondary text-xs font-bold uppercase tracking-[0.2em] opacity-60">
+            <div className="card-surface" style={{ padding: '40px', minHeight: '500px', position: 'relative' }}>
+                <div style={{ textAlign: 'center', borderBottom: '2px solid rgba(249, 115, 22, 0.1)', paddingBottom: '32px', marginBottom: '40px' }}>
+                    <h2 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 4px 0', tracking: '-0.02em' }} className="text-display uppercase">{schoolName}</h2>
+                    <div className="metric-label" style={{ margin: 0, opacity: 0.6 }}>
                         {overviewData.isGrade ? `Grade Report: ${grades.find(g => g.id === selectedGrade)?.label}` : 'Master Financial Overview'}
-                    </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-                    <div className="bg-secondary/20 p-6 rounded-2xl border border-border hover:border-primary/20 transition-all">
-                        <p className="text-[10px] uppercase font-black text-text-secondary mb-2 tracking-widest opacity-60">Total Invoiced</p>
-                        <p className="text-2xl font-black font-mono text-text-primary tracking-tighter">${(overviewData.totalInvoiced/100).toFixed(2)}</p>
-                    </div>
-                    <div className="bg-secondary/20 p-6 rounded-2xl border border-border hover:border-emerald-500/20 transition-all">
-                        <p className="text-[10px] uppercase font-black text-text-secondary mb-2 tracking-widest opacity-60">Collected</p>
-                        <p className="text-2xl font-black font-mono text-emerald-500 tracking-tighter">${(overviewData.totalPaid/100).toFixed(2)}</p>
-                    </div>
-                    <div className="bg-primary/5 p-6 rounded-2xl border-2 border-primary shadow-lg shadow-primary/5">
-                        <p className="text-[10px] uppercase font-black text-text-secondary mb-2 tracking-widest opacity-60">Unpaid Balance</p>
-                        <p className={`text-2xl font-black font-mono tracking-tighter ${overviewData.balance > 0 ? 'text-primary' : 'text-emerald-500'}`}>
-                            ${(overviewData.balance/100).toFixed(2)}
-                        </p>
                     </div>
                 </div>
 
-                <h4 className="text-[10px] font-black text-text-primary mb-6 uppercase tracking-[0.3em] opacity-40">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px', marginBottom: '40px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                        <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                            <div className="metric-label" style={{ fontSize: '10px' }}>Total Invoiced</div>
+                            <div className="metric-value" style={{ fontSize: '20px' }}>${(overviewData.totalInvoiced/100).toFixed(2)}</div>
+                        </div>
+                        <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                            <div className="metric-label" style={{ fontSize: '10px' }}>Collected</div>
+                            <div className="metric-value" style={{ fontSize: '20px', color: '#10B981' }}>${(overviewData.totalPaid/100).toFixed(2)}</div>
+                        </div>
+                        <div style={{ backgroundColor: 'rgba(249, 115, 22, 0.05)', padding: '20px', borderRadius: '16px', border: '1.5px solid var(--primary)' }}>
+                            <div className="metric-label" style={{ fontSize: '10px', color: 'var(--primary)' }}>Unpaid Balance</div>
+                            <div className="metric-value" style={{ fontSize: '20px', color: 'var(--primary)' }}>
+                                ${(overviewData.balance/100).toFixed(2)}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="metric-label" style={{ marginBottom: '24px', opacity: 0.5 }}>
                     {overviewData.isGrade ? 'Student Enrollment Breakdown' : 'Institutional Performance by Grade'}
-                </h4>
-                <div className="overflow-y-auto custom-scrollbar" style={{ maxHeight: '45vh' }}>
-                    <table className="w-full text-left border-collapse">
-                        <thead className="bg-secondary/30 text-text-secondary text-[9px] uppercase font-black tracking-widest sticky top-0">
+                </div>
+                <div style={{ maxHeight: '45vh', overflowY: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
                             <tr>
-                                <th className="px-5 py-3 rounded-l-lg">{overviewData.isGrade ? 'Student Identity' : 'Academic Form'}</th>
-                                <th className="px-5 py-3 text-right">Net Balance</th>
-                                <th className="px-5 py-3 text-center w-32 rounded-r-lg">Compliance</th>
+                                <th>{overviewData.isGrade ? 'Student Identity' : 'Academic Form'}</th>
+                                <th style={{ textAlign: 'right' }}>Net Balance</th>
+                                <th style={{ textAlign: 'center', width: '128px' }}>Compliance</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-border/50">
+                        <tbody>
                             {overviewData.isGrade ? (
                                 students.map(s => (
-                                    <tr key={s.id} onClick={() => viewStatement(s)} className="group cursor-pointer hover:bg-primary/5 transition-all">
-                                        <td className="px-5 py-4 text-sm font-bold text-text-primary group-hover:text-primary transition-colors">{s.full_name}</td>
-                                        <td className="px-5 py-4 text-sm font-mono font-black text-right text-text-primary">${(s.balance/100).toFixed(2)}</td>
-                                        <td className="px-5 py-4 text-center">
-                                            <span className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-tighter border ${s.balance > 0 ? 'bg-orange-50 border-primary/20 text-primary' : 'bg-emerald-50 border-emerald-500/20 text-emerald-600'}`}>
+                                    <tr key={s.id} onClick={() => viewStatement(s)} style={{ cursor: 'pointer', transition: 'all 0.2s ease' }} className="hover:bg-secondary">
+                                        <td style={{ fontWeight: 700 }} className="text-display">{s.full_name}</td>
+                                        <td className="text-mono" style={{ fontWeight: 800, textAlign: 'right' }}>${(s.balance/100).toFixed(2)}</td>
+                                        <td style={{ textAlign: 'center' }}>
+                                            <span style={{ 
+                                                padding: '4px 8px', 
+                                                borderRadius: '6px', 
+                                                fontSize: '9px', 
+                                                fontWeight: 800, 
+                                                textTransform: 'uppercase', 
+                                                letterSpacing: '0.05em',
+                                                border: '1px solid',
+                                                backgroundColor: s.balance > 0 ? 'rgba(249, 115, 22, 0.05)' : 'rgba(16, 185, 129, 0.05)',
+                                                borderColor: s.balance > 0 ? 'rgba(249, 115, 22, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                                                color: s.balance > 0 ? 'var(--primary)' : '#059669'
+                                            }} className="text-display">
                                                 {s.balance > 0 ? 'Action Needed' : 'In Good Standing'}
                                             </span>
                                         </td>
@@ -469,11 +519,22 @@ const StudentAccounts: React.FC = () => {
                                     const gradeStudents = students.filter(s => s.grade_id === g.id);
                                     const gradeOutstanding = gradeStudents.reduce((sum, s) => sum + s.balance, 0);
                                     return (
-                                        <tr key={g.id} className="hover:bg-secondary/40 transition-colors">
-                                            <td className="px-5 py-4 text-sm font-bold text-text-primary">{g.label}</td>
-                                            <td className="px-5 py-4 text-sm font-mono font-black text-right text-text-primary">${(gradeOutstanding/100).toFixed(2)}</td>
-                                            <td className="px-5 py-4 text-center">
-                                                <span className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-tighter border ${gradeOutstanding > 0 ? 'bg-orange-50 border-primary/20 text-primary' : 'bg-emerald-50 border-emerald-500/20 text-emerald-600'}`}>
+                                        <tr key={g.id} className="hover:bg-secondary" style={{ transition: 'background-color 0.2s ease' }}>
+                                            <td style={{ fontWeight: 700 }} className="text-display">{g.label}</td>
+                                            <td className="text-mono" style={{ fontWeight: 800, textAlign: 'right' }}>${(gradeOutstanding/100).toFixed(2)}</td>
+                                            <td style={{ textAlign: 'center' }}>
+                                                <span style={{ 
+                                                    padding: '4px 8px', 
+                                                    borderRadius: '6px', 
+                                                    fontSize: '9px', 
+                                                    fontWeight: 800, 
+                                                    textTransform: 'uppercase', 
+                                                    letterSpacing: '0.05em',
+                                                    border: '1px solid',
+                                                    backgroundColor: gradeOutstanding > 0 ? 'rgba(249, 115, 22, 0.05)' : 'rgba(16, 185, 129, 0.05)',
+                                                    borderColor: gradeOutstanding > 0 ? 'rgba(249, 115, 22, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                                                    color: gradeOutstanding > 0 ? 'var(--primary)' : '#059669'
+                                                }} className="text-display">
                                                     {gradeOutstanding > 0 ? 'Arrears Present' : 'No Arrears'}
                                                 </span>
                                             </td>
@@ -486,16 +547,16 @@ const StudentAccounts: React.FC = () => {
                 </div>
             </div>
           ) : (
-            <div className="bg-surface border border-border rounded-xl p-16 text-center flex flex-col items-center gap-6 animate-pulse">
-                <div className="w-16 h-16 bg-secondary/30 rounded-full flex items-center justify-center">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="opacity-20 text-text-secondary">
+            <div className="card-surface" style={{ padding: '64px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
+                <div style={{ width: '64px', height: '64px', backgroundColor: 'var(--secondary)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.2, color: 'var(--text-secondary)' }}>
                       <rect x="3" y="4" width="18" height="16" rx="2" />
                       <line x1="3" y1="10" x2="21" y2="10" />
                       <path d="M7 15h.01"></path>
                       <path d="M11 15h.01"></path>
                   </svg>
                 </div>
-                <p className="text-text-secondary text-xs font-black uppercase tracking-[0.3em] opacity-40">Syncing Financial Data Layer...</p>
+                <p className="metric-label" style={{ opacity: 0.4 }}>Syncing Financial Data Layer...</p>
             </div>
           )}
       </div>

@@ -105,47 +105,81 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-[var(--background)] p-4">
-      <div className="w-full max-w-sm bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8 shadow-sm">
-        <h2 className="text-2xl font-semibold text-[var(--text-primary)] mb-6" style={{ fontFamily: 'var(--font-display)' }}>
-          Admin Sign In
-        </h2>
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg">
-            {error}
-          </div>
-        )}
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Username</label>
-            <input 
-              type="text" 
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-              disabled={isLoading}
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Password</label>
-            <input 
-              type="password" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-              disabled={isLoading}
-              required
-            />
-          </div>
-          <button 
-            type="submit" 
-            disabled={isLoading}
-            className="w-full py-2.5 bg-[var(--primary)] text-white font-medium rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {isLoading ? 'Signing In...' : 'Sign In'}
-          </button>
-        </form>
+    <div className="layout-wrapper">
+      <div className="centered-card-container">
+        <div className="wizard-container" style={{ maxWidth: '400px' }}>
+            <div className="wizard-content">
+                <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                    <div style={{ 
+                        width: '60px', 
+                        height: '60px', 
+                        borderRadius: '16px', 
+                        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                        color: 'var(--primary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto 16px'
+                    }}>
+                        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                    </div>
+                    <h2 className="text-display" style={{ fontSize: '24px', fontWeight: 700, margin: 0 }}>System Access</h2>
+                    <p className="text-display" style={{ color: 'var(--text-secondary)', fontSize: '14px', marginTop: '4px' }}>Please authenticate to continue</p>
+                </div>
+
+                {error && (
+                <div className="error-message mb-4" style={{ textAlign: 'center' }}>
+                    {error}
+                </div>
+                )}
+
+                <form onSubmit={handleLogin} className="wizard-form">
+                <div className="wizard-field">
+                    <label className="text-display">Username</label>
+                    <input 
+                    className="text-mono"
+                    type="text" 
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="admin_user"
+                    disabled={isLoading}
+                    required
+                    />
+                </div>
+                <div className="wizard-field">
+                    <label className="text-display">Password</label>
+                    <input 
+                    type="password" 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    disabled={isLoading}
+                    required
+                    />
+                </div>
+                <div style={{ marginTop: '8px' }}>
+                    <button 
+                        type="submit" 
+                        disabled={isLoading}
+                        className="btn btn-primary btn-lg w-full"
+                    >
+                        {isLoading ? 'Authenticating...' : 'Sign In'}
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '4px' }}>
+                            <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                    </button>
+                </div>
+                </form>
+            </div>
+            
+            <div style={{ padding: '20px', backgroundColor: 'var(--secondary)', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+                <span className="text-display" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Protected by Synthetix Security Protocol
+                </span>
+            </div>
+        </div>
       </div>
     </div>
   );

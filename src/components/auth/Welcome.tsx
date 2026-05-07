@@ -5,26 +5,58 @@ export const Welcome: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[var(--background)] p-8">
-      <div className="max-w-4xl text-center">
-        <h1 className="text-[64px] font-bold text-[var(--text-primary)] mb-8 tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>
-          Intelligence Scaled.
-        </h1>
-        <p className="text-xl text-[var(--text-secondary)] mb-12 max-w-2xl mx-auto">
-          Manage your school's financial landscape with precision, efficiency, and clarity.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <button 
-            onClick={() => navigate('/login')}
-            className="px-8 py-4 bg-[var(--primary)] text-white font-medium rounded-lg hover:opacity-90 transition-opacity"
-          >
-            Get Started
-          </button>
-          <button className="px-8 py-4 bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border)] font-medium rounded-lg hover:bg-[var(--secondary)] transition-colors">
-            Learn More
-          </button>
+    <div className="layout-wrapper">
+        <div className="flex flex-col items-center justify-center min-h-screen p-8">
+        <div className="max-w-4xl text-center">
+            <div style={{ 
+                width: '80px', 
+                height: '80px', 
+                borderRadius: '24px', 
+                backgroundColor: 'var(--primary)',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 32px'
+            }}>
+                <svg width="50" height="50" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M16 8V24M10 12H16C18.2091 12 20 13.7909 20 16C20 18.2091 18.2091 20 16 20H12C9.79086 20 8 18.2091 8 16C8 13.7909 9.79086 12 12 12M12 20H18C20.2091 20 22 21.7909 22 24" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                </svg>
+            </div>
+            
+            <h1 className="text-display" style={{ fontSize: '72px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '24px', letterSpacing: '-0.03em', lineHeight: 1 }}>
+            Intelligence Scaled.
+            </h1>
+            <p className="text-display" style={{ fontSize: '20px', color: 'var(--text-secondary)', marginBottom: '48px', maxWidth: '600px', mx: 'auto', lineHeight: 1.6 }}>
+            The definitive financial operating system for modern academic institutions. Precision, efficiency, and clarity in every transaction.
+            </p>
+            
+            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+            <button 
+                onClick={() => navigate('/login')}
+                className="btn btn-primary btn-lg"
+                style={{ padding: '16px 48px', fontSize: '18px' }}
+            >
+                Get Started
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '8px' }}>
+                    <polyline points="9 18 15 12 9 6" />
+                </svg>
+            </button>
+            <button 
+                className="btn btn-outline btn-lg"
+                style={{ padding: '16px 48px', fontSize: '18px' }}
+            >
+                Documentation
+            </button>
+            </div>
         </div>
-      </div>
+        
+        <div style={{ position: 'fixed', bottom: '40px', left: 0, right: 0, textAlign: 'center' }}>
+            <span className="text-mono" style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                Synthetix Finance • v1.2.0 • Build 2026
+            </span>
+        </div>
+        </div>
     </div>
   );
 };
