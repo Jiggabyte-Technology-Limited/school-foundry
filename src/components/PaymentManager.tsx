@@ -15,6 +15,8 @@ interface Payment {
   student_name: string;
   year_label: string;
   term_label: string;
+  guardian_name: string;
+  guardian_contact: string;
 }
 
 interface PaymentStats {
@@ -101,7 +103,7 @@ const PaymentManager: React.FC = () => {
 
   const loadPayments = async () => {
     const paymentList = await db.all(`
-      SELECT p.*, s.full_name as student_name, y.label as year_label, t.label as term_label
+      SELECT p.*, s.full_name as student_name, s.guardian_name, s.guardian_contact, y.label as year_label, t.label as term_label
       FROM payments p
       JOIN students s ON p.student_id = s.id
       JOIN academic_years y ON p.year_id = y.id
@@ -246,6 +248,83 @@ const PaymentManager: React.FC = () => {
     setSelectedGradeFilter('all');
   };
 
+  const getPeriodLabel = (): string => {
+    if (timePeriodFilter === 'week') return 'Last 7 Days';
+    if (timePeriodFilter === 'month') return 'Last 30 Days';
+    if (timePeriodFilter === 'term') return 'This Term';
+    return 'All Time';
+  };
+
+  const handlePrintFiltered = () => {
+    const filtered = getFilteredPayments();
+    const schoolName = users.length > 0 ? 'School Name' : 'School System';
+    
+    const printWindow = window.open('', '', 'height=800,width=1000');
+    if (!printWindow) return;
+
+    const tableRows = filtered.map(p => `
+      <tr>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd;">${p.receipt_number}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd;">${p.student_name}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd;">${p.term_label}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd;">${new Date(p.payment_date).toLocaleDateString()}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: right;">$${(p.amount_paid_cents / 100).toFixed(2)}</td>
+      </tr>
+    `).join('');
+
+    const totalAmount = filtered.reduce((sum, p) => sum + p.amount_paid_cents, 0);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Payment Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          h1 { font-size: 24px; margin-bottom: 8px; }
+          .report-info { margin-bottom: 20px; color: #666; }
+          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+          th { background-color: #f0f0f0; padding: 12px; text-align: left; font-weight: 600; border-bottom: 2px solid #333; }
+          td { padding: 10px; }
+          .total-row { background-color: #f9f9f9; font-weight: 600; border-top: 2px solid #333; }
+          .total-row td { padding: 12px; }
+        </style>
+      </head>
+      <body>
+        <h1>${schoolName}</h1>
+        <div class="report-info">
+          <p><strong>Payment Report - ${getPeriodLabel()}</strong></p>
+          <p>Generated: ${new Date().toLocaleString()}</p>
+          <p>Total Records: ${filtered.length}</p>
+        </div>
+        
+        <table>
+          <thead>
+            <tr>
+              <th>Receipt #</th>
+              <th>Student</th>
+              <th>Term</th>
+              <th>Date</th>
+              <th style="text-align: right;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+            <tr class="total-row">
+              <td colspan="4" style="text-align: right;">TOTAL:</td>
+              <td style="text-align: right;">$${(totalAmount / 100).toFixed(2)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setTimeout(() => printWindow.print(), 250);
+  };
+
   return (
     <div>
       <div className="flex-between mb-4 no-print">
@@ -355,6 +434,13 @@ const PaymentManager: React.FC = () => {
       <div className="card">
         <div className="flex-between mb-4">
           <h3 style={{ margin: 0 }}>Recent Activity</h3>
+          <button 
+            className="btn btn-sage" 
+            onClick={() => handlePrintFiltered()}
+            style={{ marginRight: 0 }}
+          >
+            Print Filtered Report
+          </button>
         </div>
         
         {/* Filters for Activity */}
