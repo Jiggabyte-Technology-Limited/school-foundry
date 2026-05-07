@@ -22,7 +22,7 @@ const allNavItems: NavItem[] = [
   { id: 'payments', label: 'Payments', icon: 'credit-card', roles: ['admin', 'bursar'] },
   { id: 'logs', label: 'Logs', icon: 'list', roles: ['admin'] },
   { id: 'backup', label: 'Backup', icon: 'database', roles: ['admin'] },
-  ];
+];
 
 const iconPaths: Record<string, JSX.Element> = {
   grid: (

@@ -223,6 +223,18 @@ const migrations: MigrationStep[] = [
       await runSql(db, `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '1.2', datetime('now'));`);
     },
   },
+  {
+    version: '1.3',
+    description: 'Add missing notes column to payments table',
+    run: async (db) => {
+      try {
+        await runSql(db, `ALTER TABLE payments ADD COLUMN notes TEXT;`);
+      } catch (e) {
+        console.warn('[Migrations] payments: notes column already exists:', e);
+      }
+      await runSql(db, `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '1.3', datetime('now'));`);
+    },
+  },
 ];
 
 export async function runMigrations(db: sqlite3.Database): Promise<void> {

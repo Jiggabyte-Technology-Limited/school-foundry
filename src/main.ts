@@ -17,6 +17,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: preloadPath,
+      plugins: true,
     },
   });
 

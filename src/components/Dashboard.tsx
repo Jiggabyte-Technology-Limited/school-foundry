@@ -14,11 +14,15 @@ interface DashboardStats {
   yearFees: number;
   collected: number;
   outstanding: number;
+  termFees: number;
+  termCollected: number;
+  termOutstanding: number;
+  currentTermLabel: string;
   recentActivity: any[];
   termlyData: { term: string; collected: number; expected: number }[];
   fullyPaid: number;
   partiallyPaid: number;
-  outstanding: number;
+  notPaid: number;
 }
 
 const Dashboard: React.FC = () => {
@@ -28,11 +32,15 @@ const Dashboard: React.FC = () => {
     yearFees: 0,
     collected: 0,
     outstanding: 0,
+    termFees: 0,
+    termCollected: 0,
+    termOutstanding: 0,
+    currentTermLabel: 'Term',
     recentActivity: [],
     termlyData: [],
     fullyPaid: 0,
     partiallyPaid: 0,
-    outstanding: 0,
+    notPaid: 0,
   });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -50,6 +58,7 @@ const Dashboard: React.FC = () => {
         return;
       }
 
+      // 1. Grade Distribution
       const gradeBreakdown = await db.all(`
         SELECT g.label, COUNT(sye.student_id) as count
         FROM grades g
@@ -60,99 +69,128 @@ const Dashboard: React.FC = () => {
 
       const totalStudents = gradeBreakdown.reduce((sum: number, g: any) => sum + g.count, 0);
 
-      const enrolledStudents = await db.all(`
-        SELECT DISTINCT sye.student_id, sye.grade_id
-        FROM student_year_enrollment sye
-        WHERE sye.year_id = ?
+      // 2. Year & Term Financials
+      const terms = await db.all(`
+        SELECT id, label, start_date, end_date FROM terms WHERE year_id = ? ORDER BY term_number ASC
       `, [currentYear.id]);
 
-      let yearFees = 0;
-      for (const student of enrolledStudents) {
-        const studentFees = await db.get(`
-          SELECT SUM(amount_cents) as total
-          FROM fee_structure
-          WHERE year_id = ? AND grade_id = ?
-        `, [currentYear.id, student.grade_id]);
-        yearFees += studentFees?.total || 0;
-      }
+      const now = new Date().toISOString().split('T')[0];
+      const currentTerm = terms.find(t => t.start_date <= now && t.end_date >= now) || terms[0];
+      const currentTermLabel = currentTerm?.label || 'Current Term';
 
-      const collectedResult = await db.get(`
-        SELECT SUM(amount_paid_cents) as total
+      // Advanced Aggregation for total Year and current Term fees
+      const feesResult = await db.get(`
+        SELECT 
+            SUM(fs.amount_cents) as total_year_fees,
+            SUM(CASE WHEN fs.term_id = ? THEN fs.amount_cents ELSE 0 END) as total_term_fees
+        FROM fee_structure fs
+        JOIN student_year_enrollment sye ON fs.grade_id = sye.grade_id AND fs.year_id = sye.year_id
+        WHERE fs.year_id = ?
+      `, [currentTerm?.id, currentYear.id]);
+
+      const yearFees = feesResult?.total_year_fees || 0;
+      const termFees = feesResult?.total_term_fees || 0;
+
+      const collectionsResult = await db.get(`
+        SELECT 
+            SUM(amount_paid_cents) as total_collected,
+            SUM(CASE WHEN term_id = ? THEN amount_paid_cents ELSE 0 END) as term_collected
         FROM payments
         WHERE year_id = ?
-      `, [currentYear.id]);
-      const collected = collectedResult?.total || 0;
+      `, [currentTerm?.id, currentYear.id]);
 
-      // Get all terms for this year
-      const terms = await db.all(`
-        SELECT id, label FROM terms WHERE year_id = ? ORDER BY term_number ASC
-      `, [currentYear.id]);
+      const collected = collectionsResult?.total_collected || 0;
+      const rawTermCollected = collectionsResult?.term_collected || 0;
 
-      // Calculate termly data
-      const termlyData = await Promise.all(
-        terms.map(async (term) => {
-          const termExpected = await db.get(`
+      // 3. Robust Fee Allocation Logic (Rolling surplus to next term)
+      // We calculate how much of the TOTAL collected money applies to the CURRENT term.
+      // Logic: Collected (Current) = MIN(Expected(Current), TotalPaid - Expected(PreviousTerms))
+      
+      const previousTerms = terms.filter(t => t.start_date < currentTerm?.start_date);
+      let previousExpected = 0;
+      if (previousTerms.length > 0) {
+        const prevResult = await db.get(`
             SELECT SUM(fs.amount_cents) as total
             FROM fee_structure fs
+            JOIN student_year_enrollment sye ON fs.grade_id = sye.grade_id AND fs.year_id = sye.year_id
+            WHERE fs.year_id = ? AND fs.term_id IN (${previousTerms.map(t => t.id).join(',')})
+        `, [currentYear.id]);
+        previousExpected = prevResult?.total || 0;
+      }
+
+      const totalPaid = collected;
+      const paidSurplusAfterPrevTerms = Math.max(0, totalPaid - previousExpected);
+      const termCollected = Math.min(termFees, paidSurplusAfterPrevTerms);
+      const termOutstanding = Math.max(0, termFees - termCollected);
+
+      // 4. Termly Data for Chart (Legacy support + raw per-term collected)
+      const termlyData = await Promise.all(
+        terms.map(async (term) => {
+          const expectedResult = await db.get(`
+            SELECT SUM(fs.amount_cents) as total
+            FROM fee_structure fs
+            JOIN student_year_enrollment sye ON fs.grade_id = sye.grade_id AND fs.year_id = sye.year_id
             WHERE fs.year_id = ? AND fs.term_id = ?
           `, [currentYear.id, term.id]);
           
-          const termCollected = await db.get(`
-            SELECT SUM(p.amount_paid_cents) as total
-            FROM payments p
-            WHERE p.year_id = ? AND p.term_id = ?
+          const collectedResult = await db.get(`
+            SELECT SUM(amount_paid_cents) as total
+            FROM payments
+            WHERE year_id = ? AND term_id = ?
           `, [currentYear.id, term.id]);
 
           return {
             term: term.label,
-            expected: termExpected?.total || 0,
-            collected: termCollected?.total || 0
+            expected: expectedResult?.total || 0,
+            collected: collectedResult?.total || 0
           };
         })
       );
 
-      // Calculate payment status for each student
-      const studentPaymentStatus = await db.all(`
-        SELECT DISTINCT sye.student_id
-        FROM student_year_enrollment sye
-        WHERE sye.year_id = ?
-      `, [currentYear.id]);
+      // 4. YTD Student Payment Compliance (Optimized Logic)
+      // We calculate compliance based on terms that HAVE STARTED up to now.
+      const complianceStats = await db.all(`
+        WITH student_expected AS (
+            SELECT 
+                sye.student_id,
+                SUM(fs.amount_cents) as expected_ytd
+            FROM student_year_enrollment sye
+            JOIN fee_structure fs ON sye.grade_id = fs.grade_id AND sye.year_id = fs.year_id
+            JOIN terms t ON fs.term_id = t.id
+            WHERE sye.year_id = ? AND (t.start_date <= date('now') OR t.start_date IS NULL)
+            GROUP BY sye.student_id
+        ),
+        student_paid AS (
+            SELECT 
+                student_id,
+                SUM(amount_paid_cents) as paid_total
+            FROM payments
+            WHERE year_id = ?
+            GROUP BY student_id
+        )
+        SELECT 
+            se.student_id,
+            se.expected_ytd,
+            COALESCE(sp.paid_total, 0) as paid_total
+        FROM student_expected se
+        LEFT JOIN student_paid sp ON se.student_id = sp.student_id
+      `, [currentYear.id, currentYear.id]);
 
       let fullyPaid = 0;
       let partiallyPaid = 0;
-      let outstanding = 0;
+      let notPaid = 0;
 
-      for (const student of studentPaymentStatus) {
-        const studentId = student.student_id;
+      complianceStats.forEach(s => {
+        if (s.expected_ytd === 0) return; // Ignore students with no fees expected yet
         
-        // Get expected fees for this student across all terms
-        const studentGrade = await db.get(`
-          SELECT grade_id FROM student_year_enrollment WHERE student_id = ? AND year_id = ?
-        `, [studentId, currentYear.id]);
-
-        if (!studentGrade) continue;
-
-        const expectedFees = await db.get(`
-          SELECT SUM(amount_cents) as total FROM fee_structure
-          WHERE year_id = ? AND grade_id = ?
-        `, [currentYear.id, studentGrade.grade_id]);
-
-        const paidAmount = await db.get(`
-          SELECT SUM(amount_paid_cents) as total FROM payments
-          WHERE student_id = ? AND year_id = ?
-        `, [studentId, currentYear.id]);
-
-        const expected = expectedFees?.total || 0;
-        const paid = paidAmount?.total || 0;
-
-        if (paid >= expected && expected > 0) {
+        if (s.paid_total >= s.expected_ytd) {
           fullyPaid++;
-        } else if (paid > 0 && paid < expected) {
+        } else if (s.paid_total > 0) {
           partiallyPaid++;
-        } else if (paid === 0) {
-          outstanding++;
+        } else {
+          notPaid++;
         }
-      }
+      });
 
       const recentActivity = await db.all(`
         SELECT al.*, u.username
@@ -167,13 +205,19 @@ const Dashboard: React.FC = () => {
         gradeBreakdown, 
         yearFees, 
         collected, 
-        outstanding: yearFees - collected, 
+        outstanding: yearFees - collected,
+        termFees,
+        termCollected,
+        termOutstanding: termFees - termCollected,
+        currentTermLabel,
         recentActivity, 
         termlyData,
         fullyPaid,
         partiallyPaid,
-        outstanding
+        notPaid
       });
+    } catch (err) {
+        console.error('Dashboard Data Error:', err);
     } finally {
       setLoading(false);
     }
@@ -191,35 +235,123 @@ const Dashboard: React.FC = () => {
 
   if (loading) return <div style={{ padding: '40px', textAlign: 'center' }} className="text-display">Loading...</div>;
 
-  const PercentageChart: React.FC<{ data: { term: string; collected: number; expected: number }[] }> = ({ data }) => {
+  const PercentageChart: React.FC<{ data: { term: string; collected: number; expected: number }[]; style?: React.CSSProperties }> = ({ data, style }) => {
+    const chartHeight = 170;
     const intervals = [100, 80, 60, 40, 20, 0];
     return (
-      <div style={{ display: 'flex', gap: '8px', height: '240px', alignItems: 'flex-end', padding: '20px 20px 40px 40px', position: 'relative' }}>
-        <div style={{ position: 'absolute', left: '0', top: '20px', bottom: '40px', width: '35px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)', textAlign: 'right', paddingRight: '8px' }} className="text-mono">
-          {intervals.map(v => <span key={v}>{v}%</span>)}
-        </div>
-        <div style={{ display: 'flex', gap: '8px', flex: 1, height: '100%', alignItems: 'flex-end' }}>
-          {data.map((d, i) => {
-            const percent = d.expected > 0 ? Math.min(100, (d.collected / d.expected) * 100) : 0;
-            return (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', height: '100%' }}>
-                <div style={{ width: '100%', flex: 1, backgroundColor: 'var(--secondary)', borderRadius: '4px', position: 'relative', overflow: 'hidden' }}>
-                  <div 
-                    style={{ 
-                      position: 'absolute', 
-                      bottom: 0, 
-                      width: '100%', 
-                      height: `${percent}%`, 
-                      backgroundColor: 'var(--primary)', 
-                      borderRadius: '2px',
-                      transition: 'height 0.3s ease'
-                    }} 
-                  />
-                </div>
-                <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }} className="text-mono">{d.term}</span>
+      <div style={{ ...style, height: '240px', padding: '30px 20px 40px 40px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '35px 1fr', columnGap: '12px' }}>
+          <div style={{ position: 'relative', height: `${chartHeight}px`, fontSize: '10px', color: 'var(--text-secondary)', textAlign: 'right', paddingRight: '8px' }} className="text-mono">
+            {intervals.map(v => (
+              <div
+                key={v}
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: `${((100 - v) / 100) * chartHeight}px`,
+                  transform: 'translateY(-50%)'
+                }}
+              >
+                {v}%
               </div>
-            );
-          })}
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: '16px', height: `${chartHeight}px`, alignItems: 'flex-end' }}>
+            {data.map((d, i) => {
+              const percent = d.expected > 0 ? Math.min(100, (d.collected / d.expected) * 100) : 0;
+              const barHeight = (percent / 100) * chartHeight;
+              return (
+                <div key={i} style={{ flex: 1, position: 'relative', display: 'flex', justifyContent: 'center' }}>
+                  <div style={{ position: 'absolute', top: `-24px`, fontSize: '11px', fontWeight: 700, color: 'var(--primary)' }} className="text-mono">
+                    {percent.toFixed(0)}%
+                  </div>
+                  <div style={{ width: '80%', height: `${chartHeight}px`, backgroundColor: 'var(--secondary)', borderRadius: '4px', position: 'relative', overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        width: '100%',
+                        height: `${barHeight}px`,
+                        backgroundColor: 'var(--primary)',
+                        borderRadius: '3px',
+                        transition: 'height 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+                        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2)'
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div />
+          <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
+            {data.map((d, i) => (
+              <div key={i} style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+                <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-secondary)' }} className="text-display">{d.term}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const DonutChart: React.FC<{ breakdown: GradeCount[], total: number }> = ({ breakdown, total }) => {
+    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316'];
+    const activeBreakdown = breakdown.filter(g => g.count > 0);
+    let currentAngle = 0;
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'row', gap: '24px', alignItems: 'flex-start' }}>
+        <div style={{ position: 'relative', width: '120px', height: '120px', flexShrink: 0 }}>
+          <svg viewBox="0 0 32 32" style={{ transform: 'rotate(-90deg)', width: '100%', height: '100%' }}>
+            {activeBreakdown.map((g, i) => {
+              const percentage = total > 0 ? (g.count / total) * 100 : 0;
+              const strokeDasharray = `${percentage} 100`;
+              const strokeDashoffset = -currentAngle;
+              currentAngle += percentage;
+              return (
+                <circle
+                  key={i}
+                  cx="16"
+                  cy="16"
+                  r="12"
+                  fill="transparent"
+                  stroke={colors[i % colors.length]}
+                  strokeWidth="8"
+                  strokeDasharray={strokeDasharray}
+                  strokeDashoffset={strokeDashoffset}
+                  pathLength="100"
+                />
+              );
+            })}
+          </svg>
+          <div style={{ 
+            position: 'absolute', 
+            inset: '20px', 
+            backgroundColor: 'var(--surface)', 
+            borderRadius: '50%', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)',
+            border: '1px solid var(--border)'
+          }}>
+            <span style={{ fontSize: '18px', fontWeight: 800 }} className="text-mono">{total}</span>
+            <span style={{ fontSize: '8px', fontWeight: 700, opacity: 0.5 }} className="text-display">TOTAL</span>
+          </div>
+        </div>
+        <div style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+          {activeBreakdown.map((g, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', borderRadius: '6px', backgroundColor: 'var(--secondary)', border: '1px solid var(--border)' }}>
+              <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: colors[i % colors.length] }} />
+              <span style={{ fontSize: '11px', fontWeight: 600, flex: 1 }} className="text-display">{g.label}</span>
+              <span style={{ fontSize: '12px', fontWeight: 800 }} className="text-mono">{g.count}</span>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -229,15 +361,21 @@ const Dashboard: React.FC = () => {
     <div className="page-content" style={{ background: 'var(--background)' }}>
       <div className="flex-between mb-4" style={{ alignItems: 'flex-end' }}>
         <div>
-          <div className="metric-label" style={{ marginBottom: '4px' }}>Overview</div>
+          <div className="metric-label" style={{ marginBottom: '4px' }}>Executive Summary</div>
           <h2 style={{ margin: 0, fontSize: '32px', fontWeight: 600 }} className="text-display">Dashboard</h2>
         </div>
-        <button className="btn btn-primary btn-lg" onClick={() => setShowPaymentModal(true)}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Record Payment
-        </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ textAlign: 'right', marginRight: '12px' }}>
+                <div className="metric-label" style={{ margin: 0, fontSize: '10px' }}>Active Term</div>
+                <div style={{ fontWeight: 800, color: 'var(--primary)' }} className="text-display">{stats.currentTermLabel}</div>
+            </div>
+            <button className="btn btn-primary btn-lg" onClick={() => setShowPaymentModal(true)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Record Payment
+            </button>
+        </div>
       </div>
 
       <div style={{ 
@@ -245,30 +383,30 @@ const Dashboard: React.FC = () => {
         gridTemplateColumns: 'repeat(4, 1fr)', 
         gap: '24px'
       }}>
-        {/* Metric Cards */}
+        {/* Metric Cards - Focused on Current Term */}
         <SynthetixCard>
           <div className="metric-label">Total Students</div>
           <div className="metric-value">{formatNumber(stats.totalStudents)}</div>
         </SynthetixCard>
         
         <SynthetixCard>
-          <div className="metric-label">Year Fees</div>
-          <div className="metric-value">{formatCurrency(stats.yearFees)}</div>
+          <div className="metric-label">Expected ({stats.currentTermLabel})</div>
+          <div className="metric-value">{formatCurrency(stats.termFees)}</div>
         </SynthetixCard>
 
         <SynthetixCard>
-          <div className="metric-label">Collected</div>
-          <div className="metric-value" style={{ color: '#10B981' }}>{formatCurrency(stats.collected)}</div>
+          <div className="metric-label">Collected ({stats.currentTermLabel})</div>
+          <div className="metric-value" style={{ color: '#10B981' }}>{formatCurrency(stats.termCollected)}</div>
         </SynthetixCard>
 
         <SynthetixCard>
-          <div className="metric-label">Outstanding</div>
-          <div className="metric-value" style={{ color: 'var(--primary)' }}>{formatCurrency(stats.outstanding)}</div>
+          <div className="metric-label">Outstanding ({stats.currentTermLabel})</div>
+          <div className="metric-value" style={{ color: 'var(--primary)' }}>{formatCurrency(stats.termOutstanding)}</div>
         </SynthetixCard>
 
         {/* Payment Status Overview - Full Width */}
         <SynthetixCard style={{ gridColumn: 'span 4' }}>
-          <div className="metric-label">Student Payment Status Overview</div>
+          <div className="metric-label">Year-to-Date Student Payment Compliance</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
               <div style={{ padding: '24px', borderRadius: '16px', border: '1px solid #10B981', backgroundColor: '#ECFDF5', position: 'relative', overflow: 'hidden' }}>
                   <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '40px', height: '40px', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderRadius: '50%' }} />
@@ -283,31 +421,20 @@ const Dashboard: React.FC = () => {
               <div style={{ padding: '24px', borderRadius: '16px', border: '1px solid #EF4444', backgroundColor: '#FEF2F2', position: 'relative', overflow: 'hidden' }}>
                   <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '40px', height: '40px', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: '50%' }} />
                   <div style={{ color: '#991B1B', fontSize: '11px', fontWeight: 700, marginBottom: '8px', letterSpacing: '0.05em' }} className="text-display">NO PAYMENT</div>
-                  <div style={{ fontSize: '32px', fontWeight: 800, color: '#B91C1C' }} className="text-mono">{formatNumber(stats.outstanding)}</div>
+                  <div style={{ fontSize: '32px', fontWeight: 800, color: '#B91C1C' }} className="text-mono">{formatNumber(stats.notPaid)}</div>
               </div>
           </div>
         </SynthetixCard>
 
-        {/* Progress and Distribution */}
-        <SynthetixCard style={{ gridColumn: 'span 3' }}>
-          <div className="metric-label">Collection Progress by Term (%)</div>
-          <PercentageChart data={stats.termlyData} />
+        {/* Progress and Distribution - 50/50 split */}
+        <SynthetixCard style={{ gridColumn: 'span 2' }}>
+          <div className="metric-label">Collection Progress by Term</div>
+          <PercentageChart data={stats.termlyData} style={{ marginTop: '24px' }} />
         </SynthetixCard>
 
-        <SynthetixCard style={{ gridColumn: 'span 1' }}>
-          <div className="metric-label">Grade Distribution</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {stats.gradeBreakdown.map(g => (
-              <div key={g.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid var(--border)' }}>
-                <span style={{ fontSize: '14px', fontWeight: 500 }} className="text-display">{g.label}</span>
-                <span style={{ fontWeight: 700 }} className="text-mono">{formatNumber(g.count)}</span>
-              </div>
-            ))}
-            <div style={{ marginTop: 'auto', paddingTop: '20px', fontWeight: 800, display: 'flex', justifyContent: 'space-between', fontSize: '20px' }}>
-              <span className="text-display">Total</span>
-              <span className="text-mono">{formatNumber(stats.totalStudents)}</span>
-            </div>
-          </div>
+        <SynthetixCard style={{ gridColumn: 'span 2' }}>
+          <div className="metric-label">Grade/Form Distribution</div>
+          <DonutChart breakdown={stats.gradeBreakdown} total={stats.totalStudents} />
         </SynthetixCard>
       </div>
 
