@@ -191,36 +191,50 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
             <div style={{ 
               width: 80, 
               height: 80, 
-              borderRadius: '50%', 
-              backgroundColor: 'var(--color-accent-teal-light)',
-              color: 'var(--color-accent-teal)',
+              borderRadius: '24px', 
+              backgroundColor: 'rgba(249, 115, 22, 0.1)',
+              color: 'var(--primary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              margin: '0 auto 24px'
+              margin: '0 auto 32px',
+              transform: 'rotate(-5deg)'
             }}>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                 <polyline points="9 22 9 12 15 12 15 22" />
               </svg>
             </div>
-            <h2 className="wizard-title">Welcome to School Fees Manager</h2>
-            <p className="wizard-subtitle" style={{ maxWidth: 400, margin: '0 auto 24px' }}>
-              {"Let's get your school set up in just a few steps. This wizard will guide you through the initial configuration."}
+            <h2 className="wizard-title text-display" style={{ fontSize: '32px', letterSpacing: '-0.02em' }}>Intelligence Scaled.</h2>
+            <p className="wizard-subtitle text-display" style={{ maxWidth: 440, margin: '0 auto 32px', fontSize: '16px', lineHeight: '1.6' }}>
+              Welcome to Synthetix Finance. Let's get your school's financial infrastructure set up in just a few minutes.
             </p>
             <div style={{ 
-              backgroundColor: 'var(--color-sage-cream)', 
-              borderRadius: 'var(--border-radius-md)',
-              padding: 20,
-              textAlign: 'left'
+              backgroundColor: 'var(--secondary)', 
+              borderRadius: '16px',
+              padding: '24px',
+              textAlign: 'left',
+              border: '1px solid var(--border)'
             }}>
-              <h4 style={{ marginBottom: 12, fontSize: 14 }}>What we will set up:</h4>
-              <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--color-olive-ink)', fontSize: 14, lineHeight: 1.8 }}>
-                <li>Your school information</li>
-                <li>Administrator account</li>
-                <li>Academic year and terms</li>
-                <li>Grade levels</li>
-              </ul>
+              <h4 className="text-display" style={{ marginBottom: '16px', fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Onboarding Path:</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
+                    <span className="text-display" style={{ fontSize: '14px', fontWeight: 500 }}>School Identity</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
+                    <span className="text-display" style={{ fontSize: '14px', fontWeight: 500 }}>Admin Security</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
+                    <span className="text-display" style={{ fontSize: '14px', fontWeight: 500 }}>Academic Terms</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
+                    <span className="text-display" style={{ fontSize: '14px', fontWeight: 500 }}>Grade Matrix</span>
+                </div>
+              </div>
             </div>
           </div>
         );
@@ -228,13 +242,15 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       case 'school':
         return (
           <div>
-            <h2 className="wizard-title">School Information</h2>
-            <p className="wizard-subtitle">Enter your school details. This will appear on all reports and statements.</p>
+            <div className="metric-label" style={{ textAlign: 'center' }}>Step 01</div>
+            <h2 className="wizard-title text-display">School Identity</h2>
+            <p className="wizard-subtitle text-display">Enter your school details. This will appear on all legal reports and statements.</p>
             
             <div className="wizard-form">
               <div className="wizard-field">
-                <label>School Name <span className="required">*</span></label>
+                <label className="text-display">Official School Name <span className="required">*</span></label>
                 <input
+                  className="text-display"
                   type="text"
                   value={schoolName}
                   onChange={(e) => setSchoolName(e.target.value)}
@@ -249,13 +265,15 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       case 'admin':
         return (
           <div>
-            <h2 className="wizard-title">Create Admin Account</h2>
-            <p className="wizard-subtitle">Set up your administrator account. You can add more users later.</p>
+            <div className="metric-label" style={{ textAlign: 'center' }}>Step 02</div>
+            <h2 className="wizard-title text-display">Security Protocol</h2>
+            <p className="wizard-subtitle text-display">Establish your primary administrative access credentials.</p>
             
             <div className="wizard-form">
               <div className="wizard-field">
-                <label>Full Name <span className="required">*</span></label>
+                <label className="text-display">Full Legal Name <span className="required">*</span></label>
                 <input
+                  className="text-display"
                   type="text"
                   value={adminFullName}
                   onChange={(e) => setAdminFullName(e.target.value)}
@@ -264,31 +282,34 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                 />
               </div>
               <div className="wizard-field">
-                <label>Username <span className="required">*</span></label>
+                <label className="text-display">System Username <span className="required">*</span></label>
                 <input
+                  className="text-mono"
                   type="text"
                   value={adminUsername}
                   onChange={(e) => setAdminUsername(e.target.value)}
-                  placeholder="Enter admin username"
+                  placeholder="admin_username"
                 />
               </div>
-              <div className="wizard-field">
-                <label>Password <span className="required">*</span></label>
-                <input
-                  type="password"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="Enter password (min 4 characters)"
-                />
-              </div>
-              <div className="wizard-field">
-                <label>Confirm Password <span className="required">*</span></label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm your password"
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="wizard-field">
+                    <label className="text-display">Access Password <span className="required">*</span></label>
+                    <input
+                    type="password"
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    placeholder="••••••••"
+                    />
+                </div>
+                <div className="wizard-field">
+                    <label className="text-display">Confirm Password <span className="required">*</span></label>
+                    <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="••••••••"
+                    />
+                </div>
               </div>
             </div>
           </div>
@@ -297,26 +318,30 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       case 'academic':
         return (
           <div>
-            <h2 className="wizard-title">Academic Setup</h2>
-            <p className="wizard-subtitle">Configure your academic year, terms, and grade levels.</p>
+            <div className="metric-label" style={{ textAlign: 'center' }}>Step 03</div>
+            <h2 className="wizard-title text-display">Academic Infrastructure</h2>
+            <p className="wizard-subtitle text-display">Configure your primary academic calendar and grade levels.</p>
             
             <div className="wizard-form">
               <div className="wizard-field">
-                <label>Current Academic Year <span className="required">*</span></label>
+                <label className="text-display">Current Academic Year <span className="required">*</span></label>
                 <input
+                  className="text-mono"
                   type="text"
                   value={academicYear}
                   onChange={(e) => setAcademicYear(e.target.value)}
-                  placeholder="e.g., 2024"
+                  placeholder="2026"
                 />
               </div>
 
               <div className="wizard-field">
-                <label>Terms/Semesters</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label className="text-display">Term Configuration</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {terms.map((term, index) => (
-                    <div key={index} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <div key={index} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      <div className="text-mono" style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', width: '20px' }}>{index + 1}</div>
                       <input
+                        className="text-display"
                         type="text"
                         value={term}
                         onChange={(e) => updateTerm(index, e.target.value)}
@@ -326,11 +351,13 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                       {terms.length > 1 && (
                         <button 
                           type="button"
-                          className="btn btn-danger" 
+                          className="btn btn-outline" 
                           onClick={() => removeTerm(index)}
-                          style={{ padding: '8px 12px' }}
+                          style={{ padding: '10px' }}
                         >
-                          Remove
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
                         </button>
                       )}
                     </div>
@@ -338,59 +365,54 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                   {terms.length < 4 && (
                     <button 
                       type="button"
-                      className="btn btn-sage" 
+                      className="btn btn-outline" 
                       onClick={addTerm}
-                      style={{ alignSelf: 'flex-start' }}
+                      style={{ width: '100%', borderStyle: 'dashed' }}
                     >
-                      + Add Term
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      Add Term
                     </button>
                   )}
                 </div>
               </div>
 
               <div className="wizard-field">
-                <label>Grade Levels</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                <label className="text-display">Grade Registry</label>
+                <div className="chip-list" style={{ marginBottom: '16px' }}>
                   {grades.map((grade, index) => (
                     <span 
                       key={index} 
-                      className="chip chip-active"
-                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                      className="chip chip-active text-display"
+                      style={{ padding: '6px 12px', gap: '8px' }}
                     >
                       {grade}
                       <button
                         type="button"
                         onClick={() => removeGrade(index)}
-                        style={{ 
-                          background: 'none', 
-                          border: 'none', 
-                          color: 'white',
-                          cursor: 'pointer',
-                          padding: 0,
-                          display: 'flex',
-                          alignItems: 'center'
-                        }}
+                        style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', padding: 0, display: 'flex' }}
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <line x1="18" y1="6" x2="6" y2="18" />
-                          <line x1="6" y1="6" x2="18" y2="18" />
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                         </svg>
                       </button>
                     </span>
                   ))}
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: '12px' }}>
                   <input
+                    className="text-display"
                     type="text"
                     value={newGrade}
                     onChange={(e) => setNewGrade(e.target.value)}
-                    placeholder="Add custom grade"
+                    placeholder="Add custom grade..."
                     onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addGrade())}
                     style={{ flex: 1 }}
                   />
                   <button 
                     type="button"
-                    className="btn btn-sage" 
+                    className="btn btn-primary" 
                     onClick={addGrade}
                   >
                     Add
@@ -404,65 +426,28 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       case 'complete':
         return (
           <div className="wizard-success">
-            <div className="wizard-success-icon">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <div className="wizard-success-icon" style={{ borderRadius: '24px', transform: 'rotate(5deg)' }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             </div>
-            <h2 className="wizard-title">Setup Complete!</h2>
-            <p className="wizard-subtitle">
-              Your school is ready to go. Here are some quick actions to get started:
+            <h2 className="wizard-title text-display" style={{ fontSize: '32px' }}>Operational.</h2>
+            <p className="wizard-subtitle text-display" style={{ maxWidth: 400, margin: '0 auto 32px' }}>
+              Your financial infrastructure is ready. Proceed to the dashboard to begin management.
             </p>
 
             <div className="wizard-quick-actions">
               <div className="wizard-quick-action" onClick={onComplete}>
                 <div className="wizard-quick-action-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <line x1="23" y1="11" x2="17" y2="11" />
-                    <line x1="20" y1="8" x2="20" y2="14" />
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
                   </svg>
                 </div>
                 <div className="wizard-quick-action-content">
-                  <div className="wizard-quick-action-title">Add Students</div>
-                  <div className="wizard-quick-action-desc">Start enrolling students in your school</div>
+                  <div className="wizard-quick-action-title text-display">Initialize Dashboard</div>
+                  <div className="wizard-quick-action-desc text-display">View your complete school financial overview</div>
                 </div>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-sage-placeholder)" strokeWidth="2">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </div>
-
-              <div className="wizard-quick-action" onClick={onComplete}>
-                <div className="wizard-quick-action-icon" style={{ backgroundColor: 'var(--color-accent-amber-light)', color: 'var(--color-accent-amber)' }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="12" y1="1" x2="12" y2="23" />
-                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                  </svg>
-                </div>
-                <div className="wizard-quick-action-content">
-                  <div className="wizard-quick-action-title">Set Up Fees</div>
-                  <div className="wizard-quick-action-desc">Configure fee structure for each grade</div>
-                </div>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-sage-placeholder)" strokeWidth="2">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </div>
-
-              <div className="wizard-quick-action" onClick={onComplete}>
-                <div className="wizard-quick-action-icon" style={{ backgroundColor: 'var(--color-accent-blue-light)', color: 'var(--color-accent-blue)' }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="7" height="7" />
-                    <rect x="14" y="3" width="7" height="7" />
-                    <rect x="14" y="14" width="7" height="7" />
-                    <rect x="3" y="14" width="7" height="7" />
-                  </svg>
-                </div>
-                <div className="wizard-quick-action-content">
-                  <div className="wizard-quick-action-title">Go to Dashboard</div>
-                  <div className="wizard-quick-action-desc">View your school overview</div>
-                </div>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-sage-placeholder)" strokeWidth="2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--border)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="9 18 15 12 9 6" />
                 </svg>
               </div>

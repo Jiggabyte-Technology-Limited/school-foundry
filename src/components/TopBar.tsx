@@ -20,28 +20,28 @@ const TopBar: React.FC<TopBarProps> = ({
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <h1 className="topbar-title">{pageTitle}</h1>
+        <h1 className="topbar-title text-display">{pageTitle}</h1>
       </div>
       
       <div className="topbar-center">
-        <span className="topbar-school">{schoolName || 'School Name'}</span>
+        <span className="topbar-school text-display">{schoolName || 'School Name'}</span>
       </div>
       
       <div className="topbar-right">
         <div className="topbar-user">
-          <div className="topbar-user-avatar">
+          <div className="topbar-user-avatar text-display">
             {userName.charAt(0).toUpperCase()}
           </div>
           <div className="topbar-user-info">
-            <span className="topbar-user-name">{userName}</span>
-            <span className="topbar-user-role">{userRole}</span>
+            <span className="topbar-user-name text-display">{userName}</span>
+            <span className="topbar-user-role text-mono" style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{userRole}</span>
           </div>
         </div>
         
         <button className="topbar-btn" onClick={onSettingsClick} title="Settings">
           <svg
-            width="20"
-            height="20"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -56,8 +56,8 @@ const TopBar: React.FC<TopBarProps> = ({
         
         <button className="topbar-btn topbar-btn-logout" onClick={onLogout} title="Logout">
           <svg
-            width="20"
-            height="20"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"

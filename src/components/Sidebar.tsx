@@ -85,14 +85,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-logo">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="32" height="32" rx="6" fill="var(--color-deep-olive)" />
-            <text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="white" fontSize="16" fontWeight="700">$</text>
+          <svg width="40" height="40" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="32" height="32" rx="8" fill="var(--primary)" />
+            <path d="M16 8V24M10 12H16C18.2091 12 20 13.7909 20 16C20 18.2091 18.2091 20 16 20H12C9.79086 20 8 18.2091 8 16C8 13.7909 9.79086 12 12 12M12 20H18C20.2091 20 22 21.7909 22 24" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
           </svg>
         </div>
         <div className="sidebar-title">
-          <span className="sidebar-title-text">School Fees</span>
-          <span className="sidebar-title-sub">Manager</span>
+          <span className="sidebar-title-text">Synthetix</span>
+          <span className="sidebar-title-sub">Finance</span>
         </div>
       </div>
 
@@ -105,8 +105,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
           >
             <svg
               className="sidebar-icon"
-              width="20"
-              height="20"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -116,10 +116,19 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
             >
               {iconPaths[item.icon]}
             </svg>
-            <span>{item.label}</span>
+            <span className="text-display">{item.label}</span>
+            {activeView === item.id && (
+              <div style={{ marginLeft: 'auto', width: '4px', height: '16px', backgroundColor: 'white', borderRadius: '2px' }} />
+            )}
           </button>
         ))}
       </nav>
+      
+      <div style={{ marginTop: 'auto', padding: '1.5rem', borderTop: '1px solid var(--border)' }}>
+        <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+          v1.2.0 • Build 2026
+        </div>
+      </div>
     </aside>
   );
 };

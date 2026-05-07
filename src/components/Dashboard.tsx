@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
 import PaymentWizard from './PaymentWizard';
+import SynthetixCard from './ui/SynthetixCard';
 
 interface GradeCount {
   label: string;
@@ -110,26 +111,44 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const formatCurrency = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  const formatCurrency = (cents: number) => (
+    <span className="text-mono">
+      ${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+    </span>
+  );
 
-  if (loading) return <div>Loading...</div>;
+  const formatNumber = (num: number) => (
+    <span className="text-mono">{num}</span>
+  );
+
+  if (loading) return <div style={{ padding: '40px', textAlign: 'center' }} className="text-display">Loading...</div>;
 
   const PercentageChart: React.FC<{ data: { month: string; collected: number; expected: number }[] }> = ({ data }) => {
     const intervals = [100, 80, 60, 40, 20, 0];
     return (
-      <div style={{ display: 'flex', gap: '8px', height: '200px', alignItems: 'flex-end', padding: '20px', position: 'relative' }}>
-        <div style={{ position: 'absolute', left: '10px', top: '20px', height: '160px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: '10px', color: '#9CA3AF' }}>
+      <div style={{ display: 'flex', gap: '8px', height: '240px', alignItems: 'flex-end', padding: '20px 20px 40px 40px', position: 'relative' }}>
+        <div style={{ position: 'absolute', left: '0', top: '20px', bottom: '40px', width: '35px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)', textAlign: 'right', paddingRight: '8px' }} className="text-mono">
           {intervals.map(v => <span key={v}>{v}%</span>)}
         </div>
-        <div style={{ display: 'flex', gap: '8px', flex: 1, height: '160px', marginLeft: '30px', alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: '8px', flex: 1, height: '100%', alignItems: 'flex-end' }}>
           {data.map((d, i) => {
             const percent = d.expected > 0 ? Math.min(100, (d.collected / d.expected) * 100) : 0;
             return (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '100%', height: '160px', backgroundColor: '#F3F4F6', borderRadius: '4px', position: 'relative' }}>
-                  <div style={{ position: 'absolute', bottom: 0, width: '100%', height: `${percent}%`, backgroundColor: '#3B82F6', borderRadius: '4px' }} />
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', height: '100%' }}>
+                <div style={{ width: '100%', flex: 1, backgroundColor: 'var(--secondary)', borderRadius: '4px', position: 'relative', overflow: 'hidden' }}>
+                  <div 
+                    style={{ 
+                      position: 'absolute', 
+                      bottom: 0, 
+                      width: '100%', 
+                      height: `${percent}%`, 
+                      backgroundColor: 'var(--primary)', 
+                      borderRadius: '2px',
+                      transition: 'height 0.3s ease'
+                    }} 
+                  />
                 </div>
-                <span style={{ fontSize: '10px' }}>{d.month}</span>
+                <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }} className="text-mono">{d.month}</span>
               </div>
             );
           })}
@@ -139,55 +158,89 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="dashboard" style={{ padding: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h2 style={{ margin: 0 }}>Dashboard</h2>
-        <button className="btn btn-primary" style={{ padding: '12px 24px', fontSize: '16px' }} onClick={() => setShowPaymentModal(true)}>Record Payment</button>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '24px' }}>
-        <div className="card"><h3>Students</h3><p style={{ fontSize: '24px', fontWeight: 700 }}>{stats.totalStudents}</p></div>
-        <div className="card"><h3>Year Fees</h3><p style={{ fontSize: '24px', fontWeight: 700 }}>{formatCurrency(stats.yearFees)}</p></div>
-        <div className="card"><h3>Collected</h3><p style={{ fontSize: '24px', fontWeight: 700 }}>{formatCurrency(stats.collected)}</p></div>
-        <div className="card"><h3>Outstanding</h3><p style={{ fontSize: '24px', fontWeight: 700 }}>{formatCurrency(stats.outstanding)}</p></div>
-      </div>
-
-      <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid var(--color-border)', marginBottom: '24px' }}>
-        <h3 style={{ fontSize: '16px', marginBottom: '20px' }}>Student Payment Status Overview</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
-            <div style={{ padding: '16px', borderRadius: '8px', border: '1px solid #10B981', backgroundColor: '#ECFDF5' }}>
-                <div style={{ color: '#065F46', fontSize: '12px', fontWeight: 600 }}>Fully Paid</div>
-                <div style={{ fontSize: '20px', fontWeight: 700, color: '#047857' }}>142</div>
-            </div>
-            <div style={{ padding: '16px', borderRadius: '8px', border: '1px solid #F59E0B', backgroundColor: '#FFFBEB' }}>
-                <div style={{ color: '#92400E', fontSize: '12px', fontWeight: 600 }}>Partially Paid</div>
-                <div style={{ fontSize: '20px', fontWeight: 700, color: '#B45309' }}>28</div>
-            </div>
-            <div style={{ padding: '16px', borderRadius: '8px', border: '1px solid #EF4444', backgroundColor: '#FEF2F2' }}>
-                <div style={{ color: '#991B1B', fontSize: '12px', fontWeight: 600 }}>Outstanding</div>
-                <div style={{ fontSize: '20px', fontWeight: 700, color: '#B91C1C' }}>12</div>
-            </div>
+    <div className="page-content" style={{ background: 'var(--background)' }}>
+      <div className="flex-between mb-4" style={{ alignItems: 'flex-end' }}>
+        <div>
+          <div className="metric-label" style={{ marginBottom: '4px' }}>Overview</div>
+          <h2 style={{ margin: 0, fontSize: '32px', fontWeight: 600 }} className="text-display">Dashboard</h2>
         </div>
+        <button className="btn btn-primary btn-lg" onClick={() => setShowPaymentModal(true)}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          Record Payment
+        </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', marginBottom: '24px' }}>
-        <div className="card">
-          <h3>Collection Progress (%)</h3>
-          <PercentageChart data={stats.monthlyData} />
-        </div>
-        <div className="card">
-          <h3>Student Grade Distribution</h3>
-          {stats.gradeBreakdown.map(g => (
-            <div key={g.label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span>{g.label}</span>
-              <span style={{ fontWeight: 600 }}>{g.count}</span>
-            </div>
-          ))}
-          <div style={{ marginTop: '16px', borderTop: '1px solid #E5E7EB', paddingTop: '8px', fontWeight: 700, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Total</span>
-            <span>{stats.totalStudents}</span>
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(4, 1fr)', 
+        gap: '24px'
+      }}>
+        {/* Metric Cards */}
+        <SynthetixCard>
+          <div className="metric-label">Total Students</div>
+          <div className="metric-value">{formatNumber(stats.totalStudents)}</div>
+        </SynthetixCard>
+        
+        <SynthetixCard>
+          <div className="metric-label">Year Fees</div>
+          <div className="metric-value">{formatCurrency(stats.yearFees)}</div>
+        </SynthetixCard>
+
+        <SynthetixCard>
+          <div className="metric-label">Collected</div>
+          <div className="metric-value" style={{ color: '#10B981' }}>{formatCurrency(stats.collected)}</div>
+        </SynthetixCard>
+
+        <SynthetixCard>
+          <div className="metric-label">Outstanding</div>
+          <div className="metric-value" style={{ color: 'var(--primary)' }}>{formatCurrency(stats.outstanding)}</div>
+        </SynthetixCard>
+
+        {/* Payment Status Overview - Full Width */}
+        <SynthetixCard style={{ gridColumn: 'span 4' }}>
+          <div className="metric-label">Student Payment Status Overview</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
+              <div style={{ padding: '24px', borderRadius: '16px', border: '1px solid #10B981', backgroundColor: '#ECFDF5', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '40px', height: '40px', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderRadius: '50%' }} />
+                  <div style={{ color: '#065F46', fontSize: '11px', fontWeight: 700, marginBottom: '8px', letterSpacing: '0.05em' }} className="text-display">FULLY PAID</div>
+                  <div style={{ fontSize: '32px', fontWeight: 800, color: '#047857' }} className="text-mono">{formatNumber(142)}</div>
+              </div>
+              <div style={{ padding: '24px', borderRadius: '16px', border: '1px solid #F59E0B', backgroundColor: '#FFFBEB', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '40px', height: '40px', backgroundColor: 'rgba(245, 158, 11, 0.1)', borderRadius: '50%' }} />
+                  <div style={{ color: '#92400E', fontSize: '11px', fontWeight: 700, marginBottom: '8px', letterSpacing: '0.05em' }} className="text-display">PARTIALLY PAID</div>
+                  <div style={{ fontSize: '32px', fontWeight: 800, color: '#B45309' }} className="text-mono">{formatNumber(28)}</div>
+              </div>
+              <div style={{ padding: '24px', borderRadius: '16px', border: '1px solid #EF4444', backgroundColor: '#FEF2F2', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '40px', height: '40px', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: '50%' }} />
+                  <div style={{ color: '#991B1B', fontSize: '11px', fontWeight: 700, marginBottom: '8px', letterSpacing: '0.05em' }} className="text-display">OUTSTANDING</div>
+                  <div style={{ fontSize: '32px', fontWeight: 800, color: '#B91C1C' }} className="text-mono">{formatNumber(12)}</div>
+              </div>
           </div>
-        </div>
+        </SynthetixCard>
+
+        {/* Progress and Distribution */}
+        <SynthetixCard style={{ gridColumn: 'span 3' }}>
+          <div className="metric-label">Collection Progress (%)</div>
+          <PercentageChart data={stats.monthlyData} />
+        </SynthetixCard>
+
+        <SynthetixCard style={{ gridColumn: 'span 1' }}>
+          <div className="metric-label">Grade Distribution</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {stats.gradeBreakdown.map(g => (
+              <div key={g.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: '14px', fontWeight: 500 }} className="text-display">{g.label}</span>
+                <span style={{ fontWeight: 700 }} className="text-mono">{formatNumber(g.count)}</span>
+              </div>
+            ))}
+            <div style={{ marginTop: 'auto', paddingTop: '20px', fontWeight: 800, display: 'flex', justifyContent: 'space-between', fontSize: '20px' }}>
+              <span className="text-display">Total</span>
+              <span className="text-mono">{formatNumber(stats.totalStudents)}</span>
+            </div>
+          </div>
+        </SynthetixCard>
       </div>
 
       {showPaymentModal && <PaymentWizard onClose={() => setShowPaymentModal(false)} onSuccess={() => { setShowPaymentModal(false); fetchDashboardData(); }} />}
@@ -196,3 +249,4 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
+
