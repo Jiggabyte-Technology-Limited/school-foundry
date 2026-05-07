@@ -15,7 +15,10 @@ interface DashboardStats {
   collected: number;
   outstanding: number;
   recentActivity: any[];
-  monthlyData: { month: string; collected: number; expected: number }[];
+  termlyData: { term: string; collected: number; expected: number }[];
+  fullyPaid: number;
+  partiallyPaid: number;
+  outstanding: number;
 }
 
 const Dashboard: React.FC = () => {
@@ -26,7 +29,10 @@ const Dashboard: React.FC = () => {
     collected: 0,
     outstanding: 0,
     recentActivity: [],
-    monthlyData: [],
+    termlyData: [],
+    fullyPaid: 0,
+    partiallyPaid: 0,
+    outstanding: 0,
   });
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -55,7 +61,7 @@ const Dashboard: React.FC = () => {
       const totalStudents = gradeBreakdown.reduce((sum: number, g: any) => sum + g.count, 0);
 
       const enrolledStudents = await db.all(`
-        SELECT sye.student_id, sye.grade_id
+        SELECT DISTINCT sye.student_id, sye.grade_id
         FROM student_year_enrollment sye
         WHERE sye.year_id = ?
       `, [currentYear.id]);
@@ -77,6 +83,77 @@ const Dashboard: React.FC = () => {
       `, [currentYear.id]);
       const collected = collectedResult?.total || 0;
 
+      // Get all terms for this year
+      const terms = await db.all(`
+        SELECT id, label FROM terms WHERE year_id = ? ORDER BY term_number ASC
+      `, [currentYear.id]);
+
+      // Calculate termly data
+      const termlyData = await Promise.all(
+        terms.map(async (term) => {
+          const termExpected = await db.get(`
+            SELECT SUM(fs.amount_cents) as total
+            FROM fee_structure fs
+            WHERE fs.year_id = ? AND fs.term_id = ?
+          `, [currentYear.id, term.id]);
+          
+          const termCollected = await db.get(`
+            SELECT SUM(p.amount_paid_cents) as total
+            FROM payments p
+            WHERE p.year_id = ? AND p.term_id = ?
+          `, [currentYear.id, term.id]);
+
+          return {
+            term: term.label,
+            expected: termExpected?.total || 0,
+            collected: termCollected?.total || 0
+          };
+        })
+      );
+
+      // Calculate payment status for each student
+      const studentPaymentStatus = await db.all(`
+        SELECT DISTINCT sye.student_id
+        FROM student_year_enrollment sye
+        WHERE sye.year_id = ?
+      `, [currentYear.id]);
+
+      let fullyPaid = 0;
+      let partiallyPaid = 0;
+      let outstanding = 0;
+
+      for (const student of studentPaymentStatus) {
+        const studentId = student.student_id;
+        
+        // Get expected fees for this student across all terms
+        const studentGrade = await db.get(`
+          SELECT grade_id FROM student_year_enrollment WHERE student_id = ? AND year_id = ?
+        `, [studentId, currentYear.id]);
+
+        if (!studentGrade) continue;
+
+        const expectedFees = await db.get(`
+          SELECT SUM(amount_cents) as total FROM fee_structure
+          WHERE year_id = ? AND grade_id = ?
+        `, [currentYear.id, studentGrade.grade_id]);
+
+        const paidAmount = await db.get(`
+          SELECT SUM(amount_paid_cents) as total FROM payments
+          WHERE student_id = ? AND year_id = ?
+        `, [studentId, currentYear.id]);
+
+        const expected = expectedFees?.total || 0;
+        const paid = paidAmount?.total || 0;
+
+        if (paid >= expected && expected > 0) {
+          fullyPaid++;
+        } else if (paid > 0 && paid < expected) {
+          partiallyPaid++;
+        } else if (paid === 0) {
+          outstanding++;
+        }
+      }
+
       const recentActivity = await db.all(`
         SELECT al.*, u.username
         FROM activity_log al
@@ -85,27 +162,18 @@ const Dashboard: React.FC = () => {
         LIMIT 10
       `);
 
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const currentYearLabel = currentYear.label;
-      const monthlyData = await Promise.all(
-        months.map(async (month, idx) => {
-          const monthNum = String(idx + 1).padStart(2, '0');
-          const startDate = `${currentYearLabel}-${monthNum}-01`;
-          const endDate = idx === 11 
-            ? `${parseInt(currentYearLabel) + 1}-01-01` 
-            : `${currentYearLabel}-${String(idx + 2).padStart(2, '0')}-01`;
-          
-          const monthCollected = await db.get(`
-            SELECT SUM(amount_paid_cents) as total
-            FROM payments
-            WHERE year_id = ? AND payment_date >= ? AND payment_date < ?
-          `, [currentYear.id, startDate, endDate]);
-          
-          return { month, collected: monthCollected?.total || 0, expected: yearFees / 12 };
-        })
-      );
-
-      setStats({ totalStudents, gradeBreakdown, yearFees, collected, outstanding: yearFees - collected, recentActivity, monthlyData });
+      setStats({ 
+        totalStudents, 
+        gradeBreakdown, 
+        yearFees, 
+        collected, 
+        outstanding: yearFees - collected, 
+        recentActivity, 
+        termlyData,
+        fullyPaid,
+        partiallyPaid,
+        outstanding
+      });
     } finally {
       setLoading(false);
     }
@@ -123,7 +191,7 @@ const Dashboard: React.FC = () => {
 
   if (loading) return <div style={{ padding: '40px', textAlign: 'center' }} className="text-display">Loading...</div>;
 
-  const PercentageChart: React.FC<{ data: { month: string; collected: number; expected: number }[] }> = ({ data }) => {
+  const PercentageChart: React.FC<{ data: { term: string; collected: number; expected: number }[] }> = ({ data }) => {
     const intervals = [100, 80, 60, 40, 20, 0];
     return (
       <div style={{ display: 'flex', gap: '8px', height: '240px', alignItems: 'flex-end', padding: '20px 20px 40px 40px', position: 'relative' }}>
@@ -148,7 +216,7 @@ const Dashboard: React.FC = () => {
                     }} 
                   />
                 </div>
-                <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }} className="text-mono">{d.month}</span>
+                <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }} className="text-mono">{d.term}</span>
               </div>
             );
           })}
@@ -205,25 +273,25 @@ const Dashboard: React.FC = () => {
               <div style={{ padding: '24px', borderRadius: '16px', border: '1px solid #10B981', backgroundColor: '#ECFDF5', position: 'relative', overflow: 'hidden' }}>
                   <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '40px', height: '40px', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderRadius: '50%' }} />
                   <div style={{ color: '#065F46', fontSize: '11px', fontWeight: 700, marginBottom: '8px', letterSpacing: '0.05em' }} className="text-display">FULLY PAID</div>
-                  <div style={{ fontSize: '32px', fontWeight: 800, color: '#047857' }} className="text-mono">{formatNumber(142)}</div>
+                  <div style={{ fontSize: '32px', fontWeight: 800, color: '#047857' }} className="text-mono">{formatNumber(stats.fullyPaid)}</div>
               </div>
               <div style={{ padding: '24px', borderRadius: '16px', border: '1px solid #F59E0B', backgroundColor: '#FFFBEB', position: 'relative', overflow: 'hidden' }}>
                   <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '40px', height: '40px', backgroundColor: 'rgba(245, 158, 11, 0.1)', borderRadius: '50%' }} />
                   <div style={{ color: '#92400E', fontSize: '11px', fontWeight: 700, marginBottom: '8px', letterSpacing: '0.05em' }} className="text-display">PARTIALLY PAID</div>
-                  <div style={{ fontSize: '32px', fontWeight: 800, color: '#B45309' }} className="text-mono">{formatNumber(28)}</div>
+                  <div style={{ fontSize: '32px', fontWeight: 800, color: '#B45309' }} className="text-mono">{formatNumber(stats.partiallyPaid)}</div>
               </div>
               <div style={{ padding: '24px', borderRadius: '16px', border: '1px solid #EF4444', backgroundColor: '#FEF2F2', position: 'relative', overflow: 'hidden' }}>
                   <div style={{ position: 'absolute', top: '-10px', right: '-10px', width: '40px', height: '40px', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: '50%' }} />
-                  <div style={{ color: '#991B1B', fontSize: '11px', fontWeight: 700, marginBottom: '8px', letterSpacing: '0.05em' }} className="text-display">OUTSTANDING</div>
-                  <div style={{ fontSize: '32px', fontWeight: 800, color: '#B91C1C' }} className="text-mono">{formatNumber(12)}</div>
+                  <div style={{ color: '#991B1B', fontSize: '11px', fontWeight: 700, marginBottom: '8px', letterSpacing: '0.05em' }} className="text-display">NO PAYMENT</div>
+                  <div style={{ fontSize: '32px', fontWeight: 800, color: '#B91C1C' }} className="text-mono">{formatNumber(stats.outstanding)}</div>
               </div>
           </div>
         </SynthetixCard>
 
         {/* Progress and Distribution */}
         <SynthetixCard style={{ gridColumn: 'span 3' }}>
-          <div className="metric-label">Collection Progress (%)</div>
-          <PercentageChart data={stats.monthlyData} />
+          <div className="metric-label">Collection Progress by Term (%)</div>
+          <PercentageChart data={stats.termlyData} />
         </SynthetixCard>
 
         <SynthetixCard style={{ gridColumn: 'span 1' }}>
