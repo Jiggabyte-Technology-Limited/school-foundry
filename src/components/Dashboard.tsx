@@ -130,7 +130,9 @@ const Dashboard: React.FC = () => {
 
       // Fetch the newly created payment to show receipt
       const newPayment = await db.get(`
-        SELECT p.*, s.full_name as student_name, s.guardian_name, s.guardian_contact, y.label as year_label, t.label as term_label, u.username as recorded_by_name
+        SELECT p.id, p.student_id, p.year_id, p.receipt_number, p.amount_paid_cents, p.payment_date, p.is_voided, p.void_reason,
+               s.full_name as student_name, s.guardian_name, s.guardian_contact, 
+               y.label as year_label, t.label as term_label, u.username as recorded_by_name
         FROM payments p
         JOIN students s ON p.student_id = s.id
         JOIN academic_years y ON p.year_id = y.id
@@ -777,7 +779,13 @@ const Dashboard: React.FC = () => {
 
       {showPaymentModal && <PaymentWizard onClose={() => setShowPaymentModal(false)} onSuccess={() => { setShowPaymentModal(false); fetchDashboardData(); }} />}
       {showStudentWizard && <StudentWizard onClose={() => setShowStudentWizard(false)} onSuccess={() => { setShowStudentWizard(false); fetchDashboardData(); loadStudentsAndYears(); }} />}
-      {selectedReceipt && <Receipt payment={selectedReceipt} onClose={() => setSelectedReceipt(null)} />}
+      {selectedReceipt && (
+        <Receipt 
+          payment={selectedReceipt} 
+          onClose={() => setSelectedReceipt(null)}
+          canVoid={false}
+        />
+      )}
     </div>
   );
 };

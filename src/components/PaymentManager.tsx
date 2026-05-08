@@ -18,6 +18,8 @@ interface Payment {
   term_label: string;
   guardian_name: string;
   guardian_contact: string;
+  is_voided?: number;
+  void_reason?: string;
 }
 
 interface PaymentStats {
@@ -251,6 +253,7 @@ const PaymentManager: React.FC = () => {
     loadData();
     loadPayments();
     loadStats();
+    loadActivityLogs();
   }, []);
 
   if (!canRecordPayments) {
@@ -328,8 +331,18 @@ const PaymentManager: React.FC = () => {
     if (!voidingPayment || !voidReason) return;
     try {
       await db.run(
-        'UPDATE payments SET amount_paid_cents = 0, receipt_number = receipt_number || \'_VOID\', notes = ? WHERE id = ?',
-        [`Voided: ${voidReason}${voidComment ? ' - ' + voidComment : ''}`, voidingPayment.id]
+        `UPDATE payments SET 
+          is_voided = 1,
+          voided_by = ?,
+          voided_at = datetime('now', 'localtime'),
+          void_reason = ?
+        WHERE id = ?`,
+        [user?.id ?? null, `Voided: ${voidReason}${voidComment ? ' - ' + voidComment : ''}`, voidingPayment.id]
+      );
+
+      await db.run(
+        'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+        [user?.id ?? null, user?.username ?? 'System', 'payment_voided', 'payments', voidingPayment.id, `Payment ${voidingPayment.receipt_number} voided: ${voidReason}`]
       );
       setShowVoidModal(false);
       setVoidingPayment(null);
@@ -337,6 +350,7 @@ const PaymentManager: React.FC = () => {
       setVoidComment('');
       loadPayments();
       loadStats();
+      loadActivityLogs();
     } catch (err: any) {
       setError(err.message || 'Failed to void payment');
     }
@@ -394,9 +408,12 @@ const PaymentManager: React.FC = () => {
     try {
       const offset = (page - 1) * LOGS_PER_PAGE;
       const logs = await db.all(`
-        SELECT al.*, u.username
+        SELECT al.*, u.username, p.receipt_number, p.amount_paid_cents, s.full_name as student_name
         FROM activity_log al
         LEFT JOIN users u ON al.user_id = u.id
+        LEFT JOIN payments p ON al.entity = 'payments' AND al.entity_id = p.id
+        LEFT JOIN students s ON p.student_id = s.id
+        WHERE al.action IN ('payment_recorded', 'payment_voided')
         ORDER BY al.logged_at DESC
         LIMIT ? OFFSET ?
       `, [LOGS_PER_PAGE, offset]);
@@ -404,6 +421,28 @@ const PaymentManager: React.FC = () => {
       setLogPage(page);
     } catch (err) {
       console.error('Error loading activity logs:', err);
+    }
+  };
+
+  const handleViewReceiptFromActivity = async (log: any) => {
+    if (!log.entity_id) return;
+    try {
+      const payment = await db.get(`
+        SELECT p.id, p.student_id, p.year_id, p.receipt_number, p.amount_paid_cents, p.payment_date, p.is_voided, p.void_reason,
+               s.full_name as student_name, s.guardian_name, s.guardian_contact, 
+               y.label as year_label, t.label as term_label, u.username as recorded_by_name
+        FROM payments p
+        JOIN students s ON p.student_id = s.id
+        JOIN academic_years y ON p.year_id = y.id
+        JOIN terms t ON p.term_id = t.id
+        LEFT JOIN users u ON p.recorded_by = u.id
+        WHERE p.id = ?
+      `, [log.entity_id]);
+      if (payment) {
+        setSelectedReceipt(payment);
+      }
+    } catch (err) {
+      console.error('Error loading receipt:', err);
     }
   };
 
@@ -485,6 +524,7 @@ const PaymentManager: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 100));
       loadPayments();
       loadStats();
+      loadActivityLogs();
       loadData(); // Reload students with updated balances
     } catch (err: any) {
       setError(err.message || 'Failed to record payment');
@@ -946,17 +986,10 @@ const PaymentManager: React.FC = () => {
         </div>
       </div>
 
-      {/* ACTIVITY TABLE: Recent Activity Below */}
+      {/* RECENT ACTIVITY: Payment Activity Log */}
       <div className="card">
         <div className="flex-between mb-4">
           <h3 style={{ margin: 0 }}>Recent Activity</h3>
-          <button 
-            className="btn btn-sage" 
-            onClick={() => handlePrintFiltered()}
-            style={{ marginRight: 0 }}
-          >
-            Print Filtered Report
-          </button>
         </div>
         
         {/* Filters for Activity - Buttons */}
@@ -990,36 +1023,63 @@ const PaymentManager: React.FC = () => {
         </div>
 
         <table>
-          <thead><tr><th>Receipt</th><th>Student</th><th>Term</th><th>Date</th><th>Amount</th><th>Recorded By</th><th>Actions</th></tr></thead>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', padding: '10px', borderBottom: '2px solid var(--border)', fontSize: '12px' }}>Date & Time</th>
+              <th style={{ textAlign: 'left', padding: '10px', borderBottom: '2px solid var(--border)', fontSize: '12px' }}>Receipt Number</th>
+              <th style={{ textAlign: 'left', padding: '10px', borderBottom: '2px solid var(--border)', fontSize: '12px' }}>User</th>
+              <th style={{ textAlign: 'left', padding: '10px', borderBottom: '2px solid var(--border)', fontSize: '12px' }}>Action</th>
+              <th style={{ textAlign: 'right', padding: '10px', borderBottom: '2px solid var(--border)', fontSize: '12px' }}>Amount</th>
+              <th style={{ textAlign: 'left', padding: '10px', borderBottom: '2px solid var(--border)', fontSize: '12px' }}>Student Full Name</th>
+            </tr>
+          </thead>
           <tbody>
-            {getFilteredPayments().map((p) => (
-              <tr key={p.id}>
-                <td className="td-id">{p.receipt_number}</td>
-                <td className="td-bold">{p.student_name}</td>
-                <td>{p.term_label}</td>
-                <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{formatDate(p.payment_date)}</td>
-                <td className="td-amount" style={{ color: '#16a34a' }}>{formatCurrency(p.amount_paid_cents)}</td>
-                <td style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{p.recorded_by_name || '-'}</td>
-                <td>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button className="btn btn-sage" onClick={() => setSelectedReceipt(p)}>View</button>
-                    {user?.role === 'admin' && p.amount_paid_cents > 0 && (
-                      <button 
-                        className="btn" 
-                        onClick={() => { setVoidingPayment(p); setShowVoidModal(true); }}
-                        style={{ background: '#ef4444', color: 'white', padding: '6px 10px', fontSize: '11px' }}
-                      >
-                        Void
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {getFilteredPayments().length === 0 && (
+            {activityLogs.map((log) => {
+              const isVoided = log.action === 'payment_voided';
+              const amount = log.amount_paid_cents || 0;
+              const displayAmount = isVoided ? `-$${(amount / 100).toFixed(2)}` : `+$${(amount / 100).toFixed(2)}`;
+              return (
+                <tr 
+                  key={log.id} 
+                  onClick={() => handleViewReceiptFromActivity(log)}
+                  style={{ cursor: 'pointer' }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--secondary)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <td style={{ padding: '10px', borderBottom: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    {new Date(log.logged_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </td>
+                  <td style={{ padding: '10px', borderBottom: '1px solid var(--border)', fontSize: '12px', fontWeight: 600, color: 'var(--primary)' }}>
+                    {log.receipt_number || '-'}
+                  </td>
+                  <td style={{ padding: '10px', borderBottom: '1px solid var(--border)', fontSize: '13px', fontWeight: 600 }}>
+                    {log.username || 'System'}
+                  </td>
+                  <td style={{ padding: '10px', borderBottom: '1px solid var(--border)', fontSize: '12px' }}>
+                    <span style={{ 
+                      padding: '4px 8px', 
+                      borderRadius: '4px', 
+                      fontSize: '11px', 
+                      fontWeight: 600,
+                      backgroundColor: log.action === 'payment_recorded' ? '#D1FAE5' : '#FEE2E2',
+                      color: log.action === 'payment_recorded' ? '#065F46' : '#991B1B'
+                    }}>
+                      {log.action === 'payment_recorded' ? 'Recorded' : 'Voided'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px', borderBottom: '1px solid var(--border)', fontSize: '12px', fontWeight: 600, textAlign: 'right', color: isVoided ? '#dc2626' : '#16a34a' }}>
+                    {displayAmount}
+                  </td>
+                  <td style={{ padding: '10px', borderBottom: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    {log.student_name || '-'}
+                  </td>
+                </tr>
+              );
+            })}
+            {activityLogs.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)' }}>
-                  No payments found for the selected filters
+                <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)' }}>
+                  No payment activity yet
                 </td>
               </tr>
             )}
@@ -1027,37 +1087,14 @@ const PaymentManager: React.FC = () => {
         </table>
       </div>
 
-      {/* ACTIVITY LOG SECTION */}
-      <div className="card">
-        <div className="flex-between mb-4">
-          <h3 style={{ margin: 0 }}>Activity Log</h3>
-          {!showFullLogs ? (
-            <button
-              className="btn btn-sage"
-              onClick={() => { loadActivityLogs(1); setShowFullLogs(true); }}
-            >
-              View Full Logs
-            </button>
-          ) : (
-            <button
-              className="btn btn-outline"
-              onClick={() => { setShowFullLogs(false); setLogPage(1); }}
-            >
-              Show Less
-            </button>
-          )}
-        </div>
-
-        {!showFullLogs ? (
-          // Show last 10 activities
-          <ActivityLogPreview />
-        ) : (
-          // Show paginated full logs
-          <FullActivityLog />
-        )}
-      </div>
-
-      {selectedReceipt && <Receipt payment={selectedReceipt} onClose={() => setSelectedReceipt(null)} />}
+      {selectedReceipt && (
+        <Receipt 
+          payment={selectedReceipt} 
+          onClose={() => setSelectedReceipt(null)} 
+          onVoid={() => { setVoidingPayment(selectedReceipt); setShowVoidModal(true); }}
+          canVoid={user?.role === 'admin' && selectedReceipt.amount_paid_cents > 0 && selectedReceipt.is_voided !== 1}
+        />
+      )}
 
       {/* Void Payment Modal */}
       {showVoidModal && voidingPayment && (
