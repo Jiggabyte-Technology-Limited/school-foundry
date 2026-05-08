@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
+import { printDocument, generateReceiptHtml } from '../lib/print-service';
 
 interface ReceiptProps {
   payment: {
@@ -28,6 +29,7 @@ interface PaymentHistory {
   term_label: string;
   amount_paid_cents: number;
   payment_date: string;
+  is_voided: number;
 }
 
 const Receipt: React.FC<ReceiptProps> = ({ payment, onClose, onVoid, canVoid }) => {
@@ -35,6 +37,7 @@ const Receipt: React.FC<ReceiptProps> = ({ payment, onClose, onVoid, canVoid }) 
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
   const [runningTotal, setRunningTotal] = useState(0);
   const [currentAmountDue, setCurrentAmountDue] = useState(0);
+  const [printing, setPrinting] = useState(false);
   const isVoided = payment.is_voided === 1;
 
   useEffect(() => {
@@ -45,12 +48,12 @@ const Receipt: React.FC<ReceiptProps> = ({ payment, onClose, onVoid, canVoid }) 
           setSchoolName(setting.value);
         }
 
-        // Load payment history for this student in the same year
+        // Load payment history for this student in the same year (including voided)
         const history = await db.all(`
-          SELECT p.receipt_number, t.label as term_label, p.amount_paid_cents, p.payment_date
+          SELECT p.receipt_number, t.label as term_label, p.amount_paid_cents, p.payment_date, p.is_voided
           FROM payments p
           JOIN terms t ON p.term_id = t.id
-          WHERE p.student_id = ? AND p.year_id = ? AND p.is_voided = 0 AND p.id <= ?
+          WHERE p.student_id = ? AND p.year_id = ? AND p.id <= ?
           ORDER BY p.payment_date ASC
         `, [payment.student_id, payment.year_id, payment.id]);
 
@@ -124,10 +127,6 @@ const Receipt: React.FC<ReceiptProps> = ({ payment, onClose, onVoid, canVoid }) 
               <span style={{ fontSize: '12px', fontWeight: 600, textAlign: 'right', maxWidth: '60%' }}>{payment.student_name}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontSize: '12px' }}>Guardian:</span>
-              <span style={{ fontSize: '12px', textAlign: 'right', maxWidth: '60%' }}>{payment.guardian_name}{payment.guardian_contact ? ` - ${payment.guardian_contact}` : ''}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
               <span style={{ fontSize: '12px' }}>Period:</span>
               <span style={{ fontSize: '12px' }}>{payment.term_label}, {payment.year_label}</span>
             </div>
@@ -152,11 +151,11 @@ const Receipt: React.FC<ReceiptProps> = ({ payment, onClose, onVoid, canVoid }) 
               <table style={{ width: '100%', fontSize: '10px', borderCollapse: 'collapse' }}>
                 <tbody>
                   {paymentHistory.map((p, i) => (
-                    <tr key={i}>
-                      <td style={{ padding: '4px 0' }}>{new Date(p.payment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
-                      <td style={{ padding: '4px 0', textAlign: 'center' }}>{p.receipt_number}</td>
-                      <td style={{ padding: '4px 0', textAlign: 'center' }}>{p.term_label}</td>
-                      <td style={{ padding: '4px 0', textAlign: 'right' }}>${(p.amount_paid_cents / 100).toFixed(2)}</td>
+                    <tr key={i} style={{ opacity: p.is_voided ? 0.5 : 1 }}>
+                      <td style={{ padding: '4px 0', textDecoration: p.is_voided ? 'line-through' : 'none' }}>{new Date(p.payment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
+                      <td style={{ padding: '4px 0', textAlign: 'center', textDecoration: p.is_voided ? 'line-through' : 'none' }}>{p.receipt_number}{p.is_voided ? ' (VOID)' : ''}</td>
+                      <td style={{ padding: '4px 0', textAlign: 'center', textDecoration: p.is_voided ? 'line-through' : 'none' }}>{p.term_label}</td>
+                      <td style={{ padding: '4px 0', textAlign: 'right', textDecoration: p.is_voided ? 'line-through' : 'none' }}>${(p.amount_paid_cents / 100).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -212,8 +211,36 @@ const Receipt: React.FC<ReceiptProps> = ({ payment, onClose, onVoid, canVoid }) 
           <button className="btn btn-outline" onClick={onClose} style={{ flex: 1 }}>
             Close
           </button>
-          <button className="btn btn-primary" onClick={() => window.print()} style={{ flex: 1 }}>
-            Print Receipt
+          <button className="btn btn-primary" onClick={async () => {
+            setPrinting(true);
+            const html = generateReceiptHtml({
+              schoolName,
+              receiptNumber: payment.receipt_number,
+              date: new Date(payment.payment_date).toLocaleDateString(),
+              time: new Date(payment.payment_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              studentName: payment.student_name,
+              period: `${payment.term_label}, ${payment.year_label}`,
+              amount: (payment.amount_paid_cents / 100).toFixed(2),
+              isVoided,
+              voidReason: payment.void_reason,
+              runningTotal: (runningTotal / 100).toFixed(2),
+              currentAmountDue: (currentAmountDue / 100).toFixed(2),
+              paymentHistory: paymentHistory.map(p => ({
+                date: new Date(p.payment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                receiptNumber: p.receipt_number,
+                termLabel: p.term_label,
+                amount: (p.amount_paid_cents / 100).toFixed(2),
+                isVoided: p.is_voided === 1,
+              })),
+            });
+            await printDocument({
+              html,
+              filename: `receipt_${payment.receipt_number}`,
+              title: `Receipt ${payment.receipt_number}`,
+            });
+            setPrinting(false);
+          }} disabled={printing} style={{ flex: 1 }}>
+            {printing ? 'Generating...' : 'Print Receipt'}
           </button>
         </div>
       </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
 import Receipt from './Receipt';
+import { printDocument, generatePaymentStatementHtml } from '../lib/print-service';
 
 interface Payment {
   id: number;
@@ -221,12 +222,19 @@ const PaymentManager: React.FC = () => {
   // Filters for activity table
   const [activityTypeFilter, setActivityTypeFilter] = useState('all');
   const [timePeriodFilter, setTimePeriodFilter] = useState('all');
+  const [activitySearchQuery, setActivitySearchQuery] = useState('');
 
   // Activity log state
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
   const [showFullLogs, setShowFullLogs] = useState(false);
   const [logPage, setLogPage] = useState(1);
   const LOGS_PER_PAGE = 50;
+
+  // Print statements state
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printPeriodFilter, setPrintPeriodFilter] = useState('all');
+  const [printPreviewData, setPrintPreviewData] = useState<any[]>([]);
+  const [schoolName, setSchoolName] = useState('School');
 
   // Student selection filters
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
@@ -254,6 +262,11 @@ const PaymentManager: React.FC = () => {
     loadPayments();
     loadStats();
     loadActivityLogs();
+    // Load school name
+    (async () => {
+      const setting = await db.get("SELECT value FROM app_settings WHERE key = 'school_name'");
+      if (setting?.value) setSchoolName(setting.value);
+    })();
   }, []);
 
   if (!canRecordPayments) {
@@ -407,21 +420,76 @@ const PaymentManager: React.FC = () => {
   const loadActivityLogs = async (page = 1) => {
     try {
       const offset = (page - 1) * LOGS_PER_PAGE;
+      let whereClause = "WHERE al.action IN ('payment_recorded', 'payment_voided')";
+      const params: any[] = [];
+
+      if (activitySearchQuery) {
+        whereClause += ` AND (p.receipt_number LIKE ? OR s.full_name LIKE ? OR u.username LIKE ?)`;
+        const searchTerm = `%${activitySearchQuery}%`;
+        params.push(searchTerm, searchTerm, searchTerm);
+      }
+
       const logs = await db.all(`
         SELECT al.*, u.username, p.receipt_number, p.amount_paid_cents, s.full_name as student_name
         FROM activity_log al
         LEFT JOIN users u ON al.user_id = u.id
         LEFT JOIN payments p ON al.entity = 'payments' AND al.entity_id = p.id
         LEFT JOIN students s ON p.student_id = s.id
-        WHERE al.action IN ('payment_recorded', 'payment_voided')
+        ${whereClause}
         ORDER BY al.logged_at DESC
         LIMIT ? OFFSET ?
-      `, [LOGS_PER_PAGE, offset]);
+      `, [...params, LOGS_PER_PAGE, offset]);
       setActivityLogs(logs);
       setLogPage(page);
     } catch (err) {
       console.error('Error loading activity logs:', err);
     }
+  };
+
+  const loadPrintPreview = async () => {
+    try {
+      let dateFilter = '';
+      const now = new Date();
+      
+      switch (printPeriodFilter) {
+        case 'last_week':
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          dateFilter = `AND p.payment_date >= '${weekAgo.toISOString().split('T')[0]}'`;
+          break;
+        case 'last_month':
+          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          dateFilter = `AND p.payment_date >= '${monthAgo.toISOString().split('T')[0]}'`;
+          break;
+        case 'this_term':
+          if (form.term_id) {
+            dateFilter = `AND p.term_id = ${form.term_id}`;
+          }
+          break;
+        default:
+          dateFilter = '';
+      }
+
+      const payments = await db.all(`
+        SELECT p.receipt_number, p.amount_paid_cents, p.payment_date, p.is_voided,
+               s.full_name as student_name, t.label as term_label, y.label as year_label,
+               u.username as recorded_by_name
+        FROM payments p
+        JOIN students s ON p.student_id = s.id
+        JOIN academic_years y ON p.year_id = y.id
+        JOIN terms t ON p.term_id = t.id
+        LEFT JOIN users u ON p.recorded_by = u.id
+        WHERE p.is_voided = 0 ${dateFilter}
+        ORDER BY p.payment_date DESC
+      `);
+      setPrintPreviewData(payments);
+    } catch (err) {
+      console.error('Error loading print preview:', err);
+    }
+  };
+
+  const handleOpenPrintModal = () => {
+    loadPrintPreview();
+    setShowPrintModal(true);
   };
 
   const handleViewReceiptFromActivity = async (log: any) => {
@@ -608,74 +676,26 @@ const PaymentManager: React.FC = () => {
     return 'All Time';
   };
 
-  const handlePrintFiltered = () => {
+  const handlePrintFiltered = async () => {
     const filtered = getFilteredPayments();
-    const schoolName = users.length > 0 ? 'School Name' : 'School System';
-    
-    const printWindow = window.open('', '', 'height=800,width=1000');
-    if (!printWindow) return;
-
-    const tableRows = filtered.map(p => `
-      <tr>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd;">${p.receipt_number}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd;">${p.student_name}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd;">${p.term_label}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd;">${new Date(p.payment_date).toLocaleDateString()}</td>
-        <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: right;">$${(p.amount_paid_cents / 100).toFixed(2)}</td>
-      </tr>
-    `).join('');
-
-    const totalAmount = filtered.reduce((sum, p) => sum + p.amount_paid_cents, 0);
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Payment Report</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          h1 { font-size: 24px; margin-bottom: 8px; }
-          .report-info { margin-bottom: 20px; color: #666; }
-          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-          th { background-color: #f0f0f0; padding: 12px; text-align: left; font-weight: 600; border-bottom: 2px solid #333; }
-          td { padding: 10px; }
-          .total-row { background-color: #f9f9f9; font-weight: 600; border-top: 2px solid #333; }
-          .total-row td { padding: 12px; }
-        </style>
-      </head>
-      <body>
-        <h1>${schoolName}</h1>
-        <div class="report-info">
-          <p><strong>Payment Report - ${getPeriodLabel()}</strong></p>
-          <p>Generated: ${new Date().toLocaleString()}</p>
-          <p>Total Records: ${filtered.length}</p>
-        </div>
-        
-        <table>
-          <thead>
-            <tr>
-              <th>Receipt #</th>
-              <th>Student</th>
-              <th>Term</th>
-              <th>Date</th>
-              <th style="text-align: right;">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRows}
-            <tr class="total-row">
-              <td colspan="4" style="text-align: right;">TOTAL:</td>
-              <td style="text-align: right;">$${(totalAmount / 100).toFixed(2)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(html);
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 250);
+    const html = generatePaymentStatementHtml({
+      schoolName,
+      period: getPeriodLabel(),
+      payments: filtered.map(p => ({
+        date: new Date(p.payment_date).toLocaleDateString(),
+        receiptNumber: p.receipt_number,
+        studentName: p.student_name,
+        period: `${p.term_label}, ${p.year_label}`,
+        recordedBy: p.recorded_by_name || 'System',
+        amount: (p.amount_paid_cents / 100).toFixed(2),
+      })),
+      total: (filtered.reduce((sum, p) => sum + p.amount_paid_cents, 0) / 100).toFixed(2),
+    });
+    await printDocument({
+      html,
+      filename: `payment_report_${getPeriodLabel().toLowerCase().replace(/\s+/g, '_')}`,
+      title: `Payment Report - ${getPeriodLabel()}`,
+    });
   };
 
   return (
@@ -990,6 +1010,9 @@ const PaymentManager: React.FC = () => {
       <div className="card">
         <div className="flex-between mb-4">
           <h3 style={{ margin: 0 }}>Recent Activity</h3>
+          <button className="btn btn-outline" onClick={handleOpenPrintModal} style={{ padding: '8px 16px', fontSize: '12px' }}>
+            Print Statement
+          </button>
         </div>
         
         {/* Filters for Activity - Buttons */}
@@ -1020,6 +1043,23 @@ const PaymentManager: React.FC = () => {
               {option.label}
             </button>
           ))}
+          <input
+            type="text"
+            placeholder="Search receipt, student, or user..."
+            value={activitySearchQuery}
+            onChange={(e) => {
+              setActivitySearchQuery(e.target.value);
+              loadActivityLogs(1);
+            }}
+            style={{
+              marginLeft: 'auto',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid var(--border)',
+              fontSize: '12px',
+              width: '220px'
+            }}
+          />
         </div>
 
         <table>
@@ -1156,6 +1196,138 @@ const PaymentManager: React.FC = () => {
               >
                 Void Payment
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Statement Modal */}
+      {showPrintModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ width: '800px', maxHeight: '90vh', padding: '24px' }}>
+            <div className="flex-between mb-4">
+              <h2 style={{ margin: 0 }}>Print Payment Statement</h2>
+              <button onClick={() => setShowPrintModal(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' }}>&times;</button>
+            </div>
+            
+            <div className="flex-row gap-2 mb-4">
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginRight: 4 }}>Period:</span>
+              {[
+                { value: 'all', label: 'All' },
+                { value: 'last_week', label: 'Last Week' },
+                { value: 'last_month', label: 'Last Month' },
+                { value: 'this_term', label: 'This Term' }
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => {
+                    setPrintPeriodFilter(option.value);
+                    setTimeout(loadPrintPreview, 0);
+                  }}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: 12,
+                    borderRadius: '20px',
+                    border: '1px solid',
+                    borderColor: printPeriodFilter === option.value ? 'var(--primary)' : 'var(--border)',
+                    backgroundColor: printPeriodFilter === option.value ? 'var(--primary)' : 'transparent',
+                    color: printPeriodFilter === option.value ? 'white' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div id="print-statement-content" style={{ 
+              backgroundColor: 'white', 
+              border: '1px solid #ccc', 
+              padding: '40px', 
+              maxHeight: '400px', 
+              overflowY: 'auto',
+              fontFamily: 'monospace',
+              fontSize: '11px'
+            }}>
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>PAYMENT STATEMENT</div>
+                <div style={{ fontSize: '14px', marginTop: '4px' }}>{schoolName}</div>
+                <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
+                  {printPeriodFilter === 'all' ? 'All Time' : 
+                   printPeriodFilter === 'last_week' ? 'Last Week' : 
+                   printPeriodFilter === 'last_month' ? 'Last Month' : 'This Term'}
+                </div>
+              </div>
+              
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #333' }}>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>Date</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>Receipt No.</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>Student</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>Period</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>Recorded By</th>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {printPreviewData.map((p, i) => (
+                    <tr key={i} style={{ borderBottom: '1px dashed #ccc' }}>
+                      <td style={{ padding: '6px 8px' }}>{new Date(p.payment_date).toLocaleDateString()}</td>
+                      <td style={{ padding: '6px 8px' }}>{p.receipt_number}</td>
+                      <td style={{ padding: '6px 8px' }}>{p.student_name}</td>
+                      <td style={{ padding: '6px 8px' }}>{p.term_label}, {p.year_label}</td>
+                      <td style={{ padding: '6px 8px' }}>{p.recorded_by_name || 'System'}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>${(p.amount_paid_cents / 100).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  {printPreviewData.length === 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#666' }}>No payments found for this period</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+              
+              {printPreviewData.length > 0 && (
+                <div style={{ marginTop: '16px', padding: '12px', border: '1px solid #333', display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: 600 }}>TOTAL</span>
+                  <span style={{ fontWeight: 700 }}>
+                    ${(printPreviewData.reduce((sum, p) => sum + p.amount_paid_cents, 0) / 100).toFixed(2)}
+                  </span>
+                </div>
+              )}
+              
+              <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '9px', color: '#666', borderTop: '1px dashed #333', paddingTop: '12px' }}>
+                Generated by FeesFoundry - Jiggabyte Technology Limited
+              </div>
+            </div>
+            
+            <div className="flex-row gap-2 mt-4" style={{ justifyContent: 'flex-end' }}>
+              <button className="btn btn-outline" onClick={() => setShowPrintModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={async () => {
+                const html = generatePaymentStatementHtml({
+                  schoolName,
+                  period: printPeriodFilter === 'all' ? 'All Time' : 
+                         printPeriodFilter === 'last_week' ? 'Last Week' : 
+                         printPeriodFilter === 'last_month' ? 'Last Month' : 'This Term',
+                  payments: printPreviewData.map(p => ({
+                    date: new Date(p.payment_date).toLocaleDateString(),
+                    receiptNumber: p.receipt_number,
+                    studentName: p.student_name,
+                    period: `${p.term_label}, ${p.year_label}`,
+                    recordedBy: p.recorded_by_name || 'System',
+                    amount: (p.amount_paid_cents / 100).toFixed(2),
+                  })),
+                  total: (printPreviewData.reduce((sum, p) => sum + p.amount_paid_cents, 0) / 100).toFixed(2),
+                });
+                await printDocument({
+                  html,
+                  filename: `payment_statement_${printPeriodFilter}`,
+                  title: 'Payment Statement',
+                });
+              }}>Print</button>
             </div>
           </div>
         </div>
