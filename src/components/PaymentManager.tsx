@@ -36,7 +36,7 @@ interface PaymentStats {
 }
 
 const PaymentManager: React.FC = () => {
-  const { user } = useAuth();
+  const { user, canRecordPayments, canVoidPayments } = useAuth();
   const [students, setStudents] = useState<any[]>([]);
   const [grades, setGrades] = useState<any[]>([]);
   const [years, setYears] = useState<any[]>([]);
@@ -87,6 +87,15 @@ const PaymentManager: React.FC = () => {
     loadStats();
   }, []);
 
+  if (!canRecordPayments) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
+        <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
+        <p>You do not have permission to record payments.</p>
+      </div>
+    );
+  }
+
   useEffect(() => {
     if (form.year_id) {
       loadTerms(Number(form.year_id));
@@ -94,8 +103,16 @@ const PaymentManager: React.FC = () => {
   }, [form.year_id]);
 
   const loadData = async () => {
+    const currentYear = await db.get('SELECT id FROM academic_years ORDER BY label DESC LIMIT 1');
     const [studentList, gradeList, yearList] = await Promise.all([
-      db.all('SELECT s.id, s.full_name, g.label as grade_label, sye.grade_id FROM students s LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = (SELECT id FROM academic_years ORDER BY label DESC LIMIT 1) LEFT JOIN grades g ON sye.grade_id = g.id WHERE s.is_active = 1 ORDER BY s.full_name'),
+      db.all(`SELECT s.id, s.full_name, g.label as grade_label, sye.grade_id,
+        COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
+        COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as balance
+        FROM students s
+        LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
+        LEFT JOIN grades g ON sye.grade_id = g.id
+        WHERE s.is_active = 1
+        ORDER BY s.full_name`, [currentYear?.id, currentYear?.id, currentYear?.id]),
       db.all('SELECT id, label FROM grades ORDER BY id'),
       db.all('SELECT id, label FROM academic_years ORDER BY label DESC'),
     ]);
@@ -133,6 +150,10 @@ const PaymentManager: React.FC = () => {
   };
 
   const handleVoidPayment = async () => {
+    if (!canVoidPayments) {
+      alert('You do not have permission to void payments.');
+      return;
+    }
     if (!voidingPayment || !voidReason) return;
     try {
       await db.run(
@@ -219,10 +240,20 @@ const PaymentManager: React.FC = () => {
     try {
       const amountCents = Math.round(parseFloat(form.amount) * 100);
       
+      // Get student's grade for this year
+      const enrollment = await db.get(
+        'SELECT grade_id FROM student_year_enrollment WHERE student_id = ? AND year_id = ?',
+        [form.student_id, form.year_id]
+      );
+
+      if (!enrollment?.grade_id) {
+        throw new Error('Student is not enrolled for the selected academic year');
+      }
+
       const result = await db.run(`
-        INSERT INTO payments (student_id, year_id, term_id, receipt_number, amount_paid_cents)
-        VALUES (?, ?, ?, ?, ?)
-      `, [form.student_id, form.year_id, form.term_id, form.receipt_number, amountCents]);
+        INSERT INTO payments (student_id, year_id, term_id, grade_id, receipt_number, amount_paid_cents, payment_method, recorded_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [form.student_id, form.year_id, form.term_id, enrollment.grade_id, form.receipt_number, amountCents, 'cash', user?.id ?? 1]);
 
       const student = students.find(s => s.id === Number(form.student_id));
       await db.run(
@@ -230,10 +261,26 @@ const PaymentManager: React.FC = () => {
         [user?.id ?? null, user?.username ?? 'System', 'payment_recorded', 'payments', result.lastInsertRowid || result.lastID, `Payment of $${form.amount} recorded for ${student?.full_name} (${form.receipt_number})`]
       );
 
+      // Fetch the newly created payment to show receipt
+      const newPayment = await db.get(`
+        SELECT p.*, s.full_name as student_name, s.guardian_name, s.guardian_contact, y.label as year_label, t.label as term_label, u.username as recorded_by_name
+        FROM payments p
+        JOIN students s ON p.student_id = s.id
+        JOIN academic_years y ON p.year_id = y.id
+        JOIN terms t ON p.term_id = t.id
+        LEFT JOIN users u ON p.recorded_by = u.id
+        WHERE p.id = ?
+      `, [result.lastInsertRowid || result.lastID]);
+
+      if (newPayment) {
+        setSelectedReceipt(newPayment);
+      }
+
       setForm({ student_id: '', year_id: form.year_id, term_id: form.term_id, amount: '', receipt_number: '' });
       await generateReceiptNumber();
       loadPayments();
       loadStats();
+      loadData(); // Reload students with updated balances
     } catch (err: any) {
       setError(err.message || 'Failed to record payment');
     } finally {
@@ -493,6 +540,41 @@ const PaymentManager: React.FC = () => {
                   Change Student
                 </button>
               </div>
+
+              {(() => {
+                const selectedStudent = students.find(s => s.id === Number(form.student_id));
+                if (!selectedStudent) return null;
+                return (
+                  <div style={{ 
+                    background: 'rgba(255,255,255,0.95)', 
+                    borderRadius: '8px', 
+                    padding: '12px 16px',
+                    marginBottom: '16px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    color: '#1f2937'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current Balance</div>
+                      <div style={{ fontSize: '22px', fontWeight: 700, color: selectedStudent.balance > 0 ? '#dc2626' : '#059669' }}>
+                        ${(selectedStudent.balance / 100).toFixed(2)}
+                      </div>
+                    </div>
+                    <div style={{ 
+                      padding: '6px 12px', 
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      backgroundColor: selectedStudent.balance > 0 ? '#FEE2E2' : '#D1FAE5',
+                      color: selectedStudent.balance > 0 ? '#991B1B' : '#065F46'
+                    }}>
+                      {selectedStudent.balance > 0 ? 'Owing' : 'Paid'}
+                    </div>
+                  </div>
+                );
+              })()}
               
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                 <div>
@@ -501,7 +583,7 @@ const PaymentManager: React.FC = () => {
                     className="input-default" 
                     value={form.year_id} 
                     onChange={(e) => setForm({ ...form, year_id: e.target.value })}
-                    style={{ background: 'white' }}
+                    style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
                   >
                     {years.map((y) => <option key={y.id} value={y.id}>{y.label}</option>)}
                   </select>
@@ -512,7 +594,7 @@ const PaymentManager: React.FC = () => {
                     className="input-default" 
                     value={form.term_id} 
                     onChange={(e) => setForm({ ...form, term_id: e.target.value })}
-                    style={{ background: 'white' }}
+                    style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
                   >
                     {terms.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                   </select>
@@ -527,10 +609,48 @@ const PaymentManager: React.FC = () => {
                     value={form.amount} 
                     onChange={(e) => setForm({ ...form, amount: e.target.value })}
                     placeholder="0.00"
-                    style={{ background: 'white', fontWeight: 700, fontSize: '16px' }}
+                    autoFocus
+                    style={{ background: 'white', color: '#1f2937', fontWeight: 700, fontSize: '16px', border: '2px solid #1f2937' }}
                   />
+                  {(() => {
+                    const selectedStudent = students.find(s => s.id === Number(form.student_id));
+                    return selectedStudent && selectedStudent.balance > 0 ? (
+                      <button 
+                        type="button"
+                        onClick={() => setForm({ ...form, amount: (selectedStudent.balance / 100).toFixed(2) })}
+                        style={{
+                          marginTop: '8px',
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          backgroundColor: '#FEF3C7',
+                          color: '#92400E',
+                          border: '1px solid #F59E0B',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          width: '100%'
+                        }}
+                      >
+                        Pay Balance (${(selectedStudent.balance / 100).toFixed(2)})
+                      </button>
+                    ) : null;
+                  })()}
                 </div>
               </div>
+              
+              {error && (
+                <div style={{ 
+                  marginTop: '12px', 
+                  padding: '12px', 
+                  backgroundColor: '#FEE2E2', 
+                  border: '1px solid #FCA5A5', 
+                  borderRadius: '8px',
+                  color: '#991B1B',
+                  fontSize: '14px'
+                }}>
+                  {error}
+                </div>
+              )}
               
               <button 
                 type="submit" 

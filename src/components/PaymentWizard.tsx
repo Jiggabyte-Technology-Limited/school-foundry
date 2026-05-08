@@ -28,7 +28,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
   onSuccess,
   preSelectedStudent 
 }) => {
-  const { user } = useAuth();
+  const { user, canRecordPayments } = useAuth();
   const [currentStep, setCurrentStep] = useState<Step>(preSelectedStudent ? 'payment' : 'student');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -54,6 +54,15 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  if (!canRecordPayments) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
+        <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
+        <p>You do not have permission to record payments.</p>
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (selectedStudentId) {
@@ -228,21 +237,20 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
           user?.id || 1 // Fallback to 1 if no user (should not happen with auth)
       ]);
 
-      const paymentDetails = {
-        receipt_number: form.receipt_number,
-        student_name: selectedStudent.full_name,
-        amount_paid_cents: amountCents,
-        payment_date: new Date().toISOString(),
-        year_label: currentYear.label,
-        term_label: getSelectedTermLabel()
-      };
+      // Fetch the newly created payment to show receipt
+      const newPayment = await db.get(`
+        SELECT p.*, s.full_name as student_name, s.guardian_name, s.guardian_contact, y.label as year_label, t.label as term_label, u.username as recorded_by_name
+        FROM payments p
+        JOIN students s ON p.student_id = s.id
+        JOIN academic_years y ON p.year_id = y.id
+        JOIN terms t ON p.term_id = t.id
+        LEFT JOIN users u ON p.recorded_by = u.id
+        WHERE p.id = ?
+      `, [result.lastInsertRowid || result.lastID]);
 
-      await db.run(
-        'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
-        [user?.id ?? null, user?.username ?? 'System', 'payment_recorded', 'payments', result.lastInsertRowid || result.lastID, `Payment of $${form.amount} recorded for ${selectedStudent.full_name} (${form.receipt_number})`]
-      );
-
-      setShowReceipt(paymentDetails);
+      if (newPayment) {
+        setShowReceipt(newPayment);
+      }
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Failed to record payment. Please try again.');
@@ -358,47 +366,106 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                 Loading student records...
               </div>
             ) : (
-              <div style={{ 
-                backgroundColor: 'var(--color-sage-cream)', 
-                padding: 16, 
-                borderRadius: 'var(--border-radius-md)',
-                marginBottom: 20,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <div>
-                  <div style={{ fontWeight: 600, color: 'var(--color-deep-olive)' }}>
-                    {selectedStudent.full_name}
+              <div>
+                <div style={{ 
+                  backgroundColor: '#fff', 
+                  border: '1px solid #e5e5e5',
+                  padding: 16, 
+                  borderRadius: 'var(--border-radius-md)',
+                  marginBottom: 16,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 600, color: '#000', fontSize: 16 }}>
+                      {selectedStudent.full_name}
+                    </div>
+                    <div style={{ fontSize: 13, color: '#666' }}>
+                      {selectedStudent.grade_label} - {currentYear?.label}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--color-sage-placeholder)' }}>
-                    {selectedStudent.grade_label} - {currentYear?.label}
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Balance</div>
+                    <div style={{ 
+                      fontSize: 20, 
+                      fontWeight: 700,
+                      color: selectedStudent.balance > 0 ? '#dc2626' : '#059669'
+                    }}>
+                      {formatCurrency(selectedStudent.balance)}
+                    </div>
                   </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>Current Balance</div>
-                  <div style={{ 
-                    fontSize: 18, 
-                    fontWeight: 700,
-                    color: selectedStudent.balance > 0 ? '#dc2626' : 'var(--color-accent-emerald)'
-                  }}>
-                    {formatCurrency(selectedStudent.balance)}
+
+                <div style={{ 
+                  display: 'flex', 
+                  gap: 8, 
+                  marginBottom: 20,
+                  padding: '10px 14px',
+                  backgroundColor: selectedStudent.balance > 0 ? '#FEE2E2' : '#D1FAE5',
+                  borderRadius: 'var(--border-radius-md)',
+                  border: `1px solid ${selectedStudent.balance > 0 ? '#FCA5A5' : '#6EE7B7'}`
+                }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={selectedStudent.balance > 0 ? '#991B1B' : '#065F46'} strokeWidth="2" style={{ flexShrink: 0, marginTop: 2 }}>
+                    {selectedStudent.balance > 0 ? (
+                      <><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></>
+                    ) : (
+                      <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></>
+                    )}
+                  </svg>
+                  <div>
+                    <div style={{ fontWeight: 700, color: selectedStudent.balance > 0 ? '#991B1B' : '#065F46', fontSize: 14 }}>
+                      {selectedStudent.balance > 0 ? 'Owing' : 'Paid'}
+                    </div>
+                    <div style={{ fontSize: 12, color: selectedStudent.balance > 0 ? '#B91C1C' : '#047857' }}>
+                      {selectedStudent.balance > 0 
+                        ? `Balance: ${formatCurrency(selectedStudent.balance)}`
+                        : 'All fees cleared'}
+                    </div>
                   </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  style={{
+                    width: '100%',
+                    marginBottom: 20,
+                    padding: '10px 16px',
+                    fontSize: 13,
+                    backgroundColor: '#fff',
+                    color: '#374151',
+                    border: '1px solid #d1d5db',
+                    borderRadius: 'var(--border-radius-md)',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                  </svg>
+                  Print Statement
+                </button>
               </div>
             )}
 
             <div className="wizard-form">
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div className="wizard-field">
-                  <label>Amount <span className="required">*</span></label>
+                  <label style={{ color: '#000', fontWeight: 600 }}>Amount <span className="required">*</span></label>
                   <div style={{ position: 'relative' }}>
                     <span style={{ 
                       position: 'absolute', 
                       left: 12, 
                       top: '50%', 
                       transform: 'translateY(-50%)',
-                      color: 'var(--color-sage-placeholder)',
+                      color: '#374151',
                       fontWeight: 600
                     }}>$</span>
                     <input
@@ -409,7 +476,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                       onChange={(e) => setForm({ ...form, amount: e.target.value })}
                       placeholder="0.00"
                       autoFocus
-                      style={{ paddingLeft: 28 }}
+                      style={{ paddingLeft: 28, color: '#000', fontWeight: 500, border: '2px solid #000' }}
                     />
                   </div>
                   {selectedStudent && selectedStudent.balance > 0 && (
@@ -420,23 +487,24 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                         marginTop: 8,
                         padding: '6px 12px',
                         fontSize: 12,
-                        backgroundColor: 'var(--color-accent-teal-light)',
-                        color: 'var(--color-accent-teal)',
-                        border: 'none',
+                        backgroundColor: '#FEF3C7',
+                        color: '#92400E',
+                        border: '1px solid #F59E0B',
                         borderRadius: 'var(--border-radius-md)',
                         cursor: 'pointer',
                         fontWeight: 600
                       }}
                     >
-                      Pay Full Balance ({formatCurrency(selectedStudent.balance)})
+                      Pay Balance ({formatCurrency(selectedStudent.balance)})
                     </button>
                   )}
                 </div>
                 <div className="wizard-field">
-                  <label>Term <span className="required">*</span></label>
+                  <label style={{ color: '#000', fontWeight: 600 }}>Term <span className="required">*</span></label>
                   <select
                     value={form.term_id}
                     onChange={(e) => setForm({ ...form, term_id: e.target.value })}
+                    style={{ color: '#000' }}
                   >
                     {terms.map(term => (
                       <option key={term.id} value={term.id}>{term.label}</option>

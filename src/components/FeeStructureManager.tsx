@@ -15,7 +15,7 @@ interface MatrixCell {
 }
 
 const FeeStructureManager: React.FC = () => {
-  const { user } = useAuth();
+  const { user, canManageFees } = useAuth();
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -81,6 +81,11 @@ const FeeStructureManager: React.FC = () => {
   const saveCell = async (gradeId: number, termId: number) => {
     const cell = matrix[gradeId][termId];
     if (!cell.isUnsaved || !selectedYear) return;
+
+    if (!canManageFees) {
+      alert('You do not have permission to modify the fee structure.');
+      return;
+    }
 
     setMatrix(prev => ({
       ...prev,
@@ -183,13 +188,15 @@ const FeeStructureManager: React.FC = () => {
               {years.map(y => <option key={y.id} value={y.id}>{y.label}</option>)}
             </select>
           </div>
-          <button className={`config-toggle-btn ${showConfig ? 'active' : ''}`} onClick={() => setShowConfig(!showConfig)}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-            Configuration
-          </button>
+          {canManageFees && (
+            <button className={`config-toggle-btn ${showConfig ? 'active' : ''}`} onClick={() => setShowConfig(!showConfig)}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              Configuration
+            </button>
+          )}
         </div>
       </div>
 
@@ -308,6 +315,8 @@ const FeeStructureManager: React.FC = () => {
                           value={cell.amount}
                           onChange={(e) => handleMatrixChange(g.id, t.id, e.target.value)}
                           onBlur={() => saveCell(g.id, t.id)}
+                          readOnly={!canManageFees}
+                          style={{ cursor: !canManageFees ? 'default' : 'text' }}
                         />
                         {cell.isUnsaved && <div className="matrix-status-indicator matrix-status-unsaved" style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)' }} />}
                         {cell.isSaving && <div style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, border: '2px solid #ccc', borderTopColor: 'var(--color-accent-teal)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />}

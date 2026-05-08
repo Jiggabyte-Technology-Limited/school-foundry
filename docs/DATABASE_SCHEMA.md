@@ -10,7 +10,7 @@ Stores global configurations such as the school name and database schema version
 ### 2. `users`
 Stores office staff and administrator accounts.
 - Passwords are encrypted using `bcryptjs`.
-- Roles: `admin`, `bursar`, `viewer`.
+- Roles: `admin`, `user`.
 
 ### 3. `academic_years` & `terms`
 Defines the academic timeline. 

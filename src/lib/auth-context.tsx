@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 
-export type UserRole = 'admin' | 'bursar' | 'viewer';
+export type UserRole = 'admin' | 'user';
 
 export interface User {
   id: number;
@@ -14,8 +14,7 @@ interface AuthContextType {
   login: (user: User) => void;
   logout: () => void;
   isAdmin: boolean;
-  isBursar: boolean;
-  isViewer: boolean;
+  isUser: boolean;
   canManageUsers: boolean;
   canManageFees: boolean;
   canRecordPayments: boolean;
@@ -90,20 +89,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user, logout]);
 
   const isAdmin = user?.role === 'admin';
-  const isBursar = user?.role === 'bursar';
-  const isViewer = user?.role === 'viewer';
+  const isUser = user?.role === 'user';
 
   const value: AuthContextType = {
     user,
     login,
     logout,
     isAdmin,
-    isBursar,
-    isViewer,
+    isUser,
     canManageUsers: isAdmin,
     canManageFees: isAdmin,
-    canRecordPayments: isAdmin || isBursar,
-    canManageStudents: isAdmin || isBursar,
+    canRecordPayments: isAdmin || isUser,
+    canManageStudents: isAdmin || isUser,
     canVoidPayments: isAdmin,
     canViewReports: true,
     canViewLogs: isAdmin,

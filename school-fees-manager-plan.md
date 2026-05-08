@@ -55,8 +55,7 @@ Electron bundles a Chromium browser engine with Node.js. The developer writes UI
 - Admin can **create, edit, and deactivate** other user accounts
 - **Roles:**
   - `admin` — full access to everything including user management, all reports, settings
-  - `bursar` — record payments, view reports, cannot manage users or settings
-  - `viewer` — read-only access to reports
+  - `user` — record payments, view reports, manage students
 - Login screen on every app open (session persists until app is closed)
 - Passwords stored as hashed values (bcrypt) — never plain text
 

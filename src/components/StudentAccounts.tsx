@@ -26,7 +26,7 @@ interface AcademicYear { id: number; label: string; }
 interface Term { id: number; label: string; }
 
 const StudentAccounts: React.FC = () => {
-  const { user } = useAuth();
+  const { user, canManageStudents } = useAuth();
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -102,21 +102,33 @@ const StudentAccounts: React.FC = () => {
   const [showPaymentWizard, setShowPaymentWizard] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [schoolName, setSchoolName] = useState('School Management');
+  const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
   useEffect(() => { loadInitialData(); }, []);
 
+  if (!canManageStudents) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
+        <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
+        <p>You do not have permission to manage students.</p>
+      </div>
+    );
+  }
+
   const loadInitialData = async () => {
     try {
-        const [years, availableGrades, setting] = await Promise.all([
+        const [years, availableGrades, nameSetting, logoSetting] = await Promise.all([
             db.all('SELECT * FROM academic_years ORDER BY label DESC'),
             db.all('SELECT * FROM grades ORDER BY id ASC'),
-            db.get("SELECT value FROM app_settings WHERE key = 'school_name'")
+            db.get("SELECT value FROM app_settings WHERE key = 'school_name'"),
+            db.get("SELECT value FROM app_settings WHERE key = 'school_logo'")
         ]);
         setAcademicYears(years);
         setGrades(availableGrades);
-        setSchoolName(setting?.value || 'School Management');
+        setSchoolName(nameSetting?.value || 'School Management');
+        setSchoolLogo(logoSetting?.value || null);
         if (years.length > 0) setSelectedYear(years[0].id);
     } catch (err) {
         console.error('Error loading initial data:', err);
@@ -317,15 +329,6 @@ const StudentAccounts: React.FC = () => {
             </div>
             <button 
                 className="btn btn-outline" 
-                onClick={() => window.print()}
-                disabled={filteredStudents.length === 0}
-                style={{ whiteSpace: 'nowrap' }}
-            >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-                Print Overview
-            </button>
-            <button 
-                className="btn btn-outline" 
                 onClick={printAllStatements}
                 disabled={isPrintingAll || filteredStudents.length === 0}
                 style={{ whiteSpace: 'nowrap' }}
@@ -412,7 +415,7 @@ const StudentAccounts: React.FC = () => {
                         </button>
                     </div>
                 )}
-                <div className="card-surface" style={{ padding: '32px', minHeight: '500px', position: 'relative', border: '1px solid var(--border)', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05)' }}>
+                <div className="a4-page" style={{ position: 'relative', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05)', border: '1px solid var(--border)' }}>
                 {isLoadingDetail && (
                     <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255, 255, 255, 0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20, backdropFilter: 'blur(4px)', borderRadius: '16px' }}>
                         <div style={{ textAlign: 'center' }}>
@@ -432,19 +435,19 @@ const StudentAccounts: React.FC = () => {
                     </div>
                 ) : statementData ? (
                     <>
-                        <div style={{ textAlign: 'center', borderBottom: '2px solid rgba(249, 115, 22, 0.1)', paddingBottom: '32px', marginBottom: '32px' }}>
-                            {selectedStudent?.school_logo && (
-                                <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'center' }}>
-                                    <img src={selectedStudent.school_logo} alt="School Logo" style={{ maxHeight: '80px', maxWidth: '200px' }} />
+                        <div style={{ textAlign: 'center', borderBottom: '2px solid rgba(249, 115, 22, 0.1)', paddingBottom: '24px', marginBottom: '24px' }}>
+                            {schoolLogo && (
+                                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>
+                                    <img src={schoolLogo} alt="School Logo" style={{ maxHeight: '60px', maxWidth: '150px' }} />
                                 </div>
                             )}
-                            <h2 style={{ fontSize: '28px', fontWeight: 800, margin: '0 0 4px 0', letterSpacing: '-0.02em' }} className="text-display">{schoolName}</h2>
+                            <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 4px 0', letterSpacing: '-0.02em' }} className="text-display">{schoolName}</h2>
                             <div className="metric-label" style={{ margin: 0, opacity: 0.5 }}>Statement of Account • {statementData.generatedAt}</div>
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>      
                             <div>
-                                <h3 style={{ fontSize: '20px', fontWeight: 800, margin: '0 0 8px 0', tracking: '-0.02em' }} className="text-display">{statementData.student.full_name}</h3>
+                                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 8px 0', tracking: '-0.02em' }} className="text-display">{statementData.student.full_name}</h3>
                                 <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '8px' }}>
                                   <div style={{ display: 'flex', gap: '4px' }}>
                                     <span className="text-display" style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary)' }}>{statementData.student.grade_label}</span>
@@ -484,7 +487,7 @@ const StudentAccounts: React.FC = () => {
                                     borderColor: statementData.balance > 0 ? 'var(--primary)' : '#10B981',
                                     color: statementData.balance > 0 ? 'var(--primary)' : '#059669'
                                 }} className="text-display">
-                                    {statementData.balance > 0 ? 'Payment Required' : 'Account Cleared'}
+                                    {statementData.balance > 0 ? 'Owing' : 'Paid'}
                                 </span>
                                 <button 
                                   className="btn btn-outline" 
@@ -499,7 +502,7 @@ const StudentAccounts: React.FC = () => {
                             </div>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '40px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
                             <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
                                 <div className="metric-label" style={{ margin: '0 0 8px 0', fontSize: '10px' }}>Invoiced</div>
                                 <div className="metric-value" style={{ fontSize: '24px' }}>${(statementData.totalFees/100).toFixed(2)}</div>
@@ -509,15 +512,15 @@ const StudentAccounts: React.FC = () => {
                                 <div className="metric-value" style={{ fontSize: '24px', color: '#10B981' }}>${(statementData.totalPaid/100).toFixed(2)}</div>
                             </div>
                             <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1.5px solid var(--primary)', boxShadow: '0 4px 12px rgba(249, 115, 22, 0.08)' }}>
-                                <div className="metric-label" style={{ margin: '0 0 8px 0', fontSize: '10px' }}>Current Arrears</div>
+                                <div className="metric-label" style={{ margin: '0 0 8px 0', fontSize: '10px' }}>Balance</div>
                                 <div className="metric-value" style={{ fontSize: '24px', color: 'var(--primary)' }}>
                                     ${(statementData.balance/100).toFixed(2)}
                                 </div>
                             </div>
                         </div>
 
-                        <div className="metric-label" style={{ marginBottom: '16px', opacity: 0.5 }}>Financial History</div>
-                        <div style={{ maxHeight: '35vh', overflowY: 'auto', paddingRight: '8px' }}>
+                        <div className="metric-label" style={{ marginBottom: '12px', opacity: 0.5 }}>Financial History</div>
+                        <div style={{ flex: 1, overflow: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
                                     <tr>
@@ -555,7 +558,7 @@ const StudentAccounts: React.FC = () => {
                         </div>
 
                         {statementData.upcoming && statementData.upcoming.length > 0 && (
-                            <div style={{ marginTop: '40px' }}>
+                            <div style={{ marginTop: '24px' }}>
                                 <div className="metric-label" style={{ marginBottom: '16px', opacity: 0.5 }}>Upcoming Fees</div>
                                 <div style={{ backgroundColor: 'var(--secondary)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border)' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
@@ -580,6 +583,10 @@ const StudentAccounts: React.FC = () => {
                             </div>
                         )}
 
+                        <div className="a4-page-footer" style={{ position: 'absolute', bottom: '15mm', left: '20mm', right: '20mm', display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666', borderTop: '1px solid #eee', paddingTop: '8px' }}>
+                            <span>Page 1 of 1</span>
+                            <span>Generated: {statementData.generatedAt}</span>
+                        </div>
                     </>
                 ) : (
                     <div style={{ textAlign: 'center', padding: '96px 0', color: 'var(--text-secondary)', opacity: 0.4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }} className="text-display">
@@ -589,103 +596,116 @@ const StudentAccounts: React.FC = () => {
             </div>
             </>
           ) : currentOverview ? (
-            <div className="card-surface" style={{ padding: '40px', minHeight: '500px', position: 'relative' }}>
-                <div style={{ textAlign: 'center', borderBottom: '2px solid rgba(249, 115, 22, 0.1)', paddingBottom: '32px', marginBottom: '40px' }}>
-                    <h2 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 4px 0', tracking: '-0.02em' }} className="text-display uppercase">{schoolName}</h2>
-                    <div className="metric-label" style={{ margin: 0, opacity: 0.6 }}>
+            <>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={() => window.print()}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                  Print Overview
+                </button>
+              </div>
+              <div className="a4-page" style={{ position: 'relative', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05)', border: '1px solid var(--border)' }}>
+                    <div style={{ textAlign: 'center', borderBottom: '2px solid rgba(249, 115, 22, 0.1)', paddingBottom: '24px', marginBottom: '24px' }}>
+                      {schoolLogo && (
+                        <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>
+                          <img src={schoolLogo} alt="School Logo" style={{ maxHeight: '60px', maxWidth: '150px' }} />
+                        </div>
+                      )}
+                      <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 4px 0', letterSpacing: '-0.02em' }} className="text-display uppercase">{schoolName}</h2>
+                      <div className="metric-label" style={{ margin: 0, opacity: 0.6 }}>
                         {currentOverview.isGrade ? `Grade Report: ${grades.find(g => g.id === selectedGrade)?.label}` : 'Master Financial Overview'}
+                      </div>
                     </div>
-                </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px', marginBottom: '40px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-                        <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                            <div className="metric-label" style={{ fontSize: '10px' }}>Total Invoiced</div>
-                            <div className="metric-value" style={{ fontSize: '20px' }}>${(currentOverview.totalInvoiced/100).toFixed(2)}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
+                      <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                        <div className="metric-label" style={{ fontSize: '10px' }}>Total Invoiced</div>
+                        <div className="metric-value" style={{ fontSize: '24px' }}>${(currentOverview.totalInvoiced/100).toFixed(2)}</div>
+                      </div>
+                      <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
+                        <div className="metric-label" style={{ fontSize: '10px' }}>Collected</div>
+                        <div className="metric-value" style={{ fontSize: '24px', color: '#10B981' }}>${(currentOverview.totalPaid/100).toFixed(2)}</div>
+                      </div>
+                      <div style={{ backgroundColor: 'rgba(249, 115, 22, 0.05)', padding: '20px', borderRadius: '16px', border: '1.5px solid var(--primary)' }}>
+                        <div className="metric-label" style={{ fontSize: '10px', color: 'var(--primary)' }}>Unpaid Balance</div>
+                        <div className="metric-value" style={{ fontSize: '24px', color: 'var(--primary)' }}>
+                          ${(currentOverview.balance/100).toFixed(2)}
                         </div>
-                        <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                            <div className="metric-label" style={{ fontSize: '10px' }}>Collected</div>
-                            <div className="metric-value" style={{ fontSize: '20px', color: '#10B981' }}>${(currentOverview.totalPaid/100).toFixed(2)}</div>
-                        </div>
-                        <div style={{ backgroundColor: 'rgba(249, 115, 22, 0.05)', padding: '20px', borderRadius: '16px', border: '1.5px solid var(--primary)' }}>
-                            <div className="metric-label" style={{ fontSize: '10px', color: 'var(--primary)' }}>Unpaid Balance</div>
-                            <div className="metric-value" style={{ fontSize: '20px', color: 'var(--primary)' }}>
-                                ${(currentOverview.balance/100).toFixed(2)}
-                            </div>
-                        </div>
+                      </div>
                     </div>
-                </div>
 
-                <div className="metric-label" style={{ marginBottom: '24px', opacity: 0.5 }}>
-                    {currentOverview.isGrade ? 'Student Enrollment Breakdown' : 'Institutional Performance by Grade'}
-                </div>
-                <div style={{ maxHeight: '45vh', overflowY: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <div className="metric-label" style={{ marginBottom: '16px', opacity: 0.5 }}>
+                      {currentOverview.isGrade ? 'Student Enrollment Breakdown' : 'Institutional Performance by Grade'}
+                    </div>
+                    <div style={{ flex: 1, overflow: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
-                            <tr>
-                                <th>{currentOverview.isGrade ? 'Student Identity' : 'Academic Form'}</th>
-                                <th style={{ textAlign: 'right' }}>Net Balance</th>
-                                <th style={{ textAlign: 'center', width: '128px' }}>Compliance</th>
-                            </tr>
+                          <tr>
+                            <th>{currentOverview.isGrade ? 'Student Name' : 'Grade/Form'}</th>
+                            <th style={{ textAlign: 'right' }}>Balance</th>
+                            <th style={{ textAlign: 'center', width: '120px' }}>Status</th>
+                          </tr>
                         </thead>
                         <tbody>
-                            {currentOverview.isGrade ? (
-                                filteredStudents.map(s => (
-                                    <tr key={s.id} onClick={() => viewStatement(s)} style={{ cursor: 'pointer', transition: 'all 0.2s ease' }} className="hover:bg-secondary">
-                                        <td style={{ fontWeight: 700 }} className="text-display">{s.full_name}</td>
-                                        <td className="text-mono" style={{ fontWeight: 800, textAlign: 'right' }}>${(s.balance/100).toFixed(2)}</td>
-                                        <td style={{ textAlign: 'center' }}>
-                                            <span style={{ 
-                                                padding: '4px 8px', 
-                                                borderRadius: '6px', 
-                                                fontSize: '9px', 
-                                                fontWeight: 800, 
-                                                textTransform: 'uppercase', 
-                                                letterSpacing: '0.05em',
-                                                border: '1px solid',
-                                                backgroundColor: s.balance > 0 ? 'rgba(249, 115, 22, 0.05)' : 'rgba(16, 185, 129, 0.05)',
-                                                borderColor: s.balance > 0 ? 'rgba(249, 115, 22, 0.2)' : 'rgba(16, 185, 129, 0.2)',
-                                                color: s.balance > 0 ? 'var(--primary)' : '#059669'
-                                            }} className="text-display">
-                                                {s.balance > 0 ? 'Action Needed' : 'In Good Standing'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))
-                            ) : (
-                                grades.map(g => {
-                                    const gradeStudents = filteredStudents.filter(s => s.grade_id === g.id);
-                                    if (gradeStudents.length === 0) return null; // Don't show empty grades in filtered view
-                                    const gradeOutstanding = gradeStudents.reduce((sum, s) => sum + s.balance, 0);
-                                    return (
-                                        <tr key={g.id} className="hover:bg-secondary" style={{ transition: 'background-color 0.2s ease' }}>
-                                            <td style={{ fontWeight: 700 }} className="text-display">{g.label}</td>
-                                            <td className="text-mono" style={{ fontWeight: 800, textAlign: 'right' }}>${(gradeOutstanding/100).toFixed(2)}</td>
-                                            <td style={{ textAlign: 'center' }}>
-                                                <span style={{ 
-                                                    padding: '4px 8px', 
-                                                    borderRadius: '6px', 
-                                                    fontSize: '9px', 
-                                                    fontWeight: 800, 
-                                                    textTransform: 'uppercase', 
-                                                    letterSpacing: '0.05em',
-                                                    border: '1px solid',
-                                                    backgroundColor: gradeOutstanding > 0 ? 'rgba(249, 115, 22, 0.05)' : 'rgba(16, 185, 129, 0.05)',
-                                                    borderColor: gradeOutstanding > 0 ? 'rgba(249, 115, 22, 0.2)' : 'rgba(16, 185, 129, 0.2)',
-                                                    color: gradeOutstanding > 0 ? 'var(--primary)' : '#059669'
-                                                }} className="text-display">
-                                                    {gradeOutstanding > 0 ? 'Arrears Present' : 'No Arrears'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            )}
+                          {currentOverview.isGrade ? (
+                            filteredStudents.map(s => (
+                              <tr key={s.id} className="hover:bg-secondary">
+                                <td style={{ fontWeight: 600 }} className="text-display">{s.full_name}</td>
+                                <td className="text-mono" style={{ fontWeight: 700, textAlign: 'right' }}>${(s.balance/100).toFixed(2)}</td>
+                                <td style={{ textAlign: 'center' }}>
+                                  <span style={{ 
+                                    padding: '4px 8px', 
+                                    borderRadius: '4px', 
+                                    fontSize: '9px', 
+                                    fontWeight: 800, 
+                                    textTransform: 'uppercase',
+                                    backgroundColor: s.balance > 0 ? '#FEF3C7' : '#D1FAE5',
+                                    color: s.balance > 0 ? '#92400E' : '#065F46'
+                                  }} className="text-display">
+                                    {s.balance > 0 ? 'Owing' : 'Paid'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            grades.map(g => {
+                              const gradeStudents = filteredStudents.filter(s => s.grade_id === g.id);
+                              if (gradeStudents.length === 0) return null;
+                              const gradeOutstanding = gradeStudents.reduce((sum, s) => sum + s.balance, 0);
+                              return (
+                                <tr key={g.id} className="hover:bg-secondary">
+                                  <td style={{ fontWeight: 600 }} className="text-display">{g.label}</td>
+                                  <td className="text-mono" style={{ fontWeight: 700, textAlign: 'right' }}>${(gradeOutstanding/100).toFixed(2)}</td>
+                                  <td style={{ textAlign: 'center' }}>
+                                    <span style={{ 
+                                      padding: '4px 8px', 
+                                      borderRadius: '4px', 
+                                      fontSize: '9px', 
+                                      fontWeight: 800, 
+                                      textTransform: 'uppercase',
+                                      backgroundColor: gradeOutstanding > 0 ? '#FEF3C7' : '#D1FAE5',
+                                      color: gradeOutstanding > 0 ? '#92400E' : '#065F46'
+                                    }} className="text-display">
+                                      {gradeOutstanding > 0 ? 'Owing' : 'Paid'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
                         </tbody>
-                    </table>
-                </div>
-            </div>
-          ) : (
+                      </table>
+                    </div>
+
+                    <div className="a4-page-footer" style={{ position: 'absolute', bottom: '15mm', left: '20mm', right: '20mm', display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666', borderTop: '1px solid #eee', paddingTop: '8px' }}>
+                      <span>Page 1 of 1</span>
+                      <span>Generated: {new Date().toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
             <div className="card-surface" style={{ padding: '64px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
                 <div style={{ width: '64px', height: '64px', backgroundColor: 'var(--secondary)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.2, color: 'var(--text-secondary)' }}>
@@ -724,13 +744,18 @@ const StudentAccounts: React.FC = () => {
       {allStatementsData.length > 0 && (
         <div className="print-only" style={{ display: 'block', backgroundColor: 'white' }}>
           {allStatementsData.map((data, idx) => (
-            <div key={idx} style={{ padding: '40px', pageBreakAfter: 'always', color: 'black' }}>
-                <div style={{ textAlign: 'center', borderBottom: '2px solid #EEE', paddingBottom: '24px', marginBottom: '32px' }}>
-                    <h2 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 4px 0' }}>{schoolName}</h2>
+            <div key={idx} className="a4-page" style={{ position: 'relative', padding: '20mm', pageBreakAfter: 'always', color: 'black', minHeight: 'auto', boxShadow: 'none', border: 'none' }}>
+                <div style={{ textAlign: 'center', borderBottom: '2px solid #EEE', paddingBottom: '24px', marginBottom: '24px' }}>
+                    {schoolLogo && (
+                        <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>
+                            <img src={schoolLogo} alt="School Logo" style={{ maxHeight: '60px', maxWidth: '150px' }} />
+                        </div>
+                    )}
+                    <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 4px 0' }}>{schoolName}</h2>
                     <div style={{ fontSize: '12px', opacity: 0.6 }}>Statement of Account • {data.generatedAt}</div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>      
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>      
                     <div>
                         <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 8px 0' }}>{data.student.full_name}</h3>
                         <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '8px' }}>
@@ -749,12 +774,12 @@ const StudentAccounts: React.FC = () => {
                             fontWeight: 800,
                             textTransform: 'uppercase'
                         }}>
-                            {data.balance > 0 ? 'Payment Required' : 'Account Cleared'}
+                            {data.balance > 0 ? 'Owing' : 'Paid'}
                         </div>
                     </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '32px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
                     <div style={{ border: '1px solid #EEE', padding: '12px', textAlign: 'center' }}>
                         <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>Invoiced</div>
                         <div style={{ fontSize: '18px', fontWeight: 700 }}>${(data.totalFees/100).toFixed(2)}</div>
@@ -764,7 +789,7 @@ const StudentAccounts: React.FC = () => {
                         <div style={{ fontSize: '18px', fontWeight: 700 }}>${(data.totalPaid/100).toFixed(2)}</div>
                     </div>
                     <div style={{ border: '1px solid #000', padding: '12px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>Arrears</div>
+                        <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>Balance</div>
                         <div style={{ fontSize: '18px', fontWeight: 700 }}>${(data.balance/100).toFixed(2)}</div>
                     </div>
                 </div>
@@ -791,8 +816,86 @@ const StudentAccounts: React.FC = () => {
                         ))}
                     </tbody>
                 </table>
+
+                <div style={{ position: 'absolute', bottom: '15mm', left: '20mm', right: '20mm', display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666', borderTop: '1px solid #eee', paddingTop: '8px' }}>
+                    <span>Page {idx + 1} of {allStatementsData.length}</span>
+                    <span>Generated: {data.generatedAt}</span>
+                </div>
                 </div>
             ))}
+        </div>
+      )}
+
+      {/* Print Overview Hidden View - always rendered for printing */}
+      {currentOverview && (
+        <div className="print-only" style={{ display: 'block', backgroundColor: 'white' }}>
+          <div className="a4-page" style={{ position: 'relative', padding: '20mm', pageBreakAfter: 'always', color: 'black', minHeight: 'auto', boxShadow: 'none', border: 'none' }}>
+            <div style={{ textAlign: 'center', borderBottom: '2px solid #EEE', paddingBottom: '24px', marginBottom: '24px' }}>
+              {schoolLogo && (
+                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>
+                  <img src={schoolLogo} alt="School Logo" style={{ maxHeight: '60px', maxWidth: '150px' }} />
+                </div>
+              )}
+              <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 4px 0' }}>{schoolName}</h2>
+              <div style={{ fontSize: '12px', opacity: 0.6 }}>
+                {currentOverview.isGrade ? `Grade Report: ${grades.find(g => g.id === selectedGrade)?.label}` : 'Master Financial Overview'}
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
+              <div style={{ border: '1px solid #EEE', padding: '12px', textAlign: 'center' }}>
+                <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>Total Invoiced</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>${(currentOverview.totalInvoiced/100).toFixed(2)}</div>
+              </div>
+              <div style={{ border: '1px solid #EEE', padding: '12px', textAlign: 'center' }}>
+                <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>Collected</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>${(currentOverview.totalPaid/100).toFixed(2)}</div>
+              </div>
+              <div style={{ border: '1px solid #000', padding: '12px', textAlign: 'center' }}>
+                <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>Unpaid Balance</div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>${(currentOverview.balance/100).toFixed(2)}</div>
+              </div>
+            </div>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #000' }}>
+                  <th style={{ textAlign: 'left', padding: '8px' }}>{currentOverview.isGrade ? 'Student Name' : 'Grade/Form'}</th>
+                  <th style={{ textAlign: 'right', padding: '8px' }}>Balance</th>
+                  <th style={{ textAlign: 'center', padding: '8px' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentOverview.isGrade ? (
+                  filteredStudents.map(s => (
+                    <tr key={s.id} style={{ borderBottom: '1px solid #EEE' }}>
+                      <td style={{ padding: '8px', fontWeight: 600 }}>{s.full_name}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700 }}>${(s.balance/100).toFixed(2)}</td>
+                      <td style={{ padding: '8px', textAlign: 'center' }}>{s.balance > 0 ? 'Owing' : 'Paid'}</td>
+                    </tr>
+                  ))
+                ) : (
+                  grades.map(g => {
+                    const gradeStudents = filteredStudents.filter(s => s.grade_id === g.id);
+                    if (gradeStudents.length === 0) return null;
+                    const gradeOutstanding = gradeStudents.reduce((sum, s) => sum + s.balance, 0);
+                    return (
+                      <tr key={g.id} style={{ borderBottom: '1px solid #EEE' }}>
+                        <td style={{ padding: '8px', fontWeight: 600 }}>{g.label}</td>
+                        <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700 }}>${(gradeOutstanding/100).toFixed(2)}</td>
+                        <td style={{ padding: '8px', textAlign: 'center' }}>{gradeOutstanding > 0 ? 'Owing' : 'Paid'}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+
+            <div style={{ position: 'absolute', bottom: '15mm', left: '20mm', right: '20mm', display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666', borderTop: '1px solid #eee', paddingTop: '8px' }}>
+              <span>Page 1 of 1</span>
+              <span>Generated: {new Date().toLocaleDateString()}</span>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -213,7 +213,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
             </div>
             <h2 className="wizard-title text-display" style={{ fontSize: '32px', letterSpacing: '-0.02em' }}>Intelligence Scaled.</h2>
             <p className="wizard-subtitle text-display" style={{ maxWidth: 440, margin: '0 auto 32px', fontSize: '16px', lineHeight: '1.6' }}>
-              Welcome to FeesFoundry. Let's get your school's financial infrastructure set up in just a few minutes.
+              Welcome to <span style={{ fontWeight: 700 }}>Fees</span><span style={{ fontWeight: 400 }}>Foundry</span>. Let's get your school's financial infrastructure set up in just a few minutes.
             </p>
             <div style={{ 
               backgroundColor: 'var(--secondary)', 

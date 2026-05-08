@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
   full_name          TEXT    NOT NULL,
   username           TEXT    NOT NULL UNIQUE COLLATE NOCASE,
   password_hash      TEXT    NOT NULL,
-  role               TEXT    NOT NULL CHECK(role IN ('admin', 'bursar', 'viewer')),
+  role               TEXT    NOT NULL CHECK(role IN ('admin', 'user')),
   is_active          INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
   created_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at         TEXT    NOT NULL DEFAULT (datetime('now')),

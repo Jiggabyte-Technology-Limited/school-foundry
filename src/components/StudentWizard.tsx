@@ -40,7 +40,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
   currentYearId,
   preSelectedGrade 
 }) => {
-  const { user } = useAuth();
+  const { user, canManageStudents } = useAuth();
   const [currentStep, setCurrentStep] = useState<Step>('details');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -63,6 +63,15 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
   useEffect(() => {
     loadData();
   }, []);
+
+  if (!canManageStudents) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
+        <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
+        <p>You do not have permission to manage students.</p>
+      </div>
+    );
+  }
 
   const loadData = async () => {
     const [gradeList, yearData] = await Promise.all([

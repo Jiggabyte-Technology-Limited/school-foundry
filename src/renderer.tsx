@@ -79,7 +79,12 @@ function AppInner() {
         <Route path="/dashboard" element={
           user ? (
             <div className="app-layout">
-              <Sidebar activeView={view} onViewChange={setView} />
+              <Sidebar 
+                activeView={view} 
+                onViewChange={setView} 
+                onSettingsClick={() => setShowSettings(true)}
+                onLogout={handleLogout}
+              />
               <main className="main-content">
                 <TopBar
                   pageTitle={pageTitles[view] || 'Dashboard'}
@@ -87,8 +92,6 @@ function AppInner() {
                   activeTerm={activeTerm}
                   userName={user.full_name || user.username}
                   userRole={user.role}
-                  onSettingsClick={() => setShowSettings(true)}
-                  onLogout={handleLogout}
                 />
                 <div className="page-content">
                   {view === 'dashboard' && <Dashboard />}

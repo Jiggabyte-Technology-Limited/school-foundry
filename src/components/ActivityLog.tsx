@@ -107,6 +107,15 @@ const ActivityLog: React.FC = () => {
     window.print();
   };
 
+  if (!canViewLogs) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
+        <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
+        <p>You do not have permission to view activity logs.</p>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="flex-between mb-4 no-print">

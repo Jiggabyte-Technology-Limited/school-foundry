@@ -1,11 +1,16 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import SphereCanvas from '../SphereCanvas';
 
 export const Welcome: React.FC = () => {
   const navigate = useNavigate();
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--background)', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', position: 'relative', overflow: 'hidden' }}>
+        {/* Sphere Canvas Background */}
+        <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '800px', height: '800px', opacity: 0.5, pointerEvents: 'none' }}>
+            <SphereCanvas />
+        </div>
         <div style={{ position: 'absolute', right: '-10%', top: '50%', transform: 'translateY(-50%)', width: '700px', height: '700px', background: 'radial-gradient(circle, rgba(249,115,22,0.08), transparent 70%)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', left: '-10%', top: '50%', transform: 'translateY(-50%)', width: '400px', height: '400px', background: 'radial-gradient(circle, rgba(20,184,166,0.05), transparent 70%)', pointerEvents: 'none' }} />
         
@@ -52,7 +57,7 @@ export const Welcome: React.FC = () => {
 
         <div style={{ position: 'absolute', bottom: '40px', left: 0, right: 0, textAlign: 'center' }}>
             <span style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'monospace' }}>
-                FeesFoundry • v1.2.0 • Build 2026
+                <span style={{ fontWeight: 700 }}>Fees</span><span style={{ fontWeight: 400 }}>Foundry</span> • v1.2.0 • Build 2026
             </span>
         </div>
     </div>

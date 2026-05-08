@@ -235,6 +235,69 @@ const migrations: MigrationStep[] = [
       await runSql(db, `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '1.3', datetime('now'));`);
     },
   },
+  {
+    version: '1.4',
+    description: 'Restrict user roles to admin and user; migrate bursar/viewer to user',
+    run: async (db) => {
+      // Recreate users table to update CHECK constraint and migrate roles simultaneously
+      try {
+        // Disable foreign keys temporarily to allow table recreation
+        await runSql(db, `PRAGMA foreign_keys = OFF;`);
+        
+        // Drop temporary table if it exists from a previous failed run
+        await runSql(db, `DROP TABLE IF EXISTS users_new;`);
+        
+        await runSql(db, `CREATE TABLE users_new (
+          id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+          full_name          TEXT    NOT NULL,
+          username           TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+          password_hash      TEXT    NOT NULL,
+          role               TEXT    NOT NULL CHECK(role IN ('admin', 'user')),
+          is_active          INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
+          created_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
+          updated_at         TEXT    NOT NULL DEFAULT (datetime('now')),
+          last_login_at      TEXT,
+          failed_login_count INTEGER NOT NULL DEFAULT 0,
+          locked_until       TEXT
+        );`);
+
+        // Insert into new table while mapping 'bursar' and 'viewer' to 'user'
+        await runSql(db, `INSERT INTO users_new (id, full_name, username, password_hash, role, is_active, created_by, created_at, updated_at, last_login_at, failed_login_count, locked_until)
+                          SELECT 
+                            id, 
+                            full_name, 
+                            username, 
+                            password_hash, 
+                            CASE WHEN role IN ('bursar', 'viewer') THEN 'user' ELSE role END, 
+                            is_active, 
+                            created_by, 
+                            created_at, 
+                            updated_at, 
+                            last_login_at, 
+                            failed_login_count, 
+                            locked_until 
+                          FROM users;`);
+
+        await runSql(db, `DROP TABLE users;`);
+        await runSql(db, `ALTER TABLE users_new RENAME TO users;`);
+        
+        // Re-create indexes
+        await runSql(db, `CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);`);
+        await runSql(db, `CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);`);
+
+        // Re-enable foreign keys
+        await runSql(db, `PRAGMA foreign_keys = ON;`);
+      } catch (e) {
+        // Ensure foreign keys are back on even if it fails
+        await runSql(db, `PRAGMA foreign_keys = ON;`);
+        console.error('[Migrations] users role update FAILED:', e);
+        throw e;
+      }
+
+      await runSql(db, `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '1.4', datetime('now'));`);
+    },
+  },
 ];
 
 export async function runMigrations(db: sqlite3.Database): Promise<void> {

@@ -10,7 +10,7 @@ interface EditStudentModalProps {
 }
 
 const EditStudentModal: React.FC<EditStudentModalProps> = ({ studentId, yearId, onClose, onSuccess }) => {
-  const { user } = useAuth();
+  const { user, canManageStudents } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
@@ -32,6 +32,15 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({ studentId, yearId, 
   useEffect(() => {
     loadData();
   }, [studentId]);
+
+  if (!canManageStudents) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
+        <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
+        <p>You do not have permission to manage students.</p>
+      </div>
+    );
+  }
 
   const loadData = async () => {
     setIsLoading(true);
