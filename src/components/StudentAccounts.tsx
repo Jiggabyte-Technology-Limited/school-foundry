@@ -3,6 +3,9 @@ import { db } from '../lib/db-client';
 import StudentWizard from './StudentWizard';
 import EditStudentModal from './EditStudentModal';
 import PaymentWizard from './PaymentWizard';
+import StudentList from './StudentList';
+import StatementPrintView from './StatementPrintView';
+import GradeOverview from './GradeOverview';
 import { useAuth } from '../lib/auth-context';
 import { printDocument, generateStudentStatementHtml, generateOverviewHtml } from '../lib/print-service';
 
@@ -78,24 +81,38 @@ const StudentAccounts: React.FC = () => {
         const totalPaid = payments.reduce((sum: number, p: any) => sum + p.amount, 0);
         const balance = totalFees - totalPaid;
 
+        // Get upcoming fees (future terms)
+        const upcoming = await window.api.dbQuery(`
+            SELECT fs.amount, t.label as term_label, t.start_date
+            FROM fee_structures fs
+            JOIN terms t ON fs.term_id = t.id
+            WHERE fs.grade_id = ? AND fs.year_id = ?
+            AND t.start_date > date('now')`, [student.grade_id, selectedYear]);
+
         statements.push({
             student,
             payments,
             fees,
             totalFees,
-            totalPaid, 
+            totalPaid,
             balance,
-            generatedAt: new Date().toLocaleDateString()
+            generatedAt: new Date().toLocaleDateString(),
+            upcoming: upcoming || []
         });
       } catch (err) {
         console.error(`Error loading statement for student ${student.id}:`, err);
       }
     }
+    // Get current term for statements
+    const currentTerm = termsList.length > 0 ? termsList[0].label : '';
+    
     // Generate PDFs for each student and print them
     for (const data of statements) {
       const html = generateStudentStatementHtml({
         schoolName,
         schoolLogo: schoolLogo || undefined,
+        schoolContact: schoolContact || undefined,
+        currentTerm: currentTerm || undefined,
         generatedAt: data.generatedAt,
         studentName: data.student.full_name,
         grade: data.student.grade_label,
@@ -116,6 +133,11 @@ const StudentAccounts: React.FC = () => {
           ref: p.ref,
           amount: (p.amount / 100).toFixed(2),
         })),
+        upcoming: data.upcoming ? data.upcoming.map((u: any) => ({
+          termLabel: u.term_label,
+          startDate: u.start_date,
+          amount: (u.amount / 100).toFixed(2),
+        })) : undefined,
       });
       await printDocument({
         html,
@@ -473,6 +495,8 @@ const StudentAccounts: React.FC = () => {
                               const html = generateStudentStatementHtml({
                                 schoolName,
                                 schoolLogo: schoolLogo || undefined,
+                                schoolContact: schoolContact || undefined,
+                                currentTerm: termsList.length > 0 ? termsList[0].label : undefined,
                                 generatedAt: statementData.generatedAt,
                                 studentName: statementData.student.full_name,
                                 grade: statementData.student.grade_label,
@@ -493,6 +517,11 @@ const StudentAccounts: React.FC = () => {
                                   ref: p.ref,
                                   amount: (p.amount / 100).toFixed(2),
                                 })),
+                                upcoming: statementData.upcoming ? statementData.upcoming.map((u: any) => ({
+                                  termLabel: u.term_label,
+                                  startDate: u.start_date,
+                                  amount: (u.amount / 100).toFixed(2),
+                                })) : undefined,
                               });
                               await printDocument({
                                 html,
@@ -534,59 +563,46 @@ const StudentAccounts: React.FC = () => {
                         <button className="btn btn-primary" onClick={() => viewStatement(selectedStudent)}>Retry Connection</button>
                     </div>
                 ) : statementData ? (
-                    <>
-                        <div style={{ textAlign: 'center', borderBottom: '2px solid rgba(249, 115, 22, 0.1)', paddingBottom: '24px', marginBottom: '24px' }}>
+                    <div style={{ backgroundColor: 'white', padding: '20mm', minHeight: '297mm', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '4px' }}>
+                        <div style={{ textAlign: 'center', borderBottom: '2px solid #f97316', paddingBottom: '20px', marginBottom: '24px' }}>
                             {schoolLogo && (
-                                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>
+                                <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}>
                                     <img src={schoolLogo} alt="School Logo" style={{ maxHeight: '60px', maxWidth: '150px' }} />
                                 </div>
                             )}
-                            <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 4px 0', letterSpacing: '-0.02em' }} className="text-display">{schoolName}</h2>
-                            <div className="metric-label" style={{ margin: 0, opacity: 0.5 }}>Statement of Account • {statementData.generatedAt}</div>
+                            <h2 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 8px 0', color: '#1f2937' }}>{schoolName}</h2>
+                            <div style={{ fontSize: '16px', fontWeight: 600, color: '#f97316', marginBottom: '8px' }}>Statement of Account</div>
+                            <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                {termsList.length > 0 && <span>{termsList[0].label}</span>}
+                                <span style={{ margin: '0 8px' }}>|</span>
+                                <span>Generated: {statementData.generatedAt}</span>
+                                {schoolContact && <><span style={{ margin: '0 8px' }}>|</span><span>{schoolContact}</span></>}
+                            </div>
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>      
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '28px', background: '#f9fafb', padding: '16px', borderRadius: '8px' }}>      
                             <div>
-                                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 8px 0', tracking: '-0.02em' }} className="text-display">{statementData.student.full_name}</h3>
+                                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 8px 0', color: '#1f2937' }}>{statementData.student.full_name}</h3>
                                 <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '8px' }}>
-                                  <div style={{ display: 'flex', gap: '4px' }}>
-                                    <span className="text-display" style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary)' }}>{statementData.student.grade_label}</span>
-                                  </div>
-                                  <div style={{ display: 'flex', gap: '4px' }}>
-                                    <span className="metric-label" style={{ fontSize: '10px', margin: 0 }}>Student ID</span>
-                                    <span className="text-mono" style={{ fontSize: '12px', fontWeight: 700 }}>{statementData.student.id}</span>
-                                  </div>
+                                  <span style={{ fontSize: '14px', fontWeight: 700, color: '#f97316' }}>{statementData.student.grade_label}</span>
+                                  <span style={{ fontSize: '12px', color: '#6b7280' }}>ID: {statementData.student.id}</span>
                                 </div>
-                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }} className="text-display">
-                                    <div style={{ marginBottom: '4px' }}>
-                                        <span className="metric-label" style={{ fontSize: '10px', marginRight: '8px' }}>Guardian</span>
-                                        <span style={{ fontWeight: 600 }}>{statementData.student.guardian_name}
-                                        {statementData.student.guardian_name_2 && `, ${statementData.student.guardian_name_2}`}</span>
-                                        <span style={{ margin: '0 8px', opacity: 0.3 }}>|</span>
-                                        <span className="text-mono">{statementData.student.guardian_contact}
-                                        {statementData.student.guardian_contact_2 && `, ${statementData.student.guardian_contact_2}`}</span>
-                                    </div>
+                                <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                    <div>Guardian: {statementData.student.guardian_name}{statementData.student.guardian_name_2 && `, ${statementData.student.guardian_name_2}`} | {statementData.student.guardian_contact}{statementData.student.guardian_contact_2 && `, ${statementData.student.guardian_contact_2}`}</div>
                                     {statementData.student.guardian_email && (
-                                        <div>
-                                            <span className="metric-label" style={{ fontSize: '10px', marginRight: '8px' }}>Email Address</span>
-                                            <span style={{ fontWeight: 600 }}>{statementData.student.guardian_email}</span>
-                                        </div>
+                                        <div>Email: {statementData.student.guardian_email}</div>
                                     )}
                                 </div>
                             </div>
                             <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
                                 <span style={{ 
-                                    padding: '6px 12px', 
-                                    borderRadius: '8px', 
-                                    fontSize: '10px', 
-                                    fontWeight: 800, 
-                                    textTransform: 'uppercase', 
-                                    letterSpacing: '0.05em',
-                                    border: '1.5px solid',
-                                    backgroundColor: statementData.balance > 0 ? 'rgba(249, 115, 22, 0.05)' : 'rgba(16, 185, 129, 0.05)',
-                                    borderColor: statementData.balance > 0 ? 'var(--primary)' : '#10B981',
-                                    color: statementData.balance > 0 ? 'var(--primary)' : '#059669'
-                                }} className="text-display">
+                                    padding: '6px 14px', 
+                                    borderRadius: '20px', 
+                                    fontSize: '12px', 
+                                    fontWeight: 600,
+                                    backgroundColor: statementData.balance > 0 ? '#FEE2E2' : '#D1FAE5',
+                                    color: statementData.balance > 0 ? '#991B1B' : '#065F46'
+                                }}>
                                     {statementData.balance > 0 ? 'Owing' : 'Paid'}
                                 </span>
                                 <button 
@@ -602,24 +618,7 @@ const StudentAccounts: React.FC = () => {
                             </div>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
-                            <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                                <div className="metric-label" style={{ margin: '0 0 8px 0', fontSize: '10px' }}>Invoiced</div>
-                                <div className="metric-value" style={{ fontSize: '24px' }}>${(statementData.totalFees/100).toFixed(2)}</div>
-                            </div>
-                            <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
-                                <div className="metric-label" style={{ margin: '0 0 8px 0', fontSize: '10px' }}>Payments</div>
-                                <div className="metric-value" style={{ fontSize: '24px', color: '#10B981' }}>${(statementData.totalPaid/100).toFixed(2)}</div>
-                            </div>
-                            <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1.5px solid var(--primary)', boxShadow: '0 4px 12px rgba(249, 115, 22, 0.08)' }}>
-                                <div className="metric-label" style={{ margin: '0 0 8px 0', fontSize: '10px' }}>Balance</div>
-                                <div className="metric-value" style={{ fontSize: '24px', color: 'var(--primary)' }}>
-                                    ${(statementData.balance/100).toFixed(2)}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="metric-label" style={{ marginBottom: '12px', opacity: 0.5 }}>Financial History</div>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid #e5e7eb' }}>Transaction Details</div>
                         <div style={{ flex: 1, overflow: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
@@ -657,43 +656,83 @@ const StudentAccounts: React.FC = () => {
                             </table>
                         </div>
 
+                        <div style={{ marginTop: '20px', padding: '16px', border: '2px solid #374151', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb' }}>
+                            <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>Account Balance</span>
+                            <span style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>${(statementData.balance/100).toFixed(2)}</span>
+                        </div>
+
                         {statementData.upcoming && statementData.upcoming.length > 0 && (
-                            <div style={{ marginTop: '24px' }}>
-                                <div className="metric-label" style={{ marginBottom: '16px', opacity: 0.5 }}>Upcoming Fees</div>
-                                <div style={{ backgroundColor: 'var(--secondary)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border)' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                                        <thead>
-                                            <tr>
-                                                <th style={{ background: 'transparent', padding: '0 0 8px 0', textAlign: 'left', fontWeight: 700 }}>Term</th>
-                                                <th style={{ background: 'transparent', padding: '0 0 8px 0', textAlign: 'left', fontWeight: 700 }}>Expected Start</th>
-                                                <th style={{ background: 'transparent', padding: '0 0 8px 0', textAlign: 'right', fontWeight: 700 }}>Fees</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {statementData.upcoming.map((u: any, i: number) => (
-                                                <tr key={`up-${i}`}>
-                                                    <td style={{ padding: '6px 0', fontWeight: 600 }} className="text-display">{u.term_label}</td>
-                                                    <td style={{ padding: '6px 0' }} className="text-mono">{u.start_date || 'TBA'}</td>
-                                                    <td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 700 }} className="text-mono">${(u.amount/100).toFixed(2)}</td>
+                            <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px' }}>
+                                <div style={{ fontSize: '11px', fontWeight: 600, color: '#166534', marginBottom: '8px', paddingBottom: '4px', borderBottom: '1px solid #bbf7d0' }}>Upcoming Fees</div>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                                    <tbody>
+                                        {statementData.upcoming.map((u: any, i: number) => (
+                                            <tr key={`up-${i}`}>
+                                                <td style={{ padding: '4px 8px', fontWeight: 600, color: '#166534' }}>{u.term_label}</td>
+                                                <td style={{ padding: '4px 8px', color: '#6b7280' }}>{u.start_date || 'TBA'}</td>
+                                                <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 600, color: '#166534' }}>${(u.amount/100).toFixed(2)}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                     </table>
-                                </div>
                             </div>
                         )}
 
-                        <div className="a4-page-footer" style={{ position: 'absolute', bottom: '15mm', left: '20mm', right: '20mm', display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666', borderTop: '1px solid #eee', paddingTop: '8px' }}>
-                            <span>Page 1 of 1</span>
-                            <span>Generated: {statementData.generatedAt}</span>
+                        <div style={{ marginTop: '30px', paddingTop: '16px', borderTop: '2px dashed #e5e7eb', textAlign: 'center', fontSize: '11px', color: '#6b7280' }}>
+                            <div>This statement was generated using <span style={{ fontWeight: 600, color: '#f97316' }}>FeesFoundry</span> - a product of <span style={{ color: '#374151' }}>Jiggabyte Technology Limited</span></div>
+                            <div style={{ marginTop: '4px', fontStyle: 'italic' }}>For support, contact your school administrator or visit www.jiggabyte.co.zm</div>
                         </div>
-                    </>
+                    
+                    {/* Second Page Preview */}
+                    {(statementData.fees.length + statementData.payments.length) > 15 && (
+                        <div style={{ marginTop: '24px', backgroundColor: 'white', padding: '20mm', minHeight: '297mm', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '4px', borderTop: '3px solid #f97316' }}>
+                            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                                <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>Page 2 of 2</div>
+                                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#1f2937' }}>{statementData.student.full_name} - Continued</h3>
+                            </div>
+                            <div style={{ fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid #e5e7eb' }}>Transaction Details (Continued)</div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr>
+                                        <th>Date / Term</th>
+                                        <th>Details</th>
+                                        <th style={{ textAlign: 'right' }}>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {statementData.fees.slice(10).map((item:any, i:any) => (
+                                        <tr key={`fee2-${i}`}>
+                                            <td style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>{item.term_label || 'Term -'}</td>       
+                                            <td style={{ fontSize: '13px', fontWeight: 600 }}>{item.description}</td>    
+                                            <td style={{ fontSize: '14px', fontWeight: 700, textAlign: 'right' }}>${(item.amount/100).toFixed(2)}</td>
+                                        </tr>
+                                    ))}
+                                    {statementData.payments.slice(10).map((item:any, i:any) => (
+                                        <tr key={`pay2-${i}`}>
+                                            <td style={{ fontSize: '12px', color: '#6b7280' }}>{item.date}</td>
+                                            <td style={{ fontSize: '13px', fontWeight: 600 }}>Credit Receipt #{item.ref.split('-')[1]?.substring(0,6) || item.ref}</td>
+                                            <td style={{ fontSize: '14px', fontWeight: 700, textAlign: 'right', color: '#10B981' }}>-${(item.amount/100).toFixed(2)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div style={{ marginTop: '20px', padding: '16px', border: '2px solid #374151', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb' }}>
+                                <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>Account Balance</span>
+                                <span style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>${(statementData.balance/100).toFixed(2)}</span>
+                            </div>
+                            <div style={{ position: 'absolute', bottom: '20mm', left: '20mm', right: '20mm', paddingTop: '12px', borderTop: '2px dashed #e5e7eb', textAlign: 'center', fontSize: '11px', color: '#6b7280' }}>
+                                <div>This statement was generated using <span style={{ fontWeight: 600, color: '#f97316' }}>FeesFoundry</span> - a product of <span style={{ color: '#374151' }}>Jiggabyte Technology Limited</span></div>
+                                <div style={{ marginTop: '4px', fontStyle: 'italic' }}>For support, contact your school administrator or visit www.jiggabyte.co.zm</div>
+                            </div>
+                        </div>
+                    )}
+                    </div>
                 ) : (
                     <div style={{ textAlign: 'center', padding: '96px 0', color: 'var(--text-secondary)', opacity: 0.4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }} className="text-display">
                       Record Entry Pending
                     </div>
                 )}
-            </div>
+                </div>
             </>
           ) : currentOverview ? (
             <>
@@ -808,6 +847,11 @@ const StudentAccounts: React.FC = () => {
                           ))}
                         </tbody>
                       </table>
+                    </div>
+
+                    <div style={{ marginTop: '20px', padding: '16px', border: '2px solid #374151', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>Total Outstanding Balance</span>
+                      <span style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>${(currentOverview.balance/100).toFixed(2)}</span>
                     </div>
 
                     <div style={{ marginTop: '30px', paddingTop: '16px', borderTop: '2px dashed #e5e7eb', textAlign: 'center', fontSize: '11px', color: '#6b7280' }}>
@@ -928,11 +972,16 @@ const StudentAccounts: React.FC = () => {
                     </tbody>
                 </table>
 
-                <div style={{ position: 'absolute', bottom: '15mm', left: '20mm', right: '20mm', display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666', borderTop: '1px solid #eee', paddingTop: '8px' }}>
-                    <span>Page {idx + 1} of {allStatementsData.length}</span>
-                    <span>Generated: {data.generatedAt}</span>
+                <div style={{ marginTop: '20px', padding: '16px', border: '2px solid #374151', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb' }}>
+                    <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>Account Balance</span>
+                    <span style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>${(data.balance/100).toFixed(2)}</span>
                 </div>
+
+                <div style={{ marginTop: '30px', paddingTop: '16px', borderTop: '2px dashed #e5e7eb', textAlign: 'center', fontSize: '11px', color: '#6b7280' }}>
+                    <div>This statement was generated using <span style={{ fontWeight: 600, color: '#f97316' }}>FeesFoundry</span> - a product of <span style={{ color: '#374151' }}>Jiggabyte Technology Limited</span></div>
+                    <div style={{ marginTop: '4px', fontStyle: 'italic' }}>For support, contact your school administrator or visit www.jiggabyte.co.zm</div>
                 </div>
+            </div>
             ))}
         </div>
       )}
@@ -1002,6 +1051,11 @@ const StudentAccounts: React.FC = () => {
                 ))}
               </tbody>
             </table>
+
+            <div style={{ marginTop: '20px', padding: '16px', border: '2px solid #374151', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb' }}>
+              <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>Total Outstanding Balance</span>
+              <span style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>${(currentOverview.balance/100).toFixed(2)}</span>
+            </div>
 
             <div style={{ marginTop: '30px', paddingTop: '16px', borderTop: '2px dashed #e5e7eb', textAlign: 'center', fontSize: '11px', color: '#6b7280' }}>
               <div>This report was generated using <span style={{ fontWeight: 600, color: '#f97316' }}>FeesFoundry</span> - a product of <span style={{ color: '#374151' }}>Jiggabyte Technology Limited</span></div>

@@ -297,6 +297,8 @@ export function generatePaymentStatementHtml(data: {
 export function generateStudentStatementHtml(data: {
   schoolName: string;
   schoolLogo?: string;
+  schoolContact?: string;
+  currentTerm?: string;
   generatedAt: string;
   studentName: string;
   grade: string;
@@ -317,20 +319,25 @@ export function generateStudentStatementHtml(data: {
     ref: string;
     amount: string;
   }>;
+  upcoming?: Array<{
+    termLabel: string;
+    startDate: string;
+    amount: string;
+  }>;
 }): string {
-  const { schoolName, schoolLogo, generatedAt, studentName, grade, studentId, guardianName, guardianContact, isOwing, totalInvoiced, totalPaid, balance, fees, payments } = data;
+  const { schoolName, schoolLogo, schoolContact, currentTerm, generatedAt, studentName, grade, studentId, guardianName, guardianContact, isOwing, totalInvoiced, totalPaid, balance, fees, payments, upcoming } = data;
   
   const feeRows = fees.map(f => `
-    <tr style="border-bottom: 1px solid #eee;">
-      <td style="padding: 8px;">${f.termLabel}: ${f.description}</td>
-      <td style="padding: 8px; text-align: right;">$${f.amount}</td>
+    <tr style="border-bottom: 1px solid #e5e7eb;">
+      <td style="padding: 10px 8px;">${f.termLabel}: ${f.description}</td>
+      <td style="padding: 10px 8px; text-align: right; font-weight: 600;">$${f.amount}</td>
     </tr>
   `).join('');
 
   const paymentRows = payments.map(p => `
-    <tr style="border-bottom: 1px solid #eee;">
-      <td style="padding: 8px;">Payment - ${p.date} (Ref: ${p.ref})</td>
-      <td style="padding: 8px; text-align: right;">-$${p.amount}</td>
+    <tr style="border-bottom: 1px solid #e5e7eb;">
+      <td style="padding: 10px 8px;">Payment - ${p.date} (Ref: ${p.ref})</td>
+      <td style="padding: 10px 8px; text-align: right; font-weight: 600; color: #059669;">-$${p.amount}</td>
     </tr>
   `).join('');
 
@@ -341,25 +348,37 @@ export function generateStudentStatementHtml(data: {
   <meta charset="UTF-8">
   ${getBasePrintStyles()}
   <style>
-    .statement-container { padding: 20mm; }
-    .header { text-align: center; border-bottom: 2px solid #eee; padding-bottom: 24px; margin-bottom: 24px; }
-    .header .logo { margin-bottom: 16px; }
+    .statement-container { padding: 20mm; font-family: Arial, Helvetica, sans-serif; }
+    .header { text-align: center; border-bottom: 2px solid #f97316; padding-bottom: 20px; margin-bottom: 24px; }
+    .header .logo { margin-bottom: 12px; }
     .header .logo img { max-height: 60px; max-width: 150px; }
-    .header h2 { font-size: 22px; font-weight: 800; margin: 0 0 4px 0; }
-    .header .meta { font-size: 12px; opacity: 0.6; }
-    .student-info { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; }
-    .student-info h3 { font-size: 18px; font-weight: 800; margin: 0 0 8px 0; }
-    .student-info .details { font-size: 12px; }
+    .header h2 { font-size: 24px; font-weight: 800; margin: 0 0 8px 0; color: #1f2937; }
+    .header .report-type { font-size: 16px; font-weight: 600; color: #f97316; margin-bottom: 8px; }
+    .header .meta { font-size: 12px; color: #6b7280; }
+    .header .meta span { margin: 0 8px; }
+    .student-info { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; background: #f9fafb; padding: 16px; border-radius: 8px; }
+    .student-info h3 { font-size: 18px; font-weight: 800; margin: 0 0 8px 0; color: #1f2937; }
+    .student-info .details { font-size: 12px; color: #6b7280; }
     .student-info .details span { margin-right: 16px; }
-    .status { padding: 4px 10px; border: 1px solid #000; font-size: 10px; font-weight: 800; text-transform: uppercase; }
-    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
-    .summary-item { border: 1px solid #eee; padding: 12px; text-align: center; }
-    .summary-item .label { font-size: 10px; text-transform: uppercase; }
-    .summary-item .value { font-size: 18px; font-weight: 700; }
-    .summary-item.balance { border: 1px solid #000; }
+    .status { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .status.owing { background-color: #FEE2E2; color: #991B1B; }
+    .status.paid { background-color: #D1FAE5; color: #065F46; }
+    .section-title { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th { text-align: left; padding: 8px; border-bottom: 1px solid #000; }
-    .footer { position: absolute; bottom: 15mm; left: 20mm; right: 20mm; display: flex; justify-content: space-between; font-size: 10px; color: #666; border-top: 1px solid #eee; padding-top: 8px; }
+    th { text-align: left; padding: 12px 8px; border-bottom: 2px solid #374151; font-weight: 600; font-size: 12px; color: #374151; background-color: #f9fafb; }
+    .footer { position: absolute; bottom: 20mm; left: 20mm; right: 20mm; padding-top: 12px; border-top: 2px dashed #e5e7eb; text-align: center; font-size: 11px; color: #6b7280; }
+    .footer .branding { font-weight: 600; color: #f97316; }
+    .footer .company { color: #374151; }
+    .footer .contact { margin-top: 4px; font-style: italic; }
+    .balance-row { margin-top: 20px; padding: 16px; border: 2px solid #374151; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; background-color: #f9fafb; }
+    .balance-row .balance-label { font-size: 14px; font-weight: 600; color: #374151; }
+    .balance-row .balance-value { font-size: 24px; font-weight: 700; color: #dc2626; }
+    .upcoming-section { margin-top: 20px; padding: 12px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; }
+    .upcoming-section .section-title { font-size: 11px; font-weight: 600; color: #166534; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #bbf7d0; }
+    .upcoming-section table { font-size: 11px; }
+    .upcoming-section th { font-size: 10px; color: #166534; background-color: transparent; padding: 4px 8px; border-bottom: 1px solid #bbf7d0; }
+    .upcoming-section td { padding: 4px 8px; color: #374151; }
+    @page { size: A4; margin: 20mm; }
   </style>
 </head>
 <body>
@@ -367,7 +386,12 @@ export function generateStudentStatementHtml(data: {
     <div class="header">
       ${schoolLogo ? `<div class="logo"><img src="${schoolLogo}" alt="School Logo" /></div>` : ''}
       <h2>${schoolName}</h2>
-      <div class="meta">Statement of Account • ${generatedAt}</div>
+      <div class="report-type">Statement of Account</div>
+      <div class="meta">
+        ${currentTerm ? `<span>${currentTerm}</span>` : ''}
+        <span>Generated: ${generatedAt}</span>
+        ${schoolContact ? `<span>${schoolContact}</span>` : ''}
+      </div>
     </div>
     
     <div class="student-info">
@@ -381,24 +405,10 @@ export function generateStudentStatementHtml(data: {
           Guardian: ${guardianName} | ${guardianContact}
         </div>
       </div>
-      <div class="status">${isOwing ? 'Owing' : 'Paid'}</div>
+      <div class="status ${isOwing ? 'owing' : 'paid'}">${isOwing ? 'Owing' : 'Paid'}</div>
     </div>
     
-    <div class="summary">
-      <div class="summary-item">
-        <div class="label">Invoiced</div>
-        <div class="value">$${totalInvoiced}</div>
-      </div>
-      <div class="summary-item">
-        <div class="label">Paid</div>
-        <div class="value">$${totalPaid}</div>
-      </div>
-      <div class="summary-item balance">
-        <div class="label">Balance</div>
-        <div class="value">$${balance}</div>
-      </div>
-    </div>
-    
+    <div class="section-title">Transaction Details</div>
     <table>
       <thead>
         <tr>
@@ -411,6 +421,40 @@ export function generateStudentStatementHtml(data: {
         ${paymentRows}
       </tbody>
     </table>
+    
+    <div class="balance-row">
+      <span class="balance-label">Account Balance</span>
+      <span class="balance-value">$${balance}</span>
+    </div>
+    
+    ${upcoming && upcoming.length > 0 ? `
+    <div class="upcoming-section">
+      <div class="section-title">Upcoming Fees</div>
+      <table style="font-size: 11px;">
+        <thead>
+          <tr>
+            <th style="text-align: left; padding: 6px 8px;">Term</th>
+            <th style="text-align: left; padding: 6px 8px;">Expected Start</th>
+            <th style="text-align: right; padding: 6px 8px;">Estimated Fees</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${upcoming.map(u => `
+            <tr style="border-bottom: 1px solid #e5e7eb;">
+              <td style="padding: 6px 8px; font-weight: 600;">${u.termLabel}</td>
+              <td style="padding: 6px 8px;">${u.startDate || 'TBA'}</td>
+              <td style="padding: 6px 8px; text-align: right; font-weight: 600;">$${u.amount}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+    ` : ''}
+    
+    <div class="footer">
+      <div>This statement was generated using <span class="branding">FeesFoundry</span> - a product of <span class="company">Jiggabyte Technology Limited</span></div>
+      <div class="contact">For support, contact your school administrator or visit www.jiggabyte.co.zm</div>
+    </div>
   </div>
 </body>
 </html>
@@ -478,6 +522,9 @@ export function generateOverviewHtml(data: {
     .footer .branding { font-weight: 600; color: #f97316; }
     .footer .company { color: #374151; }
     .footer .contact { margin-top: 4px; font-style: italic; }
+    .balance-row { margin-top: 20px; padding: 16px; border: 2px solid #374151; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; background-color: #f9fafb; }
+    .balance-row .balance-label { font-size: 14px; font-weight: 600; color: #374151; }
+    .balance-row .balance-value { font-size: 24px; font-weight: 700; color: #dc2626; }
   </style>
 </head>
 <body>
@@ -519,6 +566,11 @@ export function generateOverviewHtml(data: {
         </tr>
       </tbody>
     </table>
+    
+    <div class="balance-row">
+      <span class="balance-label">Total Outstanding Balance</span>
+      <span class="balance-value">$${balance}</span>
+    </div>
     
     <div class="footer">
       <div>This report was generated using <span class="branding">FeesFoundry</span> - a product of <span class="company">Jiggabyte Technology Limited</span></div>

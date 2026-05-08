@@ -169,7 +169,7 @@ export const Login: React.FC = () => {
           
           <div style={{ 
             marginTop: '32px', 
-            textAlign: 'left',
+            textAlign: 'center',
             width: '100%',
             maxWidth: '700px',
             backgroundColor: '#ffffff',
@@ -180,9 +180,11 @@ export const Login: React.FC = () => {
             <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 20px 0', color: '#f97316' }}>Key Features</h3>
 
             <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: '1fr 1fr', 
-              gap: '14px 28px' 
+              display: 'inline-grid', 
+              gridTemplateColumns: 'repeat(2, 1fr)', 
+              gap: '14px 40px',
+              textAlign: 'left',
+              marginTop: '10px'
             }}>
               {[
                 'Record Payments & Print Receipts',
