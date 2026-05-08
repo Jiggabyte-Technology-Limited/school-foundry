@@ -5,7 +5,22 @@ import EditStudentModal from './EditStudentModal';
 import PaymentWizard from './PaymentWizard';
 import { useAuth } from '../lib/auth-context';
 
-interface Student { id: number; full_name: string; grade_label: string; grade_id: number; balance: number; guardian_name: string; guardian_contact: string; }
+interface Student { 
+  id: number; 
+  full_name: string; 
+  grade_label: string; 
+  grade_id: number; 
+  balance: number; 
+  invoiced: number;
+  paid: number;
+  guardian_name: string; 
+  guardian_contact: string; 
+  guardian_name_2: string;
+  guardian_contact_2: string;
+  guardian_email: string;
+  school_logo?: string;
+}
+
 interface Grade { id: number; label: string; }
 interface AcademicYear { id: number; label: string; }
 interface Term { id: number; label: string; }
@@ -89,8 +104,6 @@ const StudentAccounts: React.FC = () => {
   const [schoolName, setSchoolName] = useState('School Management');
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [overviewData, setOverviewData] = useState<any>(null);
-  const [isOverviewLoading, setIsOverviewLoading] = useState(false);
 
   useEffect(() => { loadInitialData(); }, []);
 
@@ -125,8 +138,8 @@ const StudentAccounts: React.FC = () => {
       let query = `
         SELECT s.id, s.full_name, g.label as grade_label, g.id as grade_id, 
           s.guardian_name, s.guardian_contact, s.guardian_name_2, s.guardian_contact_2, s.guardian_email,
-          COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
-          COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as balance
+          COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) as invoiced,
+          COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as paid
         FROM students s
         LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
         LEFT JOIN grades g ON sye.grade_id = g.id
@@ -137,43 +150,14 @@ const StudentAccounts: React.FC = () => {
           params.push(gradeId); 
       }
       const result = await db.all(query + ' ORDER BY s.full_name', params);
-      setStudents(result);
+      // Map balance locally
+      const resultWithBalance = result.map((s: any) => ({
+        ...s,
+        balance: s.invoiced - s.paid
+      }));
+      setStudents(resultWithBalance);
     } catch (err) {
       console.error('Error loading students:', err);
-    }
-  };
-
-  const loadOverview = async (yearId: number, gradeId: number | null) => {
-    setIsOverviewLoading(true);
-    try {
-        let invoicedQuery = `SELECT SUM(fs.amount_cents) as total FROM fee_structure fs JOIN student_year_enrollment sye ON fs.grade_id = sye.grade_id AND fs.year_id = sye.year_id WHERE fs.year_id = ?`;
-        let paidQuery = `SELECT SUM(amount_paid_cents) as total FROM payments WHERE year_id = ?`;
-        const params: any[] = [yearId];
-
-        if (gradeId) {
-            invoicedQuery += ` AND fs.grade_id = ?`;
-            paidQuery += ` AND grade_id = ?`;
-            params.push(gradeId);
-        }
-
-        const [invoicedResult, paidResult] = await Promise.all([
-            db.get(invoicedQuery, params),
-            db.get(paidQuery, params)
-        ]);
-
-        const totalInvoiced = invoicedResult?.total || 0;
-        const totalPaid = paidResult?.total || 0;
-
-        setOverviewData({
-            totalInvoiced,
-            totalPaid,
-            balance: totalInvoiced - totalPaid,
-            isGrade: !!gradeId
-        });
-    } catch (err) {
-        console.error('Error loading overview:', err);
-    } finally {
-        setIsOverviewLoading(false);
     }
   };
 
@@ -181,11 +165,24 @@ const StudentAccounts: React.FC = () => {
     if (selectedYear) { 
         loadStudents(selectedGrade); 
         loadTermsForYear(selectedYear); 
-        if (!selectedStudent) { 
-            loadOverview(selectedYear, selectedGrade); 
-        } 
     } 
-  }, [selectedYear, selectedGrade, selectedStudent]);
+  }, [selectedYear, selectedGrade]);
+
+  // Dynamic Overview Data based on filtered results
+  const getDynamicOverview = () => {
+    const totalInvoiced = filteredStudents.reduce((sum, s) => sum + s.invoiced, 0);
+    const totalPaid = filteredStudents.reduce((sum, s) => sum + s.paid, 0);
+    const balance = totalInvoiced - totalPaid;
+    
+    return {
+        totalInvoiced,
+        totalPaid,
+        balance,
+        isGrade: !!selectedGrade
+    };
+  };
+
+  const currentOverview = getDynamicOverview();
 
   const viewStatement = async (student: Student) => {
     setSelectedStudent(student);
@@ -246,7 +243,6 @@ const StudentAccounts: React.FC = () => {
         viewStatement(selectedStudent);
     }
     loadStudents(selectedGrade);
-    loadOverview(selectedYear!, selectedGrade);
   };
 
   return (
@@ -592,12 +588,12 @@ const StudentAccounts: React.FC = () => {
                 )}
             </div>
             </>
-          ) : overviewData ? (
+          ) : currentOverview ? (
             <div className="card-surface" style={{ padding: '40px', minHeight: '500px', position: 'relative' }}>
                 <div style={{ textAlign: 'center', borderBottom: '2px solid rgba(249, 115, 22, 0.1)', paddingBottom: '32px', marginBottom: '40px' }}>
                     <h2 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 4px 0', tracking: '-0.02em' }} className="text-display uppercase">{schoolName}</h2>
                     <div className="metric-label" style={{ margin: 0, opacity: 0.6 }}>
-                        {overviewData.isGrade ? `Grade Report: ${grades.find(g => g.id === selectedGrade)?.label}` : 'Master Financial Overview'}
+                        {currentOverview.isGrade ? `Grade Report: ${grades.find(g => g.id === selectedGrade)?.label}` : 'Master Financial Overview'}
                     </div>
                 </div>
 
@@ -605,36 +601,36 @@ const StudentAccounts: React.FC = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
                         <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
                             <div className="metric-label" style={{ fontSize: '10px' }}>Total Invoiced</div>
-                            <div className="metric-value" style={{ fontSize: '20px' }}>${(overviewData.totalInvoiced/100).toFixed(2)}</div>
+                            <div className="metric-value" style={{ fontSize: '20px' }}>${(currentOverview.totalInvoiced/100).toFixed(2)}</div>
                         </div>
                         <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
                             <div className="metric-label" style={{ fontSize: '10px' }}>Collected</div>
-                            <div className="metric-value" style={{ fontSize: '20px', color: '#10B981' }}>${(overviewData.totalPaid/100).toFixed(2)}</div>
+                            <div className="metric-value" style={{ fontSize: '20px', color: '#10B981' }}>${(currentOverview.totalPaid/100).toFixed(2)}</div>
                         </div>
                         <div style={{ backgroundColor: 'rgba(249, 115, 22, 0.05)', padding: '20px', borderRadius: '16px', border: '1.5px solid var(--primary)' }}>
                             <div className="metric-label" style={{ fontSize: '10px', color: 'var(--primary)' }}>Unpaid Balance</div>
                             <div className="metric-value" style={{ fontSize: '20px', color: 'var(--primary)' }}>
-                                ${(overviewData.balance/100).toFixed(2)}
+                                ${(currentOverview.balance/100).toFixed(2)}
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <div className="metric-label" style={{ marginBottom: '24px', opacity: 0.5 }}>
-                    {overviewData.isGrade ? 'Student Enrollment Breakdown' : 'Institutional Performance by Grade'}
+                    {currentOverview.isGrade ? 'Student Enrollment Breakdown' : 'Institutional Performance by Grade'}
                 </div>
                 <div style={{ maxHeight: '45vh', overflowY: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
                             <tr>
-                                <th>{overviewData.isGrade ? 'Student Identity' : 'Academic Form'}</th>
+                                <th>{currentOverview.isGrade ? 'Student Identity' : 'Academic Form'}</th>
                                 <th style={{ textAlign: 'right' }}>Net Balance</th>
                                 <th style={{ textAlign: 'center', width: '128px' }}>Compliance</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {overviewData.isGrade ? (
-                                students.map(s => (
+                            {currentOverview.isGrade ? (
+                                filteredStudents.map(s => (
                                     <tr key={s.id} onClick={() => viewStatement(s)} style={{ cursor: 'pointer', transition: 'all 0.2s ease' }} className="hover:bg-secondary">
                                         <td style={{ fontWeight: 700 }} className="text-display">{s.full_name}</td>
                                         <td className="text-mono" style={{ fontWeight: 800, textAlign: 'right' }}>${(s.balance/100).toFixed(2)}</td>
@@ -658,7 +654,8 @@ const StudentAccounts: React.FC = () => {
                                 ))
                             ) : (
                                 grades.map(g => {
-                                    const gradeStudents = students.filter(s => s.grade_id === g.id);
+                                    const gradeStudents = filteredStudents.filter(s => s.grade_id === g.id);
+                                    if (gradeStudents.length === 0) return null; // Don't show empty grades in filtered view
                                     const gradeOutstanding = gradeStudents.reduce((sum, s) => sum + s.balance, 0);
                                     return (
                                         <tr key={g.id} className="hover:bg-secondary" style={{ transition: 'background-color 0.2s ease' }}>

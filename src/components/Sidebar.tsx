@@ -85,34 +85,18 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-logo">
-          <svg width="40" height="40" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-            {/* Focus ring (outer) */}
-            <circle cx="32" cy="32" r="28" fill="none" stroke="white" strokeWidth="1.5"/>
-            
-            {/* Focus ring (middle) */}
-            <circle cx="32" cy="32" r="23" fill="none" stroke="white" strokeWidth="1" opacity="0.5"/>
-            
-            {/* Letter F */}
-            <g fill="white">
-              {/* Vertical bar */}
-              <rect x="20" y="14" width="4.5" height="29" rx="1"/>
-              
-              {/* Top horizontal bar */}
-              <rect x="20" y="14" width="13" height="4" rx="1"/>
-              
-              {/* Middle horizontal bar */}
-              <rect x="20" y="31" width="10" height="3.5" rx="1"/>
-            </g>
-            
-            {/* Clarity crosshair center */}
-            <circle cx="32" cy="32" r="2" fill="white"/>
-            <line x1="32" y1="26" x2="32" y2="38" stroke="white" strokeWidth="1" strokeLinecap="round"/>
-            <line x1="26" y1="32" x2="38" y2="32" stroke="white" strokeWidth="1" strokeLinecap="round"/>
-          </svg>
+          <img 
+            src="./img/feesfoundry-icon.svg" 
+            alt="FeesFoundry Logo" 
+            style={{ width: '35.2px', height: '35.2px' }} 
+          />
         </div>
         <div className="sidebar-title">
-          <span className="sidebar-title-text">FeeFocus</span>
-          <span className="sidebar-title-sub">Fee Management</span>
+          <span className="sidebar-title-text" style={{ display: 'flex' }}>
+            <span style={{ fontWeight: 800, color: '#f97316' }}>Fees</span>
+            <span style={{ fontWeight: 400, color: '#000000' }}>Foundry</span>
+          </span>
+          <span className="sidebar-title-sub" style={{ fontSize: '8px' }}>Forging a Stronger Financial Future</span>
         </div>
       </div>
 

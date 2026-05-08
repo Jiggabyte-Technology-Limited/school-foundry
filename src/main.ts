@@ -21,6 +21,8 @@ function createWindow() {
     },
   });
 
+  win.maximize();
+
   if (isDev) {
     win.loadURL('http://localhost:5173');
   } else {
