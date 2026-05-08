@@ -31,6 +31,7 @@ function AppInner() {
   const [isSetup, setIsSetup] = useState(false);
   const [view, setView] = useState('dashboard');
   const [schoolName, setSchoolName] = useState('');
+  const [activeTerm, setActiveTerm] = useState('');
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
@@ -42,11 +43,22 @@ function AppInner() {
   }, []);
 
   useEffect(() => {
-    const loadSchoolName = async () => {
+    const loadSchoolDetails = async () => {
       const setting = await db.get("SELECT value FROM app_settings WHERE key = 'school_name'");
       setSchoolName(setting?.value || '');
+      
+      const termRes = await db.get(`
+        SELECT t.label 
+        FROM terms t 
+        JOIN academic_years y ON t.year_id = y.id 
+        ORDER BY y.label DESC, t.term_number ASC 
+        LIMIT 1
+      `);
+      if (termRes && termRes.label) {
+        setActiveTerm(termRes.label);
+      }
     };
-    if (isSetup) loadSchoolName();
+    if (isSetup) loadSchoolDetails();
   }, [isSetup]);
 
   const handleLogout = () => {
@@ -72,6 +84,7 @@ function AppInner() {
                 <TopBar
                   pageTitle={pageTitles[view] || 'Dashboard'}
                   schoolName={schoolName}
+                  activeTerm={activeTerm}
                   userName={user.full_name || user.username}
                   userRole={user.role}
                   onSettingsClick={() => setShowSettings(true)}

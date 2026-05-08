@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import bcryptjs from 'bcryptjs';
 import { db } from '../../lib/db-client';
 import { useAuth } from '../../lib/auth-context';
+import SphereCanvas from '../SphereCanvas';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 5;
@@ -14,6 +15,26 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [schoolName, setSchoolName] = useState('FeesFoundry');
+  const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const fetchSchoolDetails = async () => {
+      try {
+        const nameRes = await db.get("SELECT value FROM app_settings WHERE key = 'school_name'");
+        if (nameRes && nameRes.value) {
+          setSchoolName(nameRes.value);
+        }
+        const logoRes = await db.get("SELECT value FROM app_settings WHERE key = 'school_logo'");
+        if (logoRes && logoRes.value) {
+          setSchoolLogo(logoRes.value);
+        }
+      } catch (err) {
+        console.error("Failed to fetch school details", err);
+      }
+    };
+    fetchSchoolDetails();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,10 +127,10 @@ export const Login: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', width: '100%' }}>
-      {/* Left Side - Orange Visual Section */}
+      {/* Left Side - Dark Visual Section with SphereCanvas */}
       <div style={{ 
         flex: 1, 
-        background: 'linear-gradient(135deg, #f97316 0%, #ea580c 50%, #c2410c 100%)',
+        backgroundColor: '#0A0D14',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
@@ -118,41 +139,33 @@ export const Login: React.FC = () => {
         overflow: 'hidden',
         padding: '40px'
       }}>
-        {/* Background Image with low opacity */}
+        {/* SphereCanvas Background */}
         <div style={{ 
           position: 'absolute', 
-          top: 0, 
-          left: 0, 
-          right: 0, 
-          bottom: 0, 
-          backgroundImage: 'url("./img/feesfoundry-logo.jpg")',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          opacity: 0.1,
-          mixBlendMode: 'overlay'
-        }} />
-        
-        {/* Decorative circles */}
-        <div style={{ position: 'absolute', top: '10%', left: '10%', width: '200px', height: '200px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }} />
-        <div style={{ position: 'absolute', bottom: '15%', right: '10%', width: '300px', height: '300px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(10px)' }} />
-        <div style={{ position: 'absolute', top: '40%', right: '20%', width: '150px', height: '150px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)' }} />
-        
-        {/* Floating elements */}
-        <div style={{ position: 'absolute', top: '20%', right: '30%', width: '80px', height: '80px', borderRadius: '20px', background: 'rgba(255,255,255,0.15)', transform: 'rotate(15deg)' }} />
-        <div style={{ position: 'absolute', bottom: '30%', left: '15%', width: '120px', height: '120px', borderRadius: '30px', background: 'rgba(255,255,255,0.1)', transform: 'rotate(-10deg)' }} />
+          inset: 0, 
+          zIndex: 0,
+          opacity: 0.8,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+           <div style={{ width: '100%', height: '100%', minWidth: '600px', minHeight: '600px', maxWidth: '800px', maxHeight: '800px' }}>
+              <SphereCanvas />
+           </div>
+        </div>
         
         {/* Main visual content */}
         <div style={{ textAlign: 'center', color: 'white', zIndex: 1, maxWidth: '800px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <img 
-            src="./img/feesfoundry-logo.png" 
+            src="./img/feesfoundry-logo.svg" 
             alt="FeesFoundry Logo" 
-            style={{ width: '120px', height: '120px', marginBottom: '24px' }} 
+            style={{ width: '80px', height: '80px', marginBottom: '24px' }} 
           />
           <h1 style={{ fontSize: '48px', margin: 0, letterSpacing: '-1px', display: 'flex', alignItems: 'center' }}>
             <span style={{ fontWeight: 800, color: '#FFFFFF' }}>Fees</span>
             <span style={{ fontWeight: 400, color: '#FFFFFF' }}>Foundry</span>
           </h1>
-          <p style={{ fontSize: '18px', marginTop: '16px', opacity: 0.9, fontWeight: 500, color: 'white' }}>Forging a Stronger Financial Future<br/>for Schools.</p>
+          <p style={{ fontSize: '18px', marginTop: '16px', fontWeight: 500, color: '#9ca3af' }}>Forging a Stronger Financial Future<br/>for Schools.</p>
           
           <div style={{ 
             marginTop: '32px', 
@@ -165,7 +178,8 @@ export const Login: React.FC = () => {
             border: '1px solid rgba(255,255,255,0.1)',
             display: 'flex',
             flexDirection: 'column',
-            gap: '24px'
+            gap: '24px',
+            backdropFilter: 'blur(10px)'
           }}>
             <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'white' }}>Features</h3>
 
@@ -235,8 +249,8 @@ export const Login: React.FC = () => {
           </div>
         </div>
         
-        {/* Footer on orange side */}
-        <div style={{ position: 'absolute', bottom: '24px', color: 'rgba(255,255,255,0.7)', fontSize: '12px', textAlign: 'center' }}>
+        {/* Footer on dark side */}
+        <div style={{ position: 'absolute', bottom: '24px', color: 'rgba(255,255,255,0.5)', fontSize: '12px', textAlign: 'center', zIndex: 1 }}>
           Developed by <strong>Jiggabyte Technology Limited</strong>
         </div>
       </div>
@@ -249,13 +263,54 @@ export const Login: React.FC = () => {
         justifyContent: 'center', 
         alignItems: 'center',
         background: 'white',
-        padding: '40px'
+        padding: '40px',
+        position: 'relative'
       }}>
+        {/* Back Button */}
+        <button 
+          onClick={() => navigate('/')}
+          style={{
+            position: 'absolute',
+            top: '40px',
+            right: '40px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'none',
+            border: 'none',
+            color: 'var(--text-secondary)',
+            fontSize: '14px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            transition: 'background-color 0.2s, color 0.2s',
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.backgroundColor = 'var(--background)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+          onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          Back to Welcome
+        </button>
+
         <div style={{ width: '100%', maxWidth: '400px' }}>
           {/* Login header */}
-          <div style={{ marginBottom: '40px' }}>
-            <h2 style={{ fontSize: '28px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Welcome Back</h2>
-            <p style={{ color: 'var(--text-secondary)', marginTop: '8px', fontSize: '14px' }}>Sign in to manage your school fees</p>
+          <div style={{ marginBottom: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            {schoolLogo && (
+              <img 
+                src={schoolLogo} 
+                alt={`${schoolName} Logo`} 
+                style={{ width: 'auto', height: '64px', maxHeight: '64px', marginBottom: '16px', borderRadius: '12px', objectFit: 'contain' }} 
+              />
+            )}
+            <h2 style={{ fontSize: '28px', fontWeight: 800, margin: 0, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+              <span style={{ display: 'block', fontSize: '16px', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>Welcome to</span>
+              {schoolName}
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '12px', fontSize: '14px' }}>Sign in to manage your school fees</p>
           </div>
 
           {error && (

@@ -3,6 +3,7 @@ import React from 'react';
 interface TopBarProps {
   pageTitle: string;
   schoolName: string;
+  activeTerm?: string;
   userName: string;
   userRole: string;
   onSettingsClick: () => void;
@@ -12,6 +13,7 @@ interface TopBarProps {
 const TopBar: React.FC<TopBarProps> = ({
   pageTitle,
   schoolName,
+  activeTerm,
   userName,
   userRole,
   onSettingsClick,
@@ -23,8 +25,13 @@ const TopBar: React.FC<TopBarProps> = ({
         <h1 className="topbar-title text-display">{pageTitle}</h1>
       </div>
       
-      <div className="topbar-center">
-        <span className="topbar-school text-display">{schoolName || 'School Name'}</span>
+      <div className="topbar-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <span className="topbar-school text-display" style={{ lineHeight: 1.2 }}>{schoolName || 'School Name'}</span>
+        {activeTerm && (
+          <span style={{ fontSize: '13px', fontWeight: 300, color: 'var(--primary)', marginTop: '2px' }}>
+            {activeTerm}
+          </span>
+        )}
       </div>
       
       <div className="topbar-right">

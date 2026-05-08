@@ -92,11 +92,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
           />
         </div>
         <div className="sidebar-title">
-          <span className="sidebar-title-text" style={{ display: 'flex' }}>
-            <span style={{ fontWeight: 800, color: '#f97316' }}>Fees</span>
-            <span style={{ fontWeight: 400, color: '#000000' }}>Foundry</span>
+          <span className="sidebar-title-text" style={{ display: 'flex', color: 'var(--text-primary)', fontSize: '22px' }}>
+            <span style={{ fontWeight: 800 }}>Fees</span>
+            <span style={{ fontWeight: 400 }}>Foundry</span>
           </span>
-          <span className="sidebar-title-sub" style={{ fontSize: '8px' }}>Forging a Stronger Financial Future</span>
+          <span className="sidebar-title-sub" style={{ fontSize: '9px', marginTop: '2px' }}>Forging a Stronger Financial Future</span>
         </div>
       </div>
 
@@ -126,8 +126,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
       </nav>
       
       <div style={{ marginTop: 'auto', padding: '1.5rem', borderTop: '1px solid var(--border)' }}>
-        <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+        <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '8px' }}>
           v1.2.0 • Build 2026
+        </div>
+        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          &copy; Jiggabyte Technology Limited
         </div>
       </div>
     </aside>
