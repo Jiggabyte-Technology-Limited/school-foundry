@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
+import { useToast } from './Toast';
 
 interface StudentWizardProps {
   onClose: () => void;
@@ -12,40 +13,90 @@ interface StudentWizardProps {
 type Step = 'details' | 'guardian' | 'enrollment' | 'confirm';
 
 const STEPS: { id: Step; label: string; icon: React.ReactElement }[] = [
-  { 
-    id: 'details', 
+  {
+    id: 'details',
     label: 'Student Details',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
+      </svg>
+    ),
   },
-  { 
-    id: 'guardian', 
+  {
+    id: 'guardian',
     label: 'Guardian Info',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    ),
   },
-  { 
-    id: 'enrollment', 
+  {
+    id: 'enrollment',
     label: 'Enrollment',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+      </svg>
+    ),
   },
-  { 
-    id: 'confirm', 
+  {
+    id: 'confirm',
     label: 'Confirm',
-    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12" /></svg>
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    ),
   },
 ];
 
-const StudentWizard: React.FC<StudentWizardProps> = ({ 
-  onClose, 
-  onSuccess, 
+const StudentWizard: React.FC<StudentWizardProps> = ({
+  onClose,
+  onSuccess,
   currentYearId,
-  preSelectedGrade 
+  preSelectedGrade,
 }) => {
   const { user, canManageStudents } = useAuth();
+  const { showToast } = useToast();
   const [currentStep, setCurrentStep] = useState<Step>('details');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [grades, setGrades] = useState<{id: number; label: string}[]>([]);
-  const [currentYear, setCurrentYear] = useState<{id: number; label: string} | null>(null);
+  const [grades, setGrades] = useState<{ id: number; label: string }[]>([]);
+  const [currentYear, setCurrentYear] = useState<{ id: number; label: string } | null>(null);
 
   // Form data
   const [form, setForm] = useState({
@@ -76,13 +127,13 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
   const loadData = async () => {
     const [gradeList, yearData] = await Promise.all([
       db.all('SELECT id, label FROM grades ORDER BY id'),
-      currentYearId 
+      currentYearId
         ? db.get('SELECT id, label FROM academic_years WHERE id = ?', [currentYearId])
         : db.get('SELECT id, label FROM academic_years ORDER BY label DESC LIMIT 1'),
     ]);
     setGrades(gradeList);
     setCurrentYear(yearData);
-    
+
     if (preSelectedGrade) {
       setForm(f => ({ ...f, grade_id: String(preSelectedGrade) }));
     }
@@ -92,7 +143,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
 
   const validateStep = (): boolean => {
     setError('');
-    
+
     switch (currentStep) {
       case 'details':
         if (!form.full_name.trim()) {
@@ -140,16 +191,27 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
     setError('');
 
     try {
+      // Generate unique student number (STU + year + random 4 digits)
+      const studentNumber = `STU${new Date().getFullYear()}${Math.floor(1000 + Math.random() * 9000)}`;
+
       // Add new student
-      const result = await db.run(`
-        INSERT INTO students (full_name, date_of_birth, gender, guardian_name, guardian_contact, guardian_name_2, guardian_contact_2, guardian_email)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        form.full_name, form.date_of_birth || null, form.gender || null,
-        form.guardian_name, form.guardian_contact,
-        form.guardian_name_2 || null, form.guardian_contact_2 || null,
-        form.guardian_email || null
-      ]);
+      const result = await db.run(
+        `
+        INSERT INTO students (student_number, full_name, date_of_birth, gender, guardian_name, guardian_contact, guardian_name_2, guardian_contact_2, guardian_email)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+        [
+          studentNumber,
+          form.full_name,
+          form.date_of_birth || null,
+          form.gender || null,
+          form.guardian_name,
+          form.guardian_contact,
+          form.guardian_name_2 || null,
+          form.guardian_contact_2 || null,
+          form.guardian_email || null,
+        ]
+      );
 
       // Create enrollment for current year
       if (form.grade_id && currentYear && result.lastInsertRowid) {
@@ -161,9 +223,17 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
 
       await db.run(
         'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
-        [user?.id ?? null, user?.username ?? 'System', 'student_added', 'students', result.lastInsertRowid || result.lastID, `Added new student: ${form.full_name}`]
+        [
+          user?.id ?? null,
+          user?.username ?? 'System',
+          'student_added',
+          'students',
+          result.lastInsertRowid || result.lastID,
+          `Added new student: ${form.full_name}`,
+        ]
       );
 
+      showToast('success', 'Student Added', `${form.full_name} has been successfully enrolled.`);
       onSuccess();
     } catch (err: any) {
       console.error(err);
@@ -186,37 +256,41 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
               <span className="step-indicator-number">1</span>
               Step 1 of 4
             </div>
-            <h2 className="wizard-title" style={{ textAlign: 'left', fontSize: 20 }}>Student Details</h2>
+            <h2 className="wizard-title" style={{ textAlign: 'left', fontSize: 20 }}>
+              Student Details
+            </h2>
             <p className="wizard-subtitle" style={{ textAlign: 'left', marginBottom: 24 }}>
               Enter the basic information about the student.
             </p>
-            
+
             <div className="wizard-form">
               <div className="wizard-field">
-                <label>Full Name <span className="required">*</span></label>
+                <label>
+                  Full Name <span className="required">*</span>
+                </label>
                 <input
                   type="text"
                   value={form.full_name}
-                  onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                  onChange={e => setForm({ ...form, full_name: e.target.value })}
                   placeholder="Enter student's full name"
                   autoFocus
                 />
               </div>
-              
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div className="wizard-field">
                   <label>Date of Birth</label>
                   <input
                     type="date"
                     value={form.date_of_birth}
-                    onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })}
+                    onChange={e => setForm({ ...form, date_of_birth: e.target.value })}
                   />
                 </div>
                 <div className="wizard-field">
                   <label>Gender</label>
                   <select
                     value={form.gender}
-                    onChange={(e) => setForm({ ...form, gender: e.target.value })}
+                    onChange={e => setForm({ ...form, gender: e.target.value })}
                   >
                     <option value="">Select gender</option>
                     <option value="male">Male</option>
@@ -236,50 +310,66 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
               <span className="step-indicator-number">2</span>
               Step 2 of 4
             </div>
-            <h2 className="wizard-title" style={{ textAlign: 'left', fontSize: 20 }}>Guardian Information</h2>
+            <h2 className="wizard-title" style={{ textAlign: 'left', fontSize: 20 }}>
+              Guardian Information
+            </h2>
             <p className="wizard-subtitle" style={{ textAlign: 'left', marginBottom: 24 }}>
               {"Enter the parent or guardian's contact details."}
             </p>
-            
+
             <div className="wizard-form">
-              <div style={{ 
-                backgroundColor: 'var(--color-sage-cream)', 
-                padding: 16, 
-                borderRadius: 'var(--border-radius-md)',
-                marginBottom: 16
-              }}>
+              <div
+                style={{
+                  backgroundColor: 'var(--color-sage-cream)',
+                  padding: 16,
+                  borderRadius: 'var(--border-radius-md)',
+                  marginBottom: 16,
+                }}
+              >
                 <h4 style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--color-accent-teal)' }}>
                   Primary Guardian
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <div className="wizard-field">
-                    <label>Name <span className="required">*</span></label>
+                    <label>
+                      Name <span className="required">*</span>
+                    </label>
                     <input
                       type="text"
                       value={form.guardian_name}
-                      onChange={(e) => setForm({ ...form, guardian_name: e.target.value })}
+                      onChange={e => setForm({ ...form, guardian_name: e.target.value })}
                       placeholder="Guardian's full name"
                       autoFocus
                     />
                   </div>
                   <div className="wizard-field">
-                    <label>Contact <span className="required">*</span></label>
+                    <label>
+                      Contact <span className="required">*</span>
+                    </label>
                     <input
                       type="tel"
                       value={form.guardian_contact}
-                      onChange={(e) => setForm({ ...form, guardian_contact: e.target.value })}
+                      onChange={e => setForm({ ...form, guardian_contact: e.target.value })}
                       placeholder="Phone number"
                     />
                   </div>
                 </div>
               </div>
 
-              <div style={{ 
-                backgroundColor: 'var(--color-sage-cream)', 
-                padding: 16, 
-                borderRadius: 'var(--border-radius-md)'
-              }}>
-                <h4 style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--color-sage-placeholder)' }}>
+              <div
+                style={{
+                  backgroundColor: 'var(--color-sage-cream)',
+                  padding: 16,
+                  borderRadius: 'var(--border-radius-md)',
+                }}
+              >
+                <h4
+                  style={{
+                    margin: '0 0 12px',
+                    fontSize: 14,
+                    color: 'var(--color-sage-placeholder)',
+                  }}
+                >
                   Secondary Guardian (Optional)
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -288,7 +378,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                     <input
                       type="text"
                       value={form.guardian_name_2}
-                      onChange={(e) => setForm({ ...form, guardian_name_2: e.target.value })}
+                      onChange={e => setForm({ ...form, guardian_name_2: e.target.value })}
                       placeholder="Secondary guardian name"
                     />
                   </div>
@@ -297,7 +387,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                     <input
                       type="tel"
                       value={form.guardian_contact_2}
-                      onChange={(e) => setForm({ ...form, guardian_contact_2: e.target.value })}
+                      onChange={e => setForm({ ...form, guardian_contact_2: e.target.value })}
                       placeholder="Phone number"
                     />
                   </div>
@@ -309,7 +399,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                 <input
                   type="email"
                   value={form.guardian_email}
-                  onChange={(e) => setForm({ ...form, guardian_email: e.target.value })}
+                  onChange={e => setForm({ ...form, guardian_email: e.target.value })}
                   placeholder="guardian@email.com"
                 />
               </div>
@@ -324,11 +414,13 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
               <span className="step-indicator-number">3</span>
               Step 3 of 4
             </div>
-            <h2 className="wizard-title" style={{ textAlign: 'left', fontSize: 20 }}>Enrollment</h2>
+            <h2 className="wizard-title" style={{ textAlign: 'left', fontSize: 20 }}>
+              Enrollment
+            </h2>
             <p className="wizard-subtitle" style={{ textAlign: 'left', marginBottom: 24 }}>
               Select the grade level for this student.
             </p>
-            
+
             <div className="wizard-form">
               <div className="wizard-field">
                 <label>Academic Year</label>
@@ -342,10 +434,18 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                   Students are automatically enrolled in the current academic year
                 </p>
               </div>
-              
+
               <div className="wizard-field">
-                <label>Grade Level <span className="required">*</span></label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
+                <label>
+                  Grade Level <span className="required">*</span>
+                </label>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                    gap: 8,
+                  }}
+                >
                   {grades.map(grade => (
                     <button
                       key={grade.id}
@@ -353,20 +453,23 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                       onClick={() => setForm({ ...form, grade_id: String(grade.id) })}
                       style={{
                         padding: '12px 16px',
-                        border: form.grade_id === String(grade.id) 
-                          ? '2px solid var(--color-accent-teal)' 
-                          : '1px solid var(--color-sage-border)',
+                        border:
+                          form.grade_id === String(grade.id)
+                            ? '2px solid var(--color-accent-teal)'
+                            : '1px solid var(--color-sage-border)',
                         borderRadius: 'var(--border-radius-md)',
-                        backgroundColor: form.grade_id === String(grade.id) 
-                          ? 'var(--color-accent-teal-light)' 
-                          : 'white',
-                        color: form.grade_id === String(grade.id) 
-                          ? 'var(--color-accent-teal)' 
-                          : 'var(--color-olive-ink)',
+                        backgroundColor:
+                          form.grade_id === String(grade.id)
+                            ? 'var(--color-accent-teal-light)'
+                            : 'white',
+                        color:
+                          form.grade_id === String(grade.id)
+                            ? 'var(--color-accent-teal)'
+                            : 'var(--color-olive-ink)',
                         fontWeight: form.grade_id === String(grade.id) ? 600 : 400,
                         cursor: 'pointer',
                         transition: 'all 0.15s ease',
-                        textAlign: 'center'
+                        textAlign: 'center',
                       }}
                     >
                       {grade.label}
@@ -385,51 +488,69 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
               <span className="step-indicator-number">4</span>
               Step 4 of 4
             </div>
-            <h2 className="wizard-title" style={{ textAlign: 'left', fontSize: 20 }}>Confirm Details</h2>
+            <h2 className="wizard-title" style={{ textAlign: 'left', fontSize: 20 }}>
+              Confirm Details
+            </h2>
             <p className="wizard-subtitle" style={{ textAlign: 'left', marginBottom: 24 }}>
               Please review the information before adding this student.
             </p>
-            
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ 
-                backgroundColor: 'var(--color-sage-cream)', 
-                padding: 16, 
-                borderRadius: 'var(--border-radius-md)'
-              }}>
+              <div
+                style={{
+                  backgroundColor: 'var(--color-sage-cream)',
+                  padding: 16,
+                  borderRadius: 'var(--border-radius-md)',
+                }}
+              >
                 <h4 style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--color-accent-teal)' }}>
                   Student Information
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>Name</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>
+                      Name
+                    </span>
                     <p style={{ margin: '4px 0 0', fontWeight: 600 }}>{form.full_name}</p>
                   </div>
                   {form.date_of_birth && (
                     <div>
-                      <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>Date of Birth</span>
-                      <p style={{ margin: '4px 0 0' }}>{new Date(form.date_of_birth).toLocaleDateString()}</p>
+                      <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>
+                        Date of Birth
+                      </span>
+                      <p style={{ margin: '4px 0 0' }}>
+                        {new Date(form.date_of_birth).toLocaleDateString()}
+                      </p>
                     </div>
                   )}
                   {form.gender && (
                     <div>
-                      <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>Gender</span>
-                      <p style={{ margin: '4px 0 0', textTransform: 'capitalize' }}>{form.gender}</p>
+                      <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>
+                        Gender
+                      </span>
+                      <p style={{ margin: '4px 0 0', textTransform: 'capitalize' }}>
+                        {form.gender}
+                      </p>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div style={{ 
-                backgroundColor: 'var(--color-sage-cream)', 
-                padding: 16, 
-                borderRadius: 'var(--border-radius-md)'
-              }}>
+              <div
+                style={{
+                  backgroundColor: 'var(--color-sage-cream)',
+                  padding: 16,
+                  borderRadius: 'var(--border-radius-md)',
+                }}
+              >
                 <h4 style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--color-accent-teal)' }}>
                   Guardian Information
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
                   <div>
-                    <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>Guardian(s)</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>
+                      Guardian(s)
+                    </span>
                     <p style={{ margin: '4px 0 0', fontWeight: 600 }}>
                       {form.guardian_name}
                       {form.guardian_name_2 && `, ${form.guardian_name_2}`}
@@ -441,29 +562,37 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                   </div>
                   {form.guardian_email && (
                     <div>
-                      <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>Email</span>
+                      <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>
+                        Email
+                      </span>
                       <p style={{ margin: '4px 0 0' }}>{form.guardian_email}</p>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div style={{ 
-                backgroundColor: 'var(--color-accent-teal-light)', 
-                padding: 16, 
-                borderRadius: 'var(--border-radius-md)',
-                border: '1px solid var(--color-accent-teal)'
-              }}>
+              <div
+                style={{
+                  backgroundColor: 'var(--color-accent-teal-light)',
+                  padding: 16,
+                  borderRadius: 'var(--border-radius-md)',
+                  border: '1px solid var(--color-accent-teal)',
+                }}
+              >
                 <h4 style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--color-accent-teal)' }}>
                   Enrollment
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>Academic Year</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>
+                      Academic Year
+                    </span>
                     <p style={{ margin: '4px 0 0', fontWeight: 600 }}>{currentYear?.label}</p>
                   </div>
                   <div>
-                    <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>Grade</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>
+                      Grade
+                    </span>
                     <p style={{ margin: '4px 0 0', fontWeight: 600 }}>{getSelectedGradeLabel()}</p>
                   </div>
                 </div>
@@ -476,11 +605,22 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content modal-lg" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
+      <div
+        className="modal-content modal-lg"
+        onClick={e => e.stopPropagation()}
+        style={{ maxWidth: 600 }}
+      >
         <div className="modal-header">
           <h2>Add New Student</h2>
           <button className="modal-close" onClick={onClose}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -488,55 +628,87 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
         </div>
 
         {/* Progress Steps */}
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          padding: '16px 20px',
-          backgroundColor: 'var(--color-sage-cream)',
-          borderBottom: '1px solid var(--color-sage-border)',
-          overflow: 'hidden'
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            padding: '16px 20px',
+            backgroundColor: 'var(--color-sage-cream)',
+            borderBottom: '1px solid var(--color-sage-border)',
+            overflow: 'hidden',
+          }}
+        >
           {STEPS.map((step, index) => {
             const isActive = currentStepIndex === index;
             const isCompleted = currentStepIndex > index;
-            
+
             return (
               <React.Fragment key={step.id}>
                 {index > 0 && (
-                  <div style={{
-                    flex: 1,
-                    height: 2,
-                    backgroundColor: isCompleted ? 'var(--color-accent-emerald)' : 'var(--color-sage-border)',
-                    margin: '0 8px'
-                  }} />
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 2,
+                      backgroundColor: isCompleted
+                        ? 'var(--color-accent-emerald)'
+                        : 'var(--color-sage-border)',
+                      margin: '0 8px',
+                    }}
+                  />
                 )}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  color: isActive ? 'var(--color-accent-teal)' : isCompleted ? 'var(--color-accent-emerald)' : 'var(--color-sage-placeholder)',
-                  flexShrink: 0
-                }}>
-                  <div style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: '50%',
+                <div
+                  style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: isActive ? 'var(--color-accent-teal)' : isCompleted ? 'var(--color-accent-emerald)' : 'var(--color-sage-cream)',
-                    color: isActive || isCompleted ? 'white' : 'var(--color-sage-placeholder)',
-                    border: isActive || isCompleted ? 'none' : '1px solid var(--color-sage-border)'
-                  }}>
+                    gap: 8,
+                    color: isActive
+                      ? 'var(--color-accent-teal)'
+                      : isCompleted
+                        ? 'var(--color-accent-emerald)'
+                        : 'var(--color-sage-placeholder)',
+                    flexShrink: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: isActive
+                        ? 'var(--color-accent-teal)'
+                        : isCompleted
+                          ? 'var(--color-accent-emerald)'
+                          : 'var(--color-sage-cream)',
+                      color: isActive || isCompleted ? 'white' : 'var(--color-sage-placeholder)',
+                      border:
+                        isActive || isCompleted ? 'none' : '1px solid var(--color-sage-border)',
+                    }}
+                  >
                     {isCompleted ? (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                      >
                         <polyline points="20 6 9 17 4 12" />
                       </svg>
                     ) : (
                       step.icon
                     )}
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, display: index < 2 || isActive ? 'block' : 'none' }}>
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: isActive ? 600 : 400,
+                      display: index < 2 || isActive ? 'block' : 'none',
+                    }}
+                  >
                     {step.label}
                   </span>
                 </div>
@@ -546,12 +718,8 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
         </div>
 
         <div className="modal-body">
-          {error && (
-            <div className="error-message mb-4">
-              {error}
-            </div>
-          )}
-          
+          {error && <div className="error-message mb-4">{error}</div>}
+
           {renderStepContent()}
 
           {/* Actions */}
@@ -563,7 +731,15 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                 </button>
                 <button className="btn btn-primary" onClick={goNext}>
                   Continue
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 8 }}>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    style={{ marginLeft: 8 }}
+                  >
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
                 </button>
@@ -571,18 +747,34 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
             ) : currentStep === 'confirm' ? (
               <>
                 <button className="btn btn-outline" onClick={goBack}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    style={{ marginRight: 8 }}
+                  >
                     <polyline points="15 18 9 12 15 6" />
                   </svg>
                   Back
                 </button>
-                <button 
-                  className="btn btn-success btn-lg" 
+                <button
+                  className="btn btn-success btn-lg"
                   onClick={handleSubmit}
                   disabled={isLoading}
                 >
                   {isLoading ? 'Adding Student...' : 'Add Student'}
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 8 }}>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    style={{ marginLeft: 8 }}
+                  >
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </button>
@@ -590,14 +782,30 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
             ) : (
               <>
                 <button className="btn btn-outline" onClick={goBack}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    style={{ marginRight: 8 }}
+                  >
                     <polyline points="15 18 9 12 15 6" />
                   </svg>
                   Back
                 </button>
                 <button className="btn btn-primary" onClick={goNext}>
                   Continue
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 8 }}>
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    style={{ marginLeft: 8 }}
+                  >
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
                 </button>

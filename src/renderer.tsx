@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import './index.css';
 import { db } from './lib/db-client';
 import { AuthProvider, useAuth } from './lib/auth-context';
+import { ToastProvider } from './components/Toast';
 import SetupWizard from './components/SetupWizard';
 import { Welcome } from './components/auth/Welcome';
 import { Login } from './components/auth/Login';
@@ -46,7 +47,7 @@ function AppInner() {
     const loadSchoolDetails = async () => {
       const setting = await db.get("SELECT value FROM app_settings WHERE key = 'school_name'");
       setSchoolName(setting?.value || '');
-      
+
       const termRes = await db.get(`
         SELECT t.label 
         FROM terms t 
@@ -76,43 +77,48 @@ function AppInner() {
       <Routes>
         <Route path="/" element={<Welcome />} />
         <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
-        <Route path="/dashboard" element={
-          user ? (
-            <div className="app-layout">
-              <Sidebar 
-                activeView={view} 
-                onViewChange={setView} 
-                onSettingsClick={() => setShowSettings(true)}
-                onLogout={handleLogout}
-              />
-              <main className="main-content">
-                <TopBar
-                  pageTitle={pageTitles[view] || 'Dashboard'}
-                  schoolName={schoolName}
-                  activeTerm={activeTerm}
-                  userName={user.full_name || user.username}
-                  userRole={user.role}
+        <Route
+          path="/dashboard"
+          element={
+            user ? (
+              <div className="app-layout">
+                <Sidebar
+                  activeView={view}
+                  onViewChange={setView}
+                  onSettingsClick={() => setShowSettings(true)}
+                  onLogout={handleLogout}
                 />
-                <div className="page-content">
-                  {view === 'dashboard' && <Dashboard />}
-                  {view === 'accounts' && <StudentAccounts />}
-                  {view === 'fees' && <FeeStructureManager />}
-                  {view === 'payments' && <PaymentManager />}
-                  {view === 'logs' && <ActivityLog />}
-                  {view === 'backup' && <BackupManager />}
-                </div>
-              </main>
-              {showSettings && (
-                <SettingsModal
-                  user={user}
-                  schoolName={schoolName}
-                  onSchoolNameUpdate={handleSchoolNameUpdate}
-                  onClose={() => setShowSettings(false)}
-                />
-              )}
-            </div>
-          ) : <Navigate to="/login" />
-        } />
+                <main className="main-content">
+                  <TopBar
+                    pageTitle={pageTitles[view] || 'Dashboard'}
+                    schoolName={schoolName}
+                    activeTerm={activeTerm}
+                    userName={user.full_name || user.username}
+                    userRole={user.role}
+                  />
+                  <div className="page-content">
+                    {view === 'dashboard' && <Dashboard />}
+                    {view === 'accounts' && <StudentAccounts />}
+                    {view === 'fees' && <FeeStructureManager />}
+                    {view === 'payments' && <PaymentManager />}
+                    {view === 'logs' && <ActivityLog />}
+                    {view === 'backup' && <BackupManager />}
+                  </div>
+                </main>
+                {showSettings && (
+                  <SettingsModal
+                    user={user}
+                    schoolName={schoolName}
+                    onSchoolNameUpdate={handleSchoolNameUpdate}
+                    onClose={() => setShowSettings(false)}
+                  />
+                )}
+              </div>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
       </Routes>
     </Router>
   );
@@ -120,7 +126,9 @@ function AppInner() {
 
 const App = () => (
   <AuthProvider>
-    <AppInner />
+    <ToastProvider>
+      <AppInner />
+    </ToastProvider>
   </AuthProvider>
 );
 

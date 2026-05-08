@@ -6,52 +6,83 @@ export const Welcome: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: 'var(--background)', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', position: 'relative', overflow: 'hidden' }}>
-        {/* Sphere Canvas Background */}
-        <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '800px', height: '800px', opacity: 0.5, pointerEvents: 'none' }}>
-            <SphereCanvas />
-        </div>
-        <div style={{ position: 'absolute', right: '-10%', top: '50%', transform: 'translateY(-50%)', width: '700px', height: '700px', background: 'radial-gradient(circle, rgba(249,115,22,0.08), transparent 70%)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', left: '-10%', top: '50%', transform: 'translateY(-50%)', width: '400px', height: '400px', background: 'radial-gradient(circle, rgba(20,184,166,0.05), transparent 70%)', pointerEvents: 'none' }} />
+    <div style={{ 
+      minHeight: '100vh', 
+      backgroundColor: 'var(--background)', 
+      color: 'var(--text-primary)', 
+      display: 'flex', 
+      alignItems: 'center', 
+      position: 'relative', 
+      overflow: 'hidden' 
+    }}>
+        {/* Background Decorative Elements */}
+        <div style={{ position: 'absolute', right: '-5%', top: '50%', transform: 'translateY(-50%)', width: '800px', height: '800px', background: 'radial-gradient(circle, rgba(249,115,22,0.06), transparent 70%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', left: '-5%', top: '50%', transform: 'translateY(-50%)', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(20,184,166,0.04), transparent 70%)', pointerEvents: 'none' }} />
         
-        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 40px', width: '100%', position: 'relative', zIndex: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '40px' }}>
-                <img src="./img/feesfoundry-logo.svg" alt="FeesFoundry" style={{ height: '40px', width: 'auto' }} />
-                <span style={{ fontSize: '24px', fontWeight: 'bold' }}>Fees<span style={{ fontWeight: 'normal' }}>Foundry</span></span>
-            </div>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 60px', width: '100%', position: 'relative', zIndex: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '80px' }}>
+                
+                {/* Left Column - Hero Text */}
+                <div style={{ flex: 1, textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <div style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '8px', 
+                        padding: '8px 16px', 
+                        borderRadius: '9999px', 
+                        backgroundColor: 'var(--surface)', 
+                        border: '1px solid var(--border)', 
+                        color: 'var(--primary)', 
+                        marginBottom: '24px', 
+                        fontSize: '13px', 
+                        fontFamily: 'monospace', 
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.02)' 
+                    }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)', animation: 'pulse 2s infinite' }}></span>
+                        Built for African Schools
+                    </div>
 
-            <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '9999px', backgroundColor: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--primary)', marginBottom: '28px', fontSize: '14px', fontFamily: 'monospace', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)', animation: 'pulse 2s infinite' }}></span>
-                    School Fees Management. Built for African Schools.
+                    <h2 style={{ fontSize: '32px', fontWeight: 500, margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>
+                        Welcome to
+                    </h2>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '20px', marginBottom: '32px', width: '100%' }}>
+                        <img src="./img/feesfoundry-logo.svg" alt="FeesFoundry" style={{ height: '72px', width: 'auto' }} />
+                        <h1 style={{ fontSize: '84px', fontWeight: 800, margin: 0, letterSpacing: '-2px', lineHeight: 1 }}>
+                            Fees<span style={{ fontWeight: 400 }}>Foundry</span>
+                        </h1>
+                    </div>
+
+                    <p style={{ fontSize: '20px', color: 'var(--text-secondary)', marginBottom: '48px', maxWidth: '580px', lineHeight: 1.6 }}>
+                        Replace your receipt books and filing cabinets with a simple desktop system. Pull up any student's full school fees history in seconds and record a payment.
+                    </p>
+
+                    <div style={{ display: 'flex', gap: '16px' }}>
+                        <button 
+                            onClick={() => navigate('/login')}
+                            style={{ padding: '18px 40px', backgroundColor: 'var(--primary)', color: 'white', borderRadius: '9999px', fontSize: '18px', fontWeight: 'bold', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(249, 115, 22, 0.3)', transition: 'transform 0.2s, background-color 0.2s' }}
+                            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#ea580c'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'var(--primary)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                        >
+                            Sign In to Dashboard
+                        </button>
+                        <button 
+                            style={{ padding: '18px 40px', backgroundColor: 'var(--surface)', color: 'var(--text-primary)', borderRadius: '9999px', fontSize: '18px', fontWeight: 'bold', border: '1px solid var(--border)', cursor: 'pointer', transition: 'background-color 0.2s, transform 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
+                            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = 'var(--secondary)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'var(--surface)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                        >
+                            Documentation
+                        </button>
+                    </div>
                 </div>
 
-                <h1 style={{ fontSize: '72px', fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.02em', margin: '0 auto 24px auto', color: 'var(--text-primary)' }}>
-                    Stop Drowning in <br/>
-                    <span style={{ color: 'transparent', backgroundClip: 'text', WebkitBackgroundClip: 'text', backgroundImage: 'linear-gradient(to right, #f97316, #fb923c)' }}>School Fees Paperwork</span>
-                </h1>
-
-                <p style={{ fontSize: '20px', color: 'var(--text-secondary)', marginBottom: '40px', maxWidth: '600px', margin: '0 auto 40px auto', lineHeight: 1.6 }}>
-                    Replace your receipt books and filing cabinets with a simple desktop system. Pull up any student's full school fees history in seconds and record a payment.
-                </p>
-
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px' }}>
-                    <button 
-                        onClick={() => navigate('/login')}
-                        style={{ padding: '16px 32px', backgroundColor: 'var(--primary)', color: 'white', borderRadius: '9999px', fontSize: '18px', fontWeight: 'bold', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(249,115,22,0.3)', transition: 'transform 0.2s, background-color 0.2s' }}
-                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#ea580c'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'var(--primary)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                    >
-                        Sign In to Dashboard
-                    </button>
-                    <button 
-                        style={{ padding: '16px 32px', backgroundColor: 'var(--surface)', color: 'var(--text-primary)', borderRadius: '9999px', fontSize: '18px', fontWeight: 'bold', border: '1px solid var(--border)', cursor: 'pointer', transition: 'background-color 0.2s, transform 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
-                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = 'var(--secondary)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'var(--surface)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                    >
-                        Read Documentation
-                    </button>
+                {/* Right Column - Spinning Globe */}
+                <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start', alignItems: 'center', overflow: 'visible' }}>
+                    <div style={{ width: '500px', height: '500px', position: 'relative' }}>
+                        <SphereCanvas />
+                    </div>
                 </div>
+
             </div>
         </div>
 
