@@ -148,10 +148,10 @@ const StudentAccounts: React.FC = () => {
     if (!selectedYear) return;
     try {
       let query = `
-        SELECT s.id, s.full_name, g.label as grade_label, g.id as grade_id, 
+        SELECT s.id, s.full_name, g.label as grade_label, g.id as grade_id,
           s.guardian_name, s.guardian_contact, s.guardian_name_2, s.guardian_contact_2, s.guardian_email,
           COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) as invoiced,
-          COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as paid
+          COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as paid
         FROM students s
         LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
         LEFT JOIN grades g ON sye.grade_id = g.id

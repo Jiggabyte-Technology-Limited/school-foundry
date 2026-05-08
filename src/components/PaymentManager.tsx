@@ -35,6 +35,164 @@ interface PaymentStats {
   outstandingYear: number;
 }
 
+// Helper component for last 10 activities
+const ActivityLogPreview: React.FC = () => {
+  const [recentLogs, setRecentLogs] = useState<any[]>([]);
+
+  useEffect(() => {
+    loadRecentLogs();
+  }, []);
+
+  const loadRecentLogs = async () => {
+    const logs = await db.all(`
+      SELECT al.*, u.username
+      FROM activity_log al
+      LEFT JOIN users u ON al.user_id = u.id
+      ORDER BY al.logged_at DESC
+      LIMIT 10
+    `);
+    setRecentLogs(logs);
+  };
+
+  const formatAction = (action: string) => action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+
+  return (
+    <div>
+      {recentLogs.length === 0 ? (
+        <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '24px' }}>No activity yet</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {recentLogs.map((log) => (
+            <div key={log.id} style={{
+              display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px',
+              backgroundColor: 'var(--color-sage-cream)', borderRadius: '8px', borderLeft: '3px solid var(--primary)'
+            }}>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontWeight: 600, fontSize: '13px' }}>{formatAction(log.action)}</span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '12px', marginLeft: '8px' }}>{log.details}</span>
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                {log.username || 'System'} • {formatDate(log.logged_at)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Helper component for full paginated logs
+const FullActivityLog: React.FC = () => {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const LOGS_PER_PAGE = 50;
+
+  useEffect(() => {
+    loadLogs();
+  }, [page]);
+
+  const loadLogs = async () => {
+    const offset = (page - 1) * LOGS_PER_PAGE;
+    const [logData, countData] = await Promise.all([
+      db.all(`
+        SELECT al.*, u.username
+        FROM activity_log al
+        LEFT JOIN users u ON al.user_id = u.id
+        ORDER BY al.logged_at DESC
+        LIMIT ? OFFSET ?
+      `, [LOGS_PER_PAGE, offset]),
+      db.get('SELECT COUNT(*) as count FROM activity_log')
+    ]);
+    setLogs(logData);
+    setTotalCount(countData?.count || 0);
+  };
+
+  const totalPages = Math.ceil(totalCount / LOGS_PER_PAGE);
+
+  const formatAction = (action: string) => action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+
+  const PaginationControls = () => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+        Showing {(page - 1) * LOGS_PER_PAGE + 1} - {Math.min(page * LOGS_PER_PAGE, totalCount)} of {totalCount}
+      </span>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button
+          className="btn btn-outline"
+          onClick={() => setPage(p => Math.max(1, p - 1))}
+          disabled={page === 1}
+          style={{ padding: '6px 12px', fontSize: '12px' }}
+        >
+          Previous
+        </button>
+        <span style={{ display: 'flex', alignItems: 'center', fontSize: '12px', color: 'var(--text-secondary)' }}>
+          Page {page} of {totalPages}
+        </span>
+        <button
+          className="btn btn-outline"
+          onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+          disabled={page >= totalPages}
+          style={{ padding: '6px 12px', fontSize: '12px' }}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div>
+      <PaginationControls />
+      <table style={{ marginTop: '12px', width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', padding: '10px', borderBottom: '2px solid var(--border)', fontSize: '12px' }}>Date & Time</th>
+            <th style={{ textAlign: 'left', padding: '10px', borderBottom: '2px solid var(--border)', fontSize: '12px' }}>User</th>
+            <th style={{ textAlign: 'left', padding: '10px', borderBottom: '2px solid var(--border)', fontSize: '12px' }}>Action</th>
+            <th style={{ textAlign: 'left', padding: '10px', borderBottom: '2px solid var(--border)', fontSize: '12px' }}>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {logs.map((log) => (
+            <tr key={log.id}>
+              <td style={{ padding: '10px', borderBottom: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                {formatDate(log.logged_at)}
+              </td>
+              <td style={{ padding: '10px', borderBottom: '1px solid var(--border)', fontSize: '13px', fontWeight: 600 }}>
+                {log.username || 'System'}
+              </td>
+              <td style={{ padding: '10px', borderBottom: '1px solid var(--border)', fontSize: '12px' }}>
+                {formatAction(log.action)}
+              </td>
+              <td style={{ padding: '10px', borderBottom: '1px solid var(--border)', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                {log.details || '-'}
+              </td>
+            </tr>
+          ))}
+          {logs.length === 0 && (
+            <tr>
+              <td colSpan={4} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary)' }}>
+                No activity logs found
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      <PaginationControls />
+    </div>
+  );
+};
+
 const PaymentManager: React.FC = () => {
   const { user, canRecordPayments, canVoidPayments } = useAuth();
   const [students, setStudents] = useState<any[]>([]);
@@ -61,7 +219,13 @@ const PaymentManager: React.FC = () => {
   // Filters for activity table
   const [activityTypeFilter, setActivityTypeFilter] = useState('all');
   const [timePeriodFilter, setTimePeriodFilter] = useState('all');
-  
+
+  // Activity log state
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [showFullLogs, setShowFullLogs] = useState(false);
+  const [logPage, setLogPage] = useState(1);
+  const LOGS_PER_PAGE = 50;
+
   // Student selection filters
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [selectedGradeFilter, setSelectedGradeFilter] = useState<string>('all');
@@ -73,6 +237,8 @@ const PaymentManager: React.FC = () => {
     term_id: '',
     amount: '',
     receipt_number: '',
+    payment_method: 'cash',
+    notes: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -107,7 +273,7 @@ const PaymentManager: React.FC = () => {
     const [studentList, gradeList, yearList] = await Promise.all([
       db.all(`SELECT s.id, s.full_name, g.label as grade_label, sye.grade_id,
         COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
-        COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as balance
+        COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
         FROM students s
         LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
         LEFT JOIN grades g ON sye.grade_id = g.id
@@ -136,17 +302,22 @@ const PaymentManager: React.FC = () => {
   };
 
   const loadPayments = async () => {
-    const paymentList = await db.all(`
-      SELECT p.*, s.full_name as student_name, s.guardian_name, s.guardian_contact, y.label as year_label, t.label as term_label, u.username as recorded_by_name
-      FROM payments p
-      JOIN students s ON p.student_id = s.id
-      JOIN academic_years y ON p.year_id = y.id
-      JOIN terms t ON p.term_id = t.id
-      LEFT JOIN users u ON p.received_by = u.id
-      ORDER BY p.payment_date DESC
-      LIMIT 100
-    `);
-    setPayments(paymentList);
+    try {
+      const paymentList = await db.all(`
+        SELECT p.*, s.full_name as student_name, s.guardian_name, s.guardian_contact, y.label as year_label, t.label as term_label, u.username as recorded_by_name
+        FROM payments p
+        JOIN students s ON p.student_id = s.id
+        JOIN academic_years y ON p.year_id = y.id
+        JOIN terms t ON p.term_id = t.id
+        LEFT JOIN users u ON p.recorded_by = u.id
+        WHERE p.is_voided = 0
+        ORDER BY p.payment_date DESC
+        LIMIT 100
+      `);
+      setPayments(paymentList);
+    } catch (err) {
+      console.error('Error loading payments:', err);
+    }
   };
 
   const handleVoidPayment = async () => {
@@ -182,18 +353,18 @@ const PaymentManager: React.FC = () => {
     const currentYear = await db.get(`SELECT id FROM academic_years ORDER BY label DESC LIMIT 1`);
 
     const [todayStats, weekStats, monthStats, yearStats, termFees, termPayments, yearFees, yearPayments] = await Promise.all([
-      db.get(`SELECT SUM(amount_paid_cents) as total, COUNT(*) as count FROM payments WHERE date(payment_date) = ?`, [today]),
-      db.get(`SELECT SUM(amount_paid_cents) as total, COUNT(*) as count FROM payments WHERE date(payment_date) >= ?`, [weekAgo]),
-      db.get(`SELECT SUM(amount_paid_cents) as total FROM payments WHERE date(payment_date) >= ?`, [monthAgo]),
-      db.get(`SELECT SUM(amount_paid_cents) as total FROM payments WHERE date(payment_date) >= ?`, [yearStart]),
+      db.get(`SELECT SUM(amount_paid_cents) as total, COUNT(*) as count FROM payments WHERE is_voided = 0 AND date(payment_date) = ?`, [today]),
+      db.get(`SELECT SUM(amount_paid_cents) as total, COUNT(*) as count FROM payments WHERE is_voided = 0 AND date(payment_date) >= ?`, [weekAgo]),
+      db.get(`SELECT SUM(amount_paid_cents) as total FROM payments WHERE is_voided = 0 AND date(payment_date) >= ?`, [monthAgo]),
+      db.get(`SELECT SUM(amount_paid_cents) as total FROM payments WHERE is_voided = 0 AND date(payment_date) >= ?`, [yearStart]),
       // Expected fees for current term
       db.get(`SELECT COALESCE(SUM(fs.amount_cents), 0) as total FROM fee_structure fs WHERE fs.year_id = ? AND fs.term_id = ?`, [currentYear?.id || 0, currentTerm?.id || 0]),
       // Paid for current term
-      db.get(`SELECT COALESCE(SUM(p.amount_paid_cents), 0) as total FROM payments p WHERE p.year_id = ? AND p.term_id = ?`, [currentYear?.id || 0, currentTerm?.id || 0]),
+      db.get(`SELECT COALESCE(SUM(p.amount_paid_cents), 0) as total FROM payments p WHERE p.is_voided = 0 AND p.year_id = ? AND p.term_id = ?`, [currentYear?.id || 0, currentTerm?.id || 0]),
       // Expected fees for current year
       db.get(`SELECT COALESCE(SUM(fs.amount_cents), 0) as total FROM fee_structure fs WHERE fs.year_id = ?`, [currentYear?.id || 0]),
       // Paid for current year
-      db.get(`SELECT COALESCE(SUM(p.amount_paid_cents), 0) as total FROM payments p WHERE p.year_id = ?`, [currentYear?.id || 0]),
+      db.get(`SELECT COALESCE(SUM(p.amount_paid_cents), 0) as total FROM payments p WHERE p.is_voided = 0 AND p.year_id = ?`, [currentYear?.id || 0]),
     ]);
 
     const expectedTermTotal = termFees?.total || 0;
@@ -219,12 +390,43 @@ const PaymentManager: React.FC = () => {
     });
   };
 
+  const loadActivityLogs = async (page = 1) => {
+    try {
+      const offset = (page - 1) * LOGS_PER_PAGE;
+      const logs = await db.all(`
+        SELECT al.*, u.username
+        FROM activity_log al
+        LEFT JOIN users u ON al.user_id = u.id
+        ORDER BY al.logged_at DESC
+        LIMIT ? OFFSET ?
+      `, [LOGS_PER_PAGE, offset]);
+      setActivityLogs(logs);
+      setLogPage(page);
+    } catch (err) {
+      console.error('Error loading activity logs:', err);
+    }
+  };
+
+  const getTotalLogCount = async () => {
+    const result = await db.get('SELECT COUNT(*) as count FROM activity_log');
+    return result?.count || 0;
+  };
+
   const generateReceiptNumber = async () => {
-    const lastPayment = await db.get('SELECT receipt_number FROM payments ORDER BY id DESC LIMIT 1');
-    const nextNum = lastPayment 
-      ? String(parseInt(lastPayment.receipt_number.replace(/\D/g, '') || '0') + 1).padStart(6, '0')
-      : '000001';
-    setForm(f => ({ ...f, receipt_number: `RCP${nextNum}` }));
+    // Use timestamp + random to guarantee uniqueness
+    const timestamp = Date.now().toString().slice(-6);
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const receiptNumber = `RCP${timestamp}${random}`;
+
+    // Verify it doesn't exist, if so, try again
+    const existing = await db.get('SELECT id FROM payments WHERE receipt_number = ?', [receiptNumber]);
+    if (existing) {
+      // If somehow exists, add more randomness
+      const newRandom = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+      setForm(f => ({ ...f, receipt_number: `RCP${timestamp}${newRandom}` }));
+    } else {
+      setForm(f => ({ ...f, receipt_number: receiptNumber }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -251,9 +453,9 @@ const PaymentManager: React.FC = () => {
       }
 
       const result = await db.run(`
-        INSERT INTO payments (student_id, year_id, term_id, grade_id, receipt_number, amount_paid_cents, payment_method, recorded_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, [form.student_id, form.year_id, form.term_id, enrollment.grade_id, form.receipt_number, amountCents, 'cash', user?.id ?? 1]);
+        INSERT INTO payments (student_id, year_id, term_id, grade_id, receipt_number, amount_paid_cents, payment_date, payment_method, notes, recorded_by)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), ?, ?, ?)
+      `, [form.student_id, form.year_id, form.term_id, enrollment.grade_id, form.receipt_number, amountCents, form.payment_method || 'cash', form.notes || '', user?.id ?? 1]);
 
       const student = students.find(s => s.id === Number(form.student_id));
       await db.run(
@@ -276,8 +478,11 @@ const PaymentManager: React.FC = () => {
         setSelectedReceipt(newPayment);
       }
 
-      setForm({ student_id: '', year_id: form.year_id, term_id: form.term_id, amount: '', receipt_number: '' });
+      setForm({ student_id: '', year_id: form.year_id, term_id: form.term_id, amount: '', receipt_number: '', payment_method: 'cash', notes: '' });
       await generateReceiptNumber();
+
+      // Small delay to ensure DB commits
+      await new Promise(resolve => setTimeout(resolve, 100));
       loadPayments();
       loadStats();
       loadData(); // Reload students with updated balances
@@ -579,9 +784,9 @@ const PaymentManager: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>YEAR</label>
-                  <select 
-                    className="input-default" 
-                    value={form.year_id} 
+                  <select
+                    className="input-default"
+                    value={form.year_id}
                     onChange={(e) => setForm({ ...form, year_id: e.target.value })}
                     style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
                   >
@@ -590,9 +795,9 @@ const PaymentManager: React.FC = () => {
                 </div>
                 <div>
                   <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>TERM</label>
-                  <select 
-                    className="input-default" 
-                    value={form.term_id} 
+                  <select
+                    className="input-default"
+                    value={form.term_id}
                     onChange={(e) => setForm({ ...form, term_id: e.target.value })}
                     style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
                   >
@@ -601,12 +806,12 @@ const PaymentManager: React.FC = () => {
                 </div>
                 <div>
                   <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>AMOUNT ($)</label>
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    min="0.01" 
-                    className="input-default" 
-                    value={form.amount} 
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    className="input-default"
+                    value={form.amount}
                     onChange={(e) => setForm({ ...form, amount: e.target.value })}
                     placeholder="0.00"
                     autoFocus
@@ -615,7 +820,7 @@ const PaymentManager: React.FC = () => {
                   {(() => {
                     const selectedStudent = students.find(s => s.id === Number(form.student_id));
                     return selectedStudent && selectedStudent.balance > 0 ? (
-                      <button 
+                      <button
                         type="button"
                         onClick={() => setForm({ ...form, amount: (selectedStudent.balance / 100).toFixed(2) })}
                         style={{
@@ -635,6 +840,34 @@ const PaymentManager: React.FC = () => {
                       </button>
                     ) : null;
                   })()}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>PAYMENT METHOD</label>
+                  <select
+                    className="input-default"
+                    value={form.payment_method}
+                    onChange={(e) => setForm({ ...form, payment_method: e.target.value })}
+                    style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="ecocash">EcoCash / Mobile</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}>NOTES</label>
+                  <input
+                    type="text"
+                    className="input-default"
+                    value={form.notes}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                    placeholder="Optional notes..."
+                    style={{ background: 'white', color: '#1f2937' }}
+                  />
                 </div>
               </div>
               
@@ -792,6 +1025,36 @@ const PaymentManager: React.FC = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* ACTIVITY LOG SECTION */}
+      <div className="card">
+        <div className="flex-between mb-4">
+          <h3 style={{ margin: 0 }}>Activity Log</h3>
+          {!showFullLogs ? (
+            <button
+              className="btn btn-sage"
+              onClick={() => { loadActivityLogs(1); setShowFullLogs(true); }}
+            >
+              View Full Logs
+            </button>
+          ) : (
+            <button
+              className="btn btn-outline"
+              onClick={() => { setShowFullLogs(false); setLogPage(1); }}
+            >
+              Show Less
+            </button>
+          )}
+        </div>
+
+        {!showFullLogs ? (
+          // Show last 10 activities
+          <ActivityLogPreview />
+        ) : (
+          // Show paginated full logs
+          <FullActivityLog />
+        )}
       </div>
 
       {selectedReceipt && <Receipt payment={selectedReceipt} onClose={() => setSelectedReceipt(null)} />}

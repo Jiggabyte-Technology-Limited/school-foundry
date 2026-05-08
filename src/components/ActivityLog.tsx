@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
+import { useAuth } from '../lib/auth-context';
 
 interface LogEntry {
   id: number;
@@ -11,9 +12,13 @@ interface LogEntry {
 }
 
 const ActivityLog: React.FC = () => {
+  const { user } = useAuth();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [filteredLogs, setFilteredLogs] = useState<LogEntry[]>([]);
-  
+  const [error, setError] = useState<string | null>(null);
+
+  const canViewLogs = user?.role === 'admin';
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [actionFilter, setActionFilter] = useState('');
@@ -31,17 +36,23 @@ const ActivityLog: React.FC = () => {
   }, [logs, searchQuery, actionFilter, dateFrom, dateTo]);
 
   const loadLogs = async () => {
-    const data = await db.all(`
-      SELECT al.*, u.username
-      FROM activity_log al
-      LEFT JOIN users u ON al.user_id = u.id
-      ORDER BY al.logged_at DESC
-    `);
-    setLogs(data);
-    
-    // Get unique actions for filter
-    const uniqueActions = [...new Set(data.map((l: LogEntry) => l.action))];
-    setActions(uniqueActions);
+    try {
+      const data = await db.all(`
+        SELECT al.*, u.username
+        FROM activity_log al
+        LEFT JOIN users u ON al.user_id = u.id
+        ORDER BY al.logged_at DESC
+      `);
+      setLogs(data);
+      setError(null);
+
+      // Get unique actions for filter
+      const uniqueActions = [...new Set(data.map((l: LogEntry) => l.action))];
+      setActions(uniqueActions);
+    } catch (err) {
+      console.error('Failed to load logs:', err);
+      setError('Failed to load activity logs');
+    }
   };
 
   const applyFilters = () => {
@@ -112,6 +123,16 @@ const ActivityLog: React.FC = () => {
       <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
         <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
         <p>You do not have permission to view activity logs.</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
+        <h3 style={{ color: '#ef4444' }}>Error</h3>
+        <p>{error}</p>
+        <button className="btn btn-sage" onClick={loadLogs}>Retry</button>
       </div>
     );
   }

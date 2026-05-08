@@ -195,7 +195,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
   entity     TEXT,
   entity_id  INTEGER,
   details    TEXT,
-  logged_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+  logged_at  TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_activity_log_user_id   ON activity_log(user_id);

@@ -79,7 +79,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
         db.all(`
           SELECT s.id, s.full_name, g.label as grade_label,
             COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
-            COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as balance
+            COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
           FROM students s
           JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
           JOIN grades g ON sye.grade_id = g.id
@@ -96,12 +96,11 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
         setForm(f => ({ ...f, term_id: String(termList[0].id) }));
       }
 
-      // Generate receipt number
-      const lastPayment = await db.get('SELECT receipt_number FROM payments ORDER BY id DESC LIMIT 1');
-      const nextNum = lastPayment 
-        ? String(parseInt(lastPayment.receipt_number.replace(/\D/g, '') || '0') + 1).padStart(6, '0')
-        : '000001';
-      setForm(f => ({ ...f, receipt_number: `RCP${nextNum}` }));
+      // Generate unique receipt number
+      const timestamp = Date.now().toString().slice(-6);
+      const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+      const receiptNumber = `RCP${timestamp}${random}`;
+      setForm(f => ({ ...f, receipt_number: receiptNumber }));
 
       if (preSelectedStudent) {
         const student = studentList.find(s => s.id === preSelectedStudent);
@@ -111,7 +110,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
           const studentData = await db.get(`
             SELECT s.id, s.full_name, g.label as grade_label,
               COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
-              COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as balance
+              COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
             FROM students s
             JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
             JOIN grades g ON sye.grade_id = g.id
@@ -143,7 +142,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
       const studentData = await db.get(`
         SELECT s.id, s.full_name, g.label as grade_label,
           COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
-          COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as balance
+          COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
         FROM students s
         JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
         JOIN grades g ON sye.grade_id = g.id
@@ -224,7 +223,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
             notes,
             recorded_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), ?, ?, ?)
       `, [
           selectedStudent.id, 
           currentYear.id, 
@@ -236,6 +235,12 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
           form.notes,
           user?.id || 1 // Fallback to 1 if no user (should not happen with auth)
       ]);
+
+      // Log the activity
+      await db.run(
+        'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+        [user?.id ?? null, user?.username ?? 'System', 'payment_recorded', 'payments', result.lastInsertRowid || result.lastID, `Payment of $${form.amount} recorded for ${selectedStudent.full_name} (${form.receipt_number})`]
+      );
 
       // Fetch the newly created payment to show receipt
       const newPayment = await db.get(`

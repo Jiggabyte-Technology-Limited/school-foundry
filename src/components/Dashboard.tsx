@@ -73,7 +73,7 @@ const Dashboard: React.FC = () => {
       const [studentList, yearList] = await Promise.all([
         db.all(`SELECT s.id, s.full_name, g.label as grade_label, sye.grade_id,
           COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
-          COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as balance
+          COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
           FROM students s
           LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
           LEFT JOIN grades g ON sye.grade_id = g.id
@@ -102,9 +102,11 @@ const Dashboard: React.FC = () => {
     setPaymentError('');
     try {
       const amountCents = Math.round(parseFloat(paymentAmount) * 100);
-      const lastPayment = await db.get('SELECT receipt_number FROM payments ORDER BY id DESC LIMIT 1');
-      const nextNum = lastPayment ? String(parseInt(lastPayment.receipt_number.replace(/\D/g, '') || '0') + 1).padStart(6, '0') : '000001';
-      
+      // Generate unique receipt number
+      const timestamp = Date.now().toString().slice(-6);
+      const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+      const receiptNumber = `R${timestamp}${random}`;
+
       // Get student's grade for this year
       const enrollment = await db.get(
         'SELECT grade_id FROM student_year_enrollment WHERE student_id = ? AND year_id = ?',
@@ -116,8 +118,14 @@ const Dashboard: React.FC = () => {
       }
 
       const result = await db.run(
-        'INSERT INTO payments (student_id, year_id, term_id, grade_id, receipt_number, amount_paid_cents, payment_date, payment_method, recorded_by) VALUES (?, ?, ?, ?, ?, ?, date("now"), ?, ?)',
-        [selectedStudentForPayment.id, paymentYear, paymentTerm, enrollment.grade_id, `R${nextNum}`, amountCents, 'cash', 1]
+        'INSERT INTO payments (student_id, year_id, term_id, grade_id, receipt_number, amount_paid_cents, payment_date, payment_method, recorded_by) VALUES (?, ?, ?, ?, ?, ?, datetime("now", "localtime"), ?, ?)',
+        [selectedStudentForPayment.id, paymentYear, paymentTerm, enrollment.grade_id, receiptNumber, amountCents, 'cash', 1]
+      );
+
+      // Log the activity
+      await db.run(
+        'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+        [null, 'System', 'payment_recorded', 'payments', result.lastInsertRowid || result.lastID, `Payment of $${paymentAmount} recorded for ${selectedStudentForPayment.full_name} (${receiptNumber})`]
       );
 
       // Fetch the newly created payment to show receipt
