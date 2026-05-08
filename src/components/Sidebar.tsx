@@ -18,11 +18,11 @@ interface NavItem {
 const allNavItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid', roles: ['admin', 'bursar', 'viewer'] },
   { id: 'accounts', label: 'Student Accounts', icon: 'file-text', roles: ['admin', 'bursar', 'viewer'] },
-  { id: 'fees', label: 'Fee Structure', icon: 'dollar', roles: ['admin'] },
   { id: 'payments', label: 'Payments', icon: 'credit-card', roles: ['admin', 'bursar'] },
+  { id: 'fees', label: 'Fee Structure', icon: 'dollar', roles: ['admin'] },
   { id: 'logs', label: 'Logs', icon: 'list', roles: ['admin'] },
   { id: 'backup', label: 'Backup', icon: 'database', roles: ['admin'] },
-  ];
+];
 
 const iconPaths: Record<string, JSX.Element> = {
   grid: (
@@ -85,14 +85,18 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-logo">
-          <svg width="40" height="40" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="32" height="32" rx="8" fill="var(--primary)" />
-            <path d="M16 8V24M10 12H16C18.2091 12 20 13.7909 20 16C20 18.2091 18.2091 20 16 20H12C9.79086 20 8 18.2091 8 16C8 13.7909 9.79086 12 12 12M12 20H18C20.2091 20 22 21.7909 22 24" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-          </svg>
+          <img 
+            src="./img/feesfoundry-icon.svg" 
+            alt="FeesFoundry Logo" 
+            style={{ width: '35.2px', height: '35.2px' }} 
+          />
         </div>
         <div className="sidebar-title">
-          <span className="sidebar-title-text">Synthetix</span>
-          <span className="sidebar-title-sub">Finance</span>
+          <span className="sidebar-title-text" style={{ display: 'flex' }}>
+            <span style={{ fontWeight: 800, color: '#f97316' }}>Fees</span>
+            <span style={{ fontWeight: 400, color: '#000000' }}>Foundry</span>
+          </span>
+          <span className="sidebar-title-sub" style={{ fontSize: '8px' }}>Forging a Stronger Financial Future</span>
         </div>
       </div>
 
@@ -117,9 +121,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
               {iconPaths[item.icon]}
             </svg>
             <span className="text-display">{item.label}</span>
-            {activeView === item.id && (
-              <div style={{ marginLeft: 'auto', width: '4px', height: '16px', backgroundColor: 'white', borderRadius: '2px' }} />
-            )}
           </button>
         ))}
       </nav>

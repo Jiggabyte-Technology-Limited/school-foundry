@@ -1,0 +1,10 @@
+<svg width="128" height="128" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simplified version for Small Scale (Favicon/Menu) -->
+  <rect width="512" height="512" rx="100" fill="#1A1A1A"/>
+  
+  <!-- Iconic 'F' and Foundry shape hybrid -->
+  <path d="M160 140H352V200H220V260H320V320H220V420H160V140Z" fill="#3B82F6"/>
+  
+  <!-- The "Spark" -->
+  <circle cx="380" cy="140" r="50" fill="#FFD700"/>
+</svg>

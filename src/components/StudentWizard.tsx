@@ -418,19 +418,18 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                 <h4 style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--color-accent-teal)' }}>
                   Guardian Information
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
                   <div>
-                    <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>Primary Guardian</span>
-                    <p style={{ margin: '4px 0 0', fontWeight: 600 }}>{form.guardian_name}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: 13 }}>{form.guardian_contact}</p>
+                    <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>Guardian(s)</span>
+                    <p style={{ margin: '4px 0 0', fontWeight: 600 }}>
+                      {form.guardian_name}
+                      {form.guardian_name_2 && `, ${form.guardian_name_2}`}
+                    </p>
+                    <p style={{ margin: '2px 0 0', fontSize: 13 }}>
+                      {form.guardian_contact}
+                      {form.guardian_contact_2 && `, ${form.guardian_contact_2}`}
+                    </p>
                   </div>
-                  {form.guardian_name_2 && (
-                    <div>
-                      <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>Secondary Guardian</span>
-                      <p style={{ margin: '4px 0 0' }}>{form.guardian_name_2}</p>
-                      <p style={{ margin: '2px 0 0', fontSize: 13 }}>{form.guardian_contact_2}</p>
-                    </div>
-                  )}
                   {form.guardian_email && (
                     <div>
                       <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>Email</span>

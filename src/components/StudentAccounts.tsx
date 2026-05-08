@@ -5,7 +5,22 @@ import EditStudentModal from './EditStudentModal';
 import PaymentWizard from './PaymentWizard';
 import { useAuth } from '../lib/auth-context';
 
-interface Student { id: number; full_name: string; grade_label: string; grade_id: number; balance: number; guardian_name: string; guardian_contact: string; }
+interface Student { 
+  id: number; 
+  full_name: string; 
+  grade_label: string; 
+  grade_id: number; 
+  balance: number; 
+  invoiced: number;
+  paid: number;
+  guardian_name: string; 
+  guardian_contact: string; 
+  guardian_name_2: string;
+  guardian_contact_2: string;
+  guardian_email: string;
+  school_logo?: string;
+}
+
 interface Grade { id: number; label: string; }
 interface AcademicYear { id: number; label: string; }
 interface Term { id: number; label: string; }
@@ -16,19 +31,79 @@ const StudentAccounts: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [selectedGrade, setSelectedGrade] = useState<number | null>(null);
+  const [termsList, setTermsList] = useState<Term[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showPaid, setShowPaid] = useState(true);
+  const [showOwing, setShowOwing] = useState(true);
   const [statementData, setStatementData] = useState<any>(null);
   const [showPrintView, setShowPrintView] = useState(false);
+  const [isPrintingAll, setIsPrintingAll] = useState(false);
+  const [allStatementsData, setAllStatementsData] = useState<any[]>([]);
+
+  const filteredStudents = students.filter(s => {
+    const matchesSearch = s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || String(s.id).includes(searchQuery);
+    const isPaid = s.balance <= 0;
+    const isOwing = s.balance > 0;
+    const matchesStatus = (showPaid && isPaid) || (showOwing && isOwing);
+    return matchesSearch && matchesStatus;
+  });
+
+  const printAllStatements = async () => {
+    if (filteredStudents.length === 0) return;
+    setIsPrintingAll(true);
+    const statements = [];
+    for (const student of filteredStudents) {
+      try {
+        const [payments, fees] = await Promise.all([
+            db.all(`
+                SELECT p.payment_date as date, p.receipt_number as ref, p.amount_paid_cents as amount,
+                       'Payment' as type, t.label as term_label
+                FROM payments p
+                LEFT JOIN terms t ON p.term_id = t.id
+                WHERE p.student_id = ? AND p.year_id = ?
+                ORDER BY p.payment_date`, [student.id, selectedYear]),
+            db.all(`
+                SELECT fs.description, fs.amount_cents as amount, 'Fee' as type,
+                       t.label as term_label, fs.fee_type
+                FROM fee_structure fs
+                LEFT JOIN terms t ON fs.term_id = t.id
+                WHERE fs.grade_id = ? AND fs.year_id = ?
+                AND (t.start_date IS NULL OR t.start_date <= date('now'))`, [student.grade_id, selectedYear])
+        ]);
+
+        const totalFees = fees.reduce((sum: number, f: any) => sum + f.amount, 0);
+        const totalPaid = payments.reduce((sum: number, p: any) => sum + p.amount, 0);
+        const balance = totalFees - totalPaid;
+
+        statements.push({
+            student,
+            payments,
+            fees,
+            totalFees,
+            totalPaid, 
+            balance,
+            generatedAt: new Date().toLocaleDateString()
+        });
+      } catch (err) {
+        console.error(`Error loading statement for student ${student.id}:`, err);
+      }
+    }
+    setAllStatementsData(statements);
+    // Give time for the print-only view to render
+    setTimeout(() => {
+        window.print();
+        setIsPrintingAll(false);
+        setAllStatementsData([]);
+    }, 1000);
+  };
   const [showWizard, setShowWizard] = useState(false);
   const [showPaymentWizard, setShowPaymentWizard] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [schoolName, setSchoolName] = useState('School Management');
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [overviewData, setOverviewData] = useState<any>(null);
-  const [isOverviewLoading, setIsOverviewLoading] = useState(false);
 
   useEffect(() => { loadInitialData(); }, []);
 
@@ -63,8 +138,8 @@ const StudentAccounts: React.FC = () => {
       let query = `
         SELECT s.id, s.full_name, g.label as grade_label, g.id as grade_id, 
           s.guardian_name, s.guardian_contact, s.guardian_name_2, s.guardian_contact_2, s.guardian_email,
-          COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
-          COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as balance
+          COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) as invoiced,
+          COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ?), 0) as paid
         FROM students s
         LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
         LEFT JOIN grades g ON sye.grade_id = g.id
@@ -75,43 +150,14 @@ const StudentAccounts: React.FC = () => {
           params.push(gradeId); 
       }
       const result = await db.all(query + ' ORDER BY s.full_name', params);
-      setStudents(result);
+      // Map balance locally
+      const resultWithBalance = result.map((s: any) => ({
+        ...s,
+        balance: s.invoiced - s.paid
+      }));
+      setStudents(resultWithBalance);
     } catch (err) {
       console.error('Error loading students:', err);
-    }
-  };
-
-  const loadOverview = async (yearId: number, gradeId: number | null) => {
-    setIsOverviewLoading(true);
-    try {
-        let invoicedQuery = `SELECT SUM(fs.amount_cents) as total FROM fee_structure fs JOIN student_year_enrollment sye ON fs.grade_id = sye.grade_id AND fs.year_id = sye.year_id WHERE fs.year_id = ?`;
-        let paidQuery = `SELECT SUM(amount_paid_cents) as total FROM payments WHERE year_id = ?`;
-        const params: any[] = [yearId];
-
-        if (gradeId) {
-            invoicedQuery += ` AND fs.grade_id = ?`;
-            paidQuery += ` AND grade_id = ?`;
-            params.push(gradeId);
-        }
-
-        const [invoicedResult, paidResult] = await Promise.all([
-            db.get(invoicedQuery, params),
-            db.get(paidQuery, params)
-        ]);
-
-        const totalInvoiced = invoicedResult?.total || 0;
-        const totalPaid = paidResult?.total || 0;
-
-        setOverviewData({
-            totalInvoiced,
-            totalPaid,
-            balance: totalInvoiced - totalPaid,
-            isGrade: !!gradeId
-        });
-    } catch (err) {
-        console.error('Error loading overview:', err);
-    } finally {
-        setIsOverviewLoading(false);
     }
   };
 
@@ -119,11 +165,24 @@ const StudentAccounts: React.FC = () => {
     if (selectedYear) { 
         loadStudents(selectedGrade); 
         loadTermsForYear(selectedYear); 
-        if (!selectedStudent) { 
-            loadOverview(selectedYear, selectedGrade); 
-        } 
     } 
-  }, [selectedYear, selectedGrade, selectedStudent]);
+  }, [selectedYear, selectedGrade]);
+
+  // Dynamic Overview Data based on filtered results
+  const getDynamicOverview = () => {
+    const totalInvoiced = filteredStudents.reduce((sum, s) => sum + s.invoiced, 0);
+    const totalPaid = filteredStudents.reduce((sum, s) => sum + s.paid, 0);
+    const balance = totalInvoiced - totalPaid;
+    
+    return {
+        totalInvoiced,
+        totalPaid,
+        balance,
+        isGrade: !!selectedGrade
+    };
+  };
+
+  const currentOverview = getDynamicOverview();
 
   const viewStatement = async (student: Student) => {
     setSelectedStudent(student);
@@ -184,7 +243,6 @@ const StudentAccounts: React.FC = () => {
         viewStatement(selectedStudent);
     }
     loadStudents(selectedGrade);
-    loadOverview(selectedYear!, selectedGrade);
   };
 
   return (
@@ -193,16 +251,6 @@ const StudentAccounts: React.FC = () => {
         <div className="flex-between">
             <h2 style={{ margin: 0, fontSize: '28px', fontWeight: 600 }} className="text-display">Student Accounts</h2>
             <div style={{ display: 'flex', gap: '12px' }}>
-                <button 
-                  className="btn btn-outline" 
-                  onClick={() => setShowPaymentWizard(true)}
-                  style={{ borderColor: 'var(--primary)', color: 'var(--primary)' }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
-                  </svg>
-                  Record Payment
-                </button>
                 <button 
                   className="btn btn-primary" 
                   onClick={() => setShowWizard(true)}
@@ -216,7 +264,25 @@ const StudentAccounts: React.FC = () => {
         </div>
         
         <div className="card-surface">
-          <div className="metric-label">Filter by Grade/Form</div>
+          <div className="flex-between mb-4">
+            <div className="metric-label" style={{ margin: 0 }}>Filter by Grade/Form</div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className={`btn ${showPaid ? 'btn-success' : 'btn-outline'}`} 
+                  onClick={() => setShowPaid(!showPaid)}
+                  style={{ padding: '4px 12px', fontSize: '11px', opacity: showPaid ? 1 : 0.5 }}
+                >
+                  Paid in Full
+                </button>
+                <button 
+                  className={`btn ${showOwing ? 'btn-primary' : 'btn-outline'}`} 
+                  onClick={() => setShowOwing(!showOwing)}
+                  style={{ padding: '4px 12px', fontSize: '11px', opacity: showOwing ? 1 : 0.5 }}
+                >
+                  Owing
+                </button>
+            </div>
+          </div>
           <div className="chip-list mb-4">
              <button
                 className={`chip text-display ${selectedGrade === null ? 'chip-active' : ''}`}
@@ -236,17 +302,37 @@ const StudentAccounts: React.FC = () => {
                 </button>
             ))}
           </div>
-          <div style={{ position: 'relative' }}>
-            <input 
-              className="input-default text-display" 
-              placeholder="Search by name or ID..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)} 
-              style={{ paddingLeft: '40px' }}
-            />
-            <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, display: 'flex' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <input 
+                className="input-default text-display" 
+                placeholder="Search by name or ID..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)} 
+                style={{ paddingLeft: '40px' }}
+              />
+              <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, display: 'flex' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              </div>
             </div>
+            <button 
+                className="btn btn-outline" 
+                onClick={() => window.print()}
+                disabled={filteredStudents.length === 0}
+                style={{ whiteSpace: 'nowrap' }}
+            >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                Print Overview
+            </button>
+            <button 
+                className="btn btn-outline" 
+                onClick={printAllStatements}
+                disabled={isPrintingAll || filteredStudents.length === 0}
+                style={{ whiteSpace: 'nowrap' }}
+            >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                {isPrintingAll ? 'Preparing...' : 'Print All Statements'}
+            </button>
           </div>
         </div>
 
@@ -261,7 +347,7 @@ const StudentAccounts: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                    {students.filter(s => s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || String(s.id).includes(searchQuery)).map(s => {
+                    {filteredStudents.map(s => {
                         const isSelected = selectedStudent?.id === s.id;
                         return (
                             <tr
@@ -284,10 +370,10 @@ const StudentAccounts: React.FC = () => {
                             </tr>
                         );
                     })}
-                    {students.length === 0 && (
+                    {filteredStudents.length === 0 && (
                       <tr>
                         <td colSpan={4} style={{ textAlign: 'center', padding: '48px', color: 'var(--text-secondary)', fontStyle: 'italic' }} className="text-display">
-                          No students found for this selection
+                          No students found matching your filters
                         </td>
                       </tr>
                     )}
@@ -299,6 +385,33 @@ const StudentAccounts: React.FC = () => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {showPrintView && selectedStudent ? (
             <>
+                {statementData && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                        <button 
+                            className="btn btn-outline" 
+                            onClick={() => { setShowPrintView(false); setSelectedStudent(null); }}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            Exit
+                        </button>
+                        <button 
+                            className="btn btn-outline" 
+                            onClick={() => window.print()}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                            Print Statement
+                        </button>
+                        <button 
+                            className="btn btn-primary" 
+                            onClick={() => setShowPaymentWizard(true)}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
+                            </svg>
+                            Record Payment
+                        </button>
+                    </div>
+                )}
                 <div className="card-surface" style={{ padding: '32px', minHeight: '500px', position: 'relative', border: '1px solid var(--border)', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05)' }}>
                 {isLoadingDetail && (
                     <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(255, 255, 255, 0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20, backdropFilter: 'blur(4px)', borderRadius: '16px' }}>
@@ -320,6 +433,11 @@ const StudentAccounts: React.FC = () => {
                 ) : statementData ? (
                     <>
                         <div style={{ textAlign: 'center', borderBottom: '2px solid rgba(249, 115, 22, 0.1)', paddingBottom: '32px', marginBottom: '32px' }}>
+                            {selectedStudent?.school_logo && (
+                                <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'center' }}>
+                                    <img src={selectedStudent.school_logo} alt="School Logo" style={{ maxHeight: '80px', maxWidth: '200px' }} />
+                                </div>
+                            )}
                             <h2 style={{ fontSize: '28px', fontWeight: 800, margin: '0 0 4px 0', letterSpacing: '-0.02em' }} className="text-display">{schoolName}</h2>
                             <div className="metric-label" style={{ margin: 0, opacity: 0.5 }}>Statement of Account • {statementData.generatedAt}</div>
                         </div>
@@ -338,23 +456,13 @@ const StudentAccounts: React.FC = () => {
                                 </div>
                                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }} className="text-display">
                                     <div style={{ marginBottom: '4px' }}>
-                                        <span className="metric-label" style={{ fontSize: '10px', marginRight: '8px' }}>Primary Guardian</span>
-                                        <span style={{ fontWeight: 600 }}>{statementData.student.guardian_name}</span>
+                                        <span className="metric-label" style={{ fontSize: '10px', marginRight: '8px' }}>Guardian</span>
+                                        <span style={{ fontWeight: 600 }}>{statementData.student.guardian_name}
+                                        {statementData.student.guardian_name_2 && `, ${statementData.student.guardian_name_2}`}</span>
                                         <span style={{ margin: '0 8px', opacity: 0.3 }}>|</span>
-                                        <span className="text-mono">{statementData.student.guardian_contact}</span>
+                                        <span className="text-mono">{statementData.student.guardian_contact}
+                                        {statementData.student.guardian_contact_2 && `, ${statementData.student.guardian_contact_2}`}</span>
                                     </div>
-                                    {statementData.student.guardian_name_2 && (
-                                        <div style={{ marginBottom: '4px' }}>
-                                            <span className="metric-label" style={{ fontSize: '10px', marginRight: '8px' }}>Secondary Guardian</span>
-                                            <span style={{ fontWeight: 600 }}>{statementData.student.guardian_name_2}</span>
-                                            {statementData.student.guardian_contact_2 && (
-                                                <>
-                                                    <span style={{ margin: '0 8px', opacity: 0.3 }}>|</span>
-                                                    <span className="text-mono">{statementData.student.guardian_contact_2}</span>
-                                                </>
-                                            )}
-                                        </div>
-                                    )}
                                     {statementData.student.guardian_email && (
                                         <div>
                                             <span className="metric-label" style={{ fontSize: '10px', marginRight: '8px' }}>Email Address</span>
@@ -408,15 +516,6 @@ const StudentAccounts: React.FC = () => {
                             </div>
                         </div>
 
-                        <div style={{ backgroundColor: 'rgba(249, 115, 22, 0.03)', padding: '16px 24px', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div className="text-display" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                                Total Remaining Financial Commitment for {selectedYear ? academicYears.find(y => y.id === selectedYear)?.label : 'Year'}
-                            </div>
-                            <div className="text-mono" style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                                ${( (statementData.balance + (statementData.upcoming?.reduce((s:any,u:any)=>s+u.amount,0) || 0)) / 100 ).toFixed(2)}
-                            </div>
-                        </div>
-
                         <div className="metric-label" style={{ marginBottom: '16px', opacity: 0.5 }}>Financial History</div>
                         <div style={{ maxHeight: '35vh', overflowY: 'auto', paddingRight: '8px' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -457,38 +556,30 @@ const StudentAccounts: React.FC = () => {
 
                         {statementData.upcoming && statementData.upcoming.length > 0 && (
                             <div style={{ marginTop: '40px' }}>
-                                <div className="metric-label" style={{ marginBottom: '16px', opacity: 0.5 }}>Upcoming Academic Schedule</div>
-                                <div style={{ backgroundColor: 'var(--secondary)', borderRadius: '16px', padding: '24px', border: '1px solid var(--border)' }}>
-                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <div className="metric-label" style={{ marginBottom: '16px', opacity: 0.5 }}>Upcoming Fees</div>
+                                <div style={{ backgroundColor: 'var(--secondary)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border)' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                                         <thead>
                                             <tr>
-                                                <th style={{ background: 'transparent', padding: '0 0 12px 0' }}>Term</th>
-                                                <th style={{ background: 'transparent', padding: '0 0 12px 0' }}>Expected Start</th>
-                                                <th style={{ background: 'transparent', padding: '0 0 12px 0', textAlign: 'right' }}>Projected Fee</th>
+                                                <th style={{ background: 'transparent', padding: '0 0 8px 0', textAlign: 'left', fontWeight: 700 }}>Term</th>
+                                                <th style={{ background: 'transparent', padding: '0 0 8px 0', textAlign: 'left', fontWeight: 700 }}>Expected Start</th>
+                                                <th style={{ background: 'transparent', padding: '0 0 8px 0', textAlign: 'right', fontWeight: 700 }}>Fees</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {statementData.upcoming.map((u: any, i: number) => (
                                                 <tr key={`up-${i}`}>
-                                                    <td style={{ padding: '12px 0', fontWeight: 700 }} className="text-display">{u.term_label}</td>
-                                                    <td style={{ padding: '12px 0' }} className="text-mono">{u.start_date || 'TBA'}</td>
-                                                    <td style={{ padding: '12px 0', textAlign: 'right', fontWeight: 700 }} className="text-mono">${(u.amount/100).toFixed(2)}</td>
+                                                    <td style={{ padding: '6px 0', fontWeight: 600 }} className="text-display">{u.term_label}</td>
+                                                    <td style={{ padding: '6px 0' }} className="text-mono">{u.start_date || 'TBA'}</td>
+                                                    <td style={{ padding: '6px 0', textAlign: 'right', fontWeight: 700 }} className="text-mono">${(u.amount/100).toFixed(2)}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                     </table>
-                                    <div style={{ marginTop: '16px', padding: '12px', backgroundColor: 'rgba(249, 115, 22, 0.05)', borderRadius: '8px', fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '8px' }}>
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                                        <span>Projections based on current approved fee structure for this academic year.</span>
-                                    </div>
                                 </div>
                             </div>
                         )}
 
-                        <div style={{ marginTop: '32px', display: 'flex', gap: '16px' }} className="no-print">
-                            <button className="btn btn-primary" style={{ flex: 1, padding: '16px' }} onClick={() => window.print()}>Print Statement</button>
-                            <button className="btn btn-outline" style={{ padding: '0 32px' }} onClick={() => { setShowPrintView(false); setSelectedStudent(null); }}>Exit</button>
-                        </div>
                     </>
                 ) : (
                     <div style={{ textAlign: 'center', padding: '96px 0', color: 'var(--text-secondary)', opacity: 0.4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }} className="text-display">
@@ -497,12 +588,12 @@ const StudentAccounts: React.FC = () => {
                 )}
             </div>
             </>
-          ) : overviewData ? (
+          ) : currentOverview ? (
             <div className="card-surface" style={{ padding: '40px', minHeight: '500px', position: 'relative' }}>
                 <div style={{ textAlign: 'center', borderBottom: '2px solid rgba(249, 115, 22, 0.1)', paddingBottom: '32px', marginBottom: '40px' }}>
                     <h2 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 4px 0', tracking: '-0.02em' }} className="text-display uppercase">{schoolName}</h2>
                     <div className="metric-label" style={{ margin: 0, opacity: 0.6 }}>
-                        {overviewData.isGrade ? `Grade Report: ${grades.find(g => g.id === selectedGrade)?.label}` : 'Master Financial Overview'}
+                        {currentOverview.isGrade ? `Grade Report: ${grades.find(g => g.id === selectedGrade)?.label}` : 'Master Financial Overview'}
                     </div>
                 </div>
 
@@ -510,36 +601,36 @@ const StudentAccounts: React.FC = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
                         <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
                             <div className="metric-label" style={{ fontSize: '10px' }}>Total Invoiced</div>
-                            <div className="metric-value" style={{ fontSize: '20px' }}>${(overviewData.totalInvoiced/100).toFixed(2)}</div>
+                            <div className="metric-value" style={{ fontSize: '20px' }}>${(currentOverview.totalInvoiced/100).toFixed(2)}</div>
                         </div>
                         <div style={{ backgroundColor: 'var(--secondary)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
                             <div className="metric-label" style={{ fontSize: '10px' }}>Collected</div>
-                            <div className="metric-value" style={{ fontSize: '20px', color: '#10B981' }}>${(overviewData.totalPaid/100).toFixed(2)}</div>
+                            <div className="metric-value" style={{ fontSize: '20px', color: '#10B981' }}>${(currentOverview.totalPaid/100).toFixed(2)}</div>
                         </div>
                         <div style={{ backgroundColor: 'rgba(249, 115, 22, 0.05)', padding: '20px', borderRadius: '16px', border: '1.5px solid var(--primary)' }}>
                             <div className="metric-label" style={{ fontSize: '10px', color: 'var(--primary)' }}>Unpaid Balance</div>
                             <div className="metric-value" style={{ fontSize: '20px', color: 'var(--primary)' }}>
-                                ${(overviewData.balance/100).toFixed(2)}
+                                ${(currentOverview.balance/100).toFixed(2)}
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <div className="metric-label" style={{ marginBottom: '24px', opacity: 0.5 }}>
-                    {overviewData.isGrade ? 'Student Enrollment Breakdown' : 'Institutional Performance by Grade'}
+                    {currentOverview.isGrade ? 'Student Enrollment Breakdown' : 'Institutional Performance by Grade'}
                 </div>
                 <div style={{ maxHeight: '45vh', overflowY: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
                             <tr>
-                                <th>{overviewData.isGrade ? 'Student Identity' : 'Academic Form'}</th>
+                                <th>{currentOverview.isGrade ? 'Student Identity' : 'Academic Form'}</th>
                                 <th style={{ textAlign: 'right' }}>Net Balance</th>
                                 <th style={{ textAlign: 'center', width: '128px' }}>Compliance</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {overviewData.isGrade ? (
-                                students.map(s => (
+                            {currentOverview.isGrade ? (
+                                filteredStudents.map(s => (
                                     <tr key={s.id} onClick={() => viewStatement(s)} style={{ cursor: 'pointer', transition: 'all 0.2s ease' }} className="hover:bg-secondary">
                                         <td style={{ fontWeight: 700 }} className="text-display">{s.full_name}</td>
                                         <td className="text-mono" style={{ fontWeight: 800, textAlign: 'right' }}>${(s.balance/100).toFixed(2)}</td>
@@ -563,7 +654,8 @@ const StudentAccounts: React.FC = () => {
                                 ))
                             ) : (
                                 grades.map(g => {
-                                    const gradeStudents = students.filter(s => s.grade_id === g.id);
+                                    const gradeStudents = filteredStudents.filter(s => s.grade_id === g.id);
+                                    if (gradeStudents.length === 0) return null; // Don't show empty grades in filtered view
                                     const gradeOutstanding = gradeStudents.reduce((sum, s) => sum + s.balance, 0);
                                     return (
                                         <tr key={g.id} className="hover:bg-secondary" style={{ transition: 'background-color 0.2s ease' }}>
@@ -626,6 +718,82 @@ const StudentAccounts: React.FC = () => {
             loadStudents(selectedGrade);
           }} 
         />
+      )}
+
+      {/* Print All Statements Hidden View */}
+      {allStatementsData.length > 0 && (
+        <div className="print-only" style={{ display: 'block', backgroundColor: 'white' }}>
+          {allStatementsData.map((data, idx) => (
+            <div key={idx} style={{ padding: '40px', pageBreakAfter: 'always', color: 'black' }}>
+                <div style={{ textAlign: 'center', borderBottom: '2px solid #EEE', paddingBottom: '24px', marginBottom: '32px' }}>
+                    <h2 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 4px 0' }}>{schoolName}</h2>
+                    <div style={{ fontSize: '12px', opacity: 0.6 }}>Statement of Account • {data.generatedAt}</div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>      
+                    <div>
+                        <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 8px 0' }}>{data.student.full_name}</h3>
+                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '14px', fontWeight: 700 }}>{data.student.grade_label}</span>
+                            <span style={{ fontSize: '12px' }}>ID: {data.student.id}</span>
+                        </div>
+                        <div style={{ fontSize: '12px' }}>
+                            <div>Guardian: {data.student.guardian_name} | {data.student.guardian_contact}</div>
+                        </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                        <div style={{ 
+                            padding: '4px 10px', 
+                            border: '1px solid #000',
+                            fontSize: '10px', 
+                            fontWeight: 800,
+                            textTransform: 'uppercase'
+                        }}>
+                            {data.balance > 0 ? 'Payment Required' : 'Account Cleared'}
+                        </div>
+                    </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '32px' }}>
+                    <div style={{ border: '1px solid #EEE', padding: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>Invoiced</div>
+                        <div style={{ fontSize: '18px', fontWeight: 700 }}>${(data.totalFees/100).toFixed(2)}</div>
+                    </div>
+                    <div style={{ border: '1px solid #EEE', padding: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>Paid</div>
+                        <div style={{ fontSize: '18px', fontWeight: 700 }}>${(data.totalPaid/100).toFixed(2)}</div>
+                    </div>
+                    <div style={{ border: '1px solid #000', padding: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>Arrears</div>
+                        <div style={{ fontSize: '18px', fontWeight: 700 }}>${(data.balance/100).toFixed(2)}</div>
+                    </div>
+                </div>
+
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                        <tr style={{ borderBottom: '1px solid #000' }}>
+                            <th style={{ textAlign: 'left', padding: '8px' }}>Detail</th>
+                            <th style={{ textAlign: 'right', padding: '8px' }}>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {data.fees.map((item:any, i:number) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #EEE' }}>
+                                <td style={{ padding: '8px' }}>{item.term_label}: {item.description}</td>
+                                <td style={{ padding: '8px', textAlign: 'right' }}>${(item.amount/100).toFixed(2)}</td>
+                            </tr>
+                        ))}
+                        {data.payments.map((item:any, i:number) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #EEE' }}>
+                                <td style={{ padding: '8px' }}>Payment - {item.date} (Ref: {item.ref})</td>
+                                <td style={{ padding: '8px', textAlign: 'right' }}>-${(item.amount/100).toFixed(2)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                </div>
+            ))}
+        </div>
       )}
     </div>
   );

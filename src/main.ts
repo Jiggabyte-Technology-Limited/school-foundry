@@ -17,8 +17,11 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: preloadPath,
+      plugins: true,
     },
   });
+
+  win.maximize();
 
   if (isDev) {
     win.loadURL('http://localhost:5173');

@@ -1,11 +1,11 @@
 {
-  "name": "school-db",
+  "name": "feesfoundry",
   "version": "1.0.0",
-  "description": "School Fees Management System for Rural Schools",
+  "description": "FeesFoundry - Forging a Stronger Financial Future for Schools",
   "main": "dist/main.js",
   "build": {
-    "appId": "com.schoolfees.manager",
-    "productName": "School Fees Manager",
+    "appId": "com.feesfoundry.app",
+    "productName": "FeesFoundry",
     "directories": {
       "output": "release"
     }

@@ -33,6 +33,9 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
 
   // Form data
   const [schoolName, setSchoolName] = useState('');
+  const [schoolAddress, setSchoolAddress] = useState('');
+  const [schoolPhone, setSchoolPhone] = useState('');
+  const [schoolEmail, setSchoolEmail] = useState('');
   const [adminFullName, setAdminFullName] = useState('');
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
@@ -144,6 +147,9 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
     try {
       // 1. Save school info
       await db.run('INSERT INTO app_settings (key, value) VALUES (?, ?)', ['school_name', schoolName]);
+      if (schoolAddress.trim()) await db.run('INSERT INTO app_settings (key, value) VALUES (?, ?)', ['school_address', schoolAddress]);
+      if (schoolPhone.trim()) await db.run('INSERT INTO app_settings (key, value) VALUES (?, ?)', ['school_phone', schoolPhone]);
+      if (schoolEmail.trim()) await db.run('INSERT INTO app_settings (key, value) VALUES (?, ?)', ['school_email', schoolEmail]);
 
       // 2. Create admin user
       const passwordHash = await bcryptjs.hash(adminPassword, 10);
@@ -207,7 +213,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
             </div>
             <h2 className="wizard-title text-display" style={{ fontSize: '32px', letterSpacing: '-0.02em' }}>Intelligence Scaled.</h2>
             <p className="wizard-subtitle text-display" style={{ maxWidth: 440, margin: '0 auto 32px', fontSize: '16px', lineHeight: '1.6' }}>
-              Welcome to Synthetix Finance. Let's get your school's financial infrastructure set up in just a few minutes.
+              Welcome to FeesFoundry. Let's get your school's financial infrastructure set up in just a few minutes.
             </p>
             <div style={{ 
               backgroundColor: 'var(--secondary)', 
@@ -257,6 +263,38 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                   placeholder="e.g., Springfield Elementary School"
                   autoFocus
                 />
+              </div>
+              <div className="wizard-field">
+                <label className="text-display">School Address</label>
+                <input
+                  className="text-display"
+                  type="text"
+                  value={schoolAddress}
+                  onChange={(e) => setSchoolAddress(e.target.value)}
+                  placeholder="e.g., 123 Main Street, City, State"
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="wizard-field">
+                  <label className="text-display">Phone Number</label>
+                  <input
+                    className="text-display"
+                    type="tel"
+                    value={schoolPhone}
+                    onChange={(e) => setSchoolPhone(e.target.value)}
+                    placeholder="e.g., +1 (555) 123-4567"
+                  />
+                </div>
+                <div className="wizard-field">
+                  <label className="text-display">Email Address</label>
+                  <input
+                    className="text-display"
+                    type="email"
+                    value={schoolEmail}
+                    onChange={(e) => setSchoolEmail(e.target.value)}
+                    placeholder="e.g., info@school.edu"
+                  />
+                </div>
               </div>
             </div>
           </div>

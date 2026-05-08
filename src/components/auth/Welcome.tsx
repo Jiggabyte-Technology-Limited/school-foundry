@@ -9,23 +9,17 @@ export const Welcome: React.FC = () => {
         <div className="flex flex-col items-center justify-center min-h-screen p-8">
         <div className="max-w-4xl text-center">
             <div style={{ 
-                width: '80px', 
-                height: '80px', 
-                borderRadius: '24px', 
-                backgroundColor: 'var(--primary)',
-                color: 'white',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 32px'
+                marginBottom: '32px'
             }}>
-                <svg width="50" height="50" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M16 8V24M10 12H16C18.2091 12 20 13.7909 20 16C20 18.2091 18.2091 20 16 20H12C9.79086 20 8 18.2091 8 16C8 13.7909 9.79086 12 12 12M12 20H18C20.2091 20 22 21.7909 22 24" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-                </svg>
+                <img 
+                    src="./img/feesfoundry-logo.svg" 
+                    alt="FeesFoundry Logo" 
+                    style={{ width: '120px', height: '120px', margin: '0 auto' }} 
+                />
             </div>
             
             <h1 className="text-display" style={{ fontSize: '72px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '24px', letterSpacing: '-0.03em', lineHeight: 1 }}>
-            Intelligence Scaled.
+            FeesFoundry
             </h1>
             <p className="text-display" style={{ fontSize: '20px', color: 'var(--text-secondary)', marginBottom: '48px', maxWidth: '600px', mx: 'auto', lineHeight: 1.6 }}>
             The definitive financial operating system for modern academic institutions. Precision, efficiency, and clarity in every transaction.
@@ -53,7 +47,7 @@ export const Welcome: React.FC = () => {
         
         <div style={{ position: 'fixed', bottom: '40px', left: 0, right: 0, textAlign: 'center' }}>
             <span className="text-mono" style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                Synthetix Finance • v1.2.0 • Build 2026
+                FeesFoundry • v1.2.0 • Build 2026
             </span>
         </div>
         </div>
