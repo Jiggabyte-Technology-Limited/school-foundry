@@ -2,11 +2,12 @@ import { app, BrowserWindow } from 'electron';
 import * as path from 'path';
 import { initializeDatabase } from './db/init';
 import { setupIpcHandlers } from './db/ipc';
+import { checkAndDebitFees } from './lib/auto-debit';
 
 function createWindow() {
   const isDev = !app.isPackaged;
   const preloadPath = path.join(__dirname, 'preload.js');
-  
+
   console.log('[Main] Preload Path:', preloadPath);
   console.log('[Main] Dev Mode:', isDev);
 
@@ -34,6 +35,12 @@ async function startApp() {
   await initializeDatabase();
   setupIpcHandlers();
   createWindow();
+
+  // Check for and apply fees for periods that have started (run on startup)
+  setTimeout(() => checkAndDebitFees(), 3000);
+
+  // Check every hour for new periods to debit
+  setInterval(() => checkAndDebitFees(), 60 * 60 * 1000);
 }
 
 app.whenReady().then(startApp);

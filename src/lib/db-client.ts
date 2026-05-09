@@ -4,6 +4,23 @@ export interface DbRunResult {
   changes: number;
 }
 
+export interface PrintToPdfOptions {
+  html: string;
+  filename: string;
+  title: string;
+}
+
+export interface PrintToPdfResult {
+  success: boolean;
+  filePath?: string;
+  error?: string;
+}
+
+export interface OpenFileResult {
+  success: boolean;
+  error?: string;
+}
+
 declare global {
   interface Window {
     api: {
@@ -12,6 +29,10 @@ declare global {
       dbGet: (sql: string, params: any[]) => Promise<any>;
       fsBackup: () => Promise<boolean>;
       fsRestore: () => Promise<boolean>;
+      printToPdf: (options: PrintToPdfOptions) => Promise<PrintToPdfResult>;
+      openFileForPrint: (filePath: string) => Promise<OpenFileResult>;
+      getPrintOutputDir: () => Promise<string>;
+      autoDebitFees: () => Promise<{ success: boolean; error?: string }>;
     };
   }
 }

@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS users (
   full_name     TEXT    NOT NULL,
   username      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
   password_hash TEXT    NOT NULL,
-  role          TEXT    NOT NULL CHECK(role IN ('admin', 'bursar', 'viewer')),
+  role               TEXT    NOT NULL CHECK(role IN ('admin', 'user')),
   is_active     INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
   created_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS users (
 |---|---|
 | `username` | Case-insensitive unique. No spaces. |
 | `password_hash` | bcrypt hash, minimum cost factor 10. Never store plain text. |
-| `role` | `admin` — full access. `bursar` — record/view payments. `viewer` — read-only reports. |
+| `role` | `admin` — full access. `user` — record/view payments and manage students. |
 | `is_active` | `0` = deactivated. Deactivated users cannot log in but their records are preserved in logs. |
 | `created_by` | Which admin created this account. NULL for the first admin (self-created on setup). |
 
@@ -102,17 +102,17 @@ CREATE INDEX IF NOT EXISTS idx_users_role     ON users(role);
 
 #### Role Permissions Summary
 
-| Action | admin | bursar | viewer |
-|---|---|---|---|
-| Manage users | ✅ | ❌ | ❌ |
-| Configure fee structure | ✅ | ❌ | ❌ |
-| Add/edit students | ✅ | ✅ | ❌ |
-| Record payments | ✅ | ✅ | ❌ |
-| Void payments | ✅ | ❌ | ❌ |
-| View all reports | ✅ | ✅ | ✅ |
-| View activity log | ✅ | ❌ | ❌ |
-| Backup / Restore | ✅ | ❌ | ❌ |
-| Open new academic year | ✅ | ❌ | ❌ |
+| Action | admin | user |
+|---|---|---|
+| Manage users | ✅ | ❌ |
+| Configure fee structure | ✅ | ❌ |
+| Add/edit students | ✅ | ✅ |
+| Record payments | ✅ | ✅ |
+| Void payments | ✅ | ❌ |
+| View all reports | ✅ | ✅ |
+| View activity log | ✅ | ❌ |
+| Backup / Restore | ✅ | ❌ |
+| Open new academic year | ✅ | ❌ |
 
 ---
 

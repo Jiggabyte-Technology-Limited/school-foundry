@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import bcryptjs from 'bcryptjs';
 import { db } from '../../lib/db-client';
 import { useAuth } from '../../lib/auth-context';
+import SphereCanvas from '../SphereCanvas';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 5;
@@ -14,6 +15,26 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [schoolName, setSchoolName] = useState('FeesFoundry');
+  const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const fetchSchoolDetails = async () => {
+      try {
+        const nameRes = await db.get("SELECT value FROM app_settings WHERE key = 'school_name'");
+        if (nameRes && nameRes.value) {
+          setSchoolName(nameRes.value);
+        }
+        const logoRes = await db.get("SELECT value FROM app_settings WHERE key = 'school_logo'");
+        if (logoRes && logoRes.value) {
+          setSchoolLogo(logoRes.value);
+        }
+      } catch (err) {
+        console.error("Failed to fetch school details", err);
+      }
+    };
+    fetchSchoolDetails();
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,10 +127,10 @@ export const Login: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', width: '100%' }}>
-      {/* Left Side - Orange Visual Section */}
+      {/* Left Side - Orange Visual Section with SphereCanvas */}
       <div style={{ 
         flex: 1, 
-        background: 'linear-gradient(135deg, #f97316 0%, #ea580c 50%, #c2410c 100%)',
+        backgroundColor: '#f97316',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
@@ -118,75 +139,66 @@ export const Login: React.FC = () => {
         overflow: 'hidden',
         padding: '40px'
       }}>
-        {/* Background Image with low opacity */}
+        {/* SphereCanvas Background */}
         <div style={{ 
           position: 'absolute', 
-          top: 0, 
-          left: 0, 
-          right: 0, 
-          bottom: 0, 
-          backgroundImage: 'url("./img/feesfoundry-logo.jpg")',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          opacity: 0.1,
-          mixBlendMode: 'overlay'
-        }} />
-        
-        {/* Decorative circles */}
-        <div style={{ position: 'absolute', top: '10%', left: '10%', width: '200px', height: '200px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }} />
-        <div style={{ position: 'absolute', bottom: '15%', right: '10%', width: '300px', height: '300px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(10px)' }} />
-        <div style={{ position: 'absolute', top: '40%', right: '20%', width: '150px', height: '150px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)' }} />
-        
-        {/* Floating elements */}
-        <div style={{ position: 'absolute', top: '20%', right: '30%', width: '80px', height: '80px', borderRadius: '20px', background: 'rgba(255,255,255,0.15)', transform: 'rotate(15deg)' }} />
-        <div style={{ position: 'absolute', bottom: '30%', left: '15%', width: '120px', height: '120px', borderRadius: '30px', background: 'rgba(255,255,255,0.1)', transform: 'rotate(-10deg)' }} />
+          inset: 0, 
+          zIndex: 0,
+          opacity: 0.6,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+           <div style={{ width: '100%', height: '100%', minWidth: '600px', minHeight: '600px', maxWidth: '800px', maxHeight: '800px' }}>
+              <SphereCanvas />
+           </div>
+        </div>
         
         {/* Main visual content */}
         <div style={{ textAlign: 'center', color: 'white', zIndex: 1, maxWidth: '800px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <img 
             src="./img/feesfoundry-logo.png" 
             alt="FeesFoundry Logo" 
-            style={{ width: '120px', height: '120px', marginBottom: '24px' }} 
+            style={{ width: '80px', height: '80px', marginBottom: '24px', filter: 'brightness(0) invert(1)' }} 
           />
           <h1 style={{ fontSize: '48px', margin: 0, letterSpacing: '-1px', display: 'flex', alignItems: 'center' }}>
             <span style={{ fontWeight: 800, color: '#FFFFFF' }}>Fees</span>
             <span style={{ fontWeight: 400, color: '#FFFFFF' }}>Foundry</span>
           </h1>
-          <p style={{ fontSize: '18px', marginTop: '16px', opacity: 0.9, fontWeight: 500, color: 'white' }}>Forging a Stronger Financial Future<br/>for Schools.</p>
+          <p style={{ fontSize: '18px', marginTop: '16px', fontWeight: 500, color: 'rgba(255,255,255,0.8)' }}>Forging a Stronger Financial Future<br/>for Schools.</p>
           
           <div style={{ 
             marginTop: '32px', 
-            textAlign: 'left',
+            textAlign: 'center',
             width: '100%',
             maxWidth: '700px',
-            backgroundColor: 'rgba(255,255,255,0.05)',
+            backgroundColor: '#ffffff',
             borderRadius: '16px',
-            padding: '32px',
-            border: '1px solid rgba(255,255,255,0.1)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '24px'
+            padding: '28px 32px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.15)'
           }}>
-            <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'white' }}>Features</h3>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 20px 0', color: '#f97316' }}>Key Features</h3>
 
             <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: '1fr 1fr', 
-              gap: '16px 32px' 
+              display: 'inline-grid', 
+              gridTemplateColumns: 'repeat(2, 1fr)', 
+              gap: '14px 40px',
+              textAlign: 'left',
+              marginTop: '10px'
             }}>
               {[
-                'Record Payments and Print Receipts',
-                'Secure Login',
-                'Print Statements (Individual, Grade, School)',
-                'Print list of Students Owing',
-                'List Students Fully Paid',
+                'Record Payments & Print Receipts',
+                'Secure Login System',
+                'Print Financial Statements',
+                'Track Students Owing',
+                'List Fully Paid Students',
                 'Analytics Dashboard',
-                'Activity Logs',
-                'Add and Manage Students'
+                'Activity Logging',
+                'Student Management'
               ].map((feature, idx) => (
                 <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--primary)' }} />
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'white' }}>{feature}</span>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f97316', flexShrink: 0 }} />
+                  <span style={{ fontSize: '13px', fontWeight: 500, color: '#374151' }}>{feature}</span>
                 </div>
               ))}
             </div>
@@ -194,9 +206,9 @@ export const Login: React.FC = () => {
 
           {/* Contact Details */}
           <div style={{ 
-            marginTop: '40px', 
-            paddingTop: '32px', 
-            borderTop: '1px solid rgba(255,255,255,0.15)',
+            marginTop: '32px', 
+            paddingTop: '24px', 
+            borderTop: '1px solid rgba(255,255,255,0.3)',
             width: '100%',
             maxWidth: '360px',
             display: 'flex',
@@ -220,10 +232,10 @@ export const Login: React.FC = () => {
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: '4px', 
-                background: 'rgba(37, 211, 102, 0.2)', 
+                background: '#ffffff', 
                 padding: '2px 8px', 
                 borderRadius: '12px',
-                border: '1px solid rgba(37, 211, 102, 0.3)',
+                border: '1px solid rgba(0,0,0,0.1)',
                 marginLeft: '4px'
               }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="#25D366">
@@ -236,8 +248,8 @@ export const Login: React.FC = () => {
         </div>
         
         {/* Footer on orange side */}
-        <div style={{ position: 'absolute', bottom: '24px', color: 'rgba(255,255,255,0.7)', fontSize: '12px', textAlign: 'center' }}>
-          Developed by <strong>Jiggabyte Technology Limited</strong>
+        <div style={{ position: 'absolute', bottom: '24px', color: 'rgba(0,0,0,0.4)', fontSize: '12px', textAlign: 'center', zIndex: 1 }}>
+          Developed by <strong style={{ color: 'rgba(0,0,0,0.5)' }}>Jiggabyte Technology Limited</strong>
         </div>
       </div>
 
@@ -249,17 +261,63 @@ export const Login: React.FC = () => {
         justifyContent: 'center', 
         alignItems: 'center',
         background: 'white',
-        padding: '40px'
+        padding: '40px',
+        position: 'relative'
       }}>
+        {/* Back Button */}
+        <button 
+          onClick={() => navigate('/')}
+          style={{
+            position: 'absolute',
+            top: '40px',
+            right: '40px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'none',
+            border: 'none',
+            color: 'var(--text-secondary)',
+            fontSize: '14px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            transition: 'background-color 0.2s, color 0.2s',
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.backgroundColor = 'var(--background)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
+          onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          Back to Welcome
+        </button>
+
         <div style={{ width: '100%', maxWidth: '400px' }}>
           {/* Login header */}
           <div style={{ marginBottom: '40px' }}>
-            <h2 style={{ fontSize: '28px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>Welcome Back</h2>
-            <p style={{ color: 'var(--text-secondary)', marginTop: '8px', fontSize: '14px' }}>Sign in to manage your school fees</p>
+            {schoolLogo && (
+              <img 
+                src={schoolLogo} 
+                alt={`${schoolName} Logo`} 
+                style={{ width: 'auto', height: '64px', maxHeight: '64px', marginBottom: '16px', borderRadius: '12px', objectFit: 'contain' }} 
+              />
+            )}
+            <h2 style={{ fontSize: '28px', fontWeight: 800, margin: 0, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+              Welcome to<br/>
+              {schoolName}
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '12px', fontSize: '14px' }}>
+              <span style={{ fontWeight: 700 }}>Fees</span><span style={{ fontWeight: 400 }}>Foundry</span> School Fees Manager
+            </p>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '16px', fontSize: '13px', lineHeight: 1.5 }}>
+              Login below to record payments, view student balances, manage fee structures, and print financial statements for your school.
+            </p>
           </div>
 
           {error && (
-            <div className="error-message mb-4" style={{ textAlign: 'center' }}>
+            <div className="error-message mb-4">
               {error}
             </div>
           )}
@@ -333,11 +391,32 @@ export const Login: React.FC = () => {
             >
               {isLoading ? 'Authenticating...' : 'Sign In'}
             </button>
+            <div style={{ marginTop: '16px' }}>
+              <button 
+                type="button"
+                onClick={() => alert('Password reset not configured. Contact your administrator.')}
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  color: 'var(--text-secondary)', 
+                  fontSize: '13px', 
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  padding: 0
+                }}
+              >
+                Forgot password?
+              </button>
+            </div>
           </form>
 
           {/* Footer */}
-          <div style={{ marginTop: '48px', textAlign: 'center', fontSize: '11px', color: 'var(--text-secondary)' }}>
-            Powered by <span style={{ fontWeight: 600, color: 'var(--primary)' }}>FeesFoundry</span>
+          <div style={{ marginTop: '48px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            Secure Login by <span style={{ fontWeight: 700, color: 'var(--primary)' }}>Fees</span><span style={{ fontWeight: 400 }}>Foundry</span>
           </div>
         </div>
       </div>

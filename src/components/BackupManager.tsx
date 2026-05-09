@@ -3,7 +3,7 @@ import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
 
 const BackupManager: React.FC = () => {
-  const { user } = useAuth();
+  const { user, canBackup } = useAuth();
   const [loading, setLoading] = useState<'backup' | 'restore' | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -48,6 +48,15 @@ const BackupManager: React.FC = () => {
       setLoading(null);
     }
   };
+
+  if (!canBackup) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
+        <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
+        <p>You do not have permission to access backup and restore tools.</p>
+      </div>
+    );
+  }
 
   return (
     <div>

@@ -1,55 +1,95 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import SphereCanvas from '../SphereCanvas';
 
 export const Welcome: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="layout-wrapper">
-        <div className="flex flex-col items-center justify-center min-h-screen p-8">
-        <div className="max-w-4xl text-center">
-            <div style={{ 
-                marginBottom: '32px'
-            }}>
-                <img 
-                    src="./img/feesfoundry-logo.svg" 
-                    alt="FeesFoundry Logo" 
-                    style={{ width: '120px', height: '120px', margin: '0 auto' }} 
-                />
-            </div>
-            
-            <h1 className="text-display" style={{ fontSize: '72px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '24px', letterSpacing: '-0.03em', lineHeight: 1 }}>
-            FeesFoundry
-            </h1>
-            <p className="text-display" style={{ fontSize: '20px', color: 'var(--text-secondary)', marginBottom: '48px', maxWidth: '600px', mx: 'auto', lineHeight: 1.6 }}>
-            The definitive financial operating system for modern academic institutions. Precision, efficiency, and clarity in every transaction.
-            </p>
-            
-            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
-            <button 
-                onClick={() => navigate('/login')}
-                className="btn btn-primary btn-lg"
-                style={{ padding: '16px 48px', fontSize: '18px' }}
-            >
-                Get Started
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: '8px' }}>
-                    <polyline points="9 18 15 12 9 6" />
-                </svg>
-            </button>
-            <button 
-                className="btn btn-outline btn-lg"
-                style={{ padding: '16px 48px', fontSize: '18px' }}
-            >
-                Documentation
-            </button>
-            </div>
-        </div>
+    <div style={{ 
+      minHeight: '100vh', 
+      backgroundColor: 'var(--background)', 
+      color: 'var(--text-primary)', 
+      display: 'flex', 
+      alignItems: 'center', 
+      position: 'relative', 
+      overflow: 'hidden' 
+    }}>
+        {/* Background Decorative Elements */}
+        <div style={{ position: 'absolute', right: '-5%', top: '50%', transform: 'translateY(-50%)', width: '800px', height: '800px', background: 'radial-gradient(circle, rgba(249,115,22,0.06), transparent 70%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', left: '-5%', top: '50%', transform: 'translateY(-50%)', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(20,184,166,0.04), transparent 70%)', pointerEvents: 'none' }} />
         
-        <div style={{ position: 'fixed', bottom: '40px', left: 0, right: 0, textAlign: 'center' }}>
-            <span className="text-mono" style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                FeesFoundry • v1.2.0 • Build 2026
-            </span>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 60px', width: '100%', position: 'relative', zIndex: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '80px' }}>
+                
+                {/* Left Column - Hero Text */}
+                <div style={{ flex: 1, textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <div style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '8px', 
+                        padding: '8px 16px', 
+                        borderRadius: '9999px', 
+                        backgroundColor: 'var(--surface)', 
+                        border: '1px solid var(--border)', 
+                        color: 'var(--primary)', 
+                        marginBottom: '24px', 
+                        fontSize: '13px', 
+                        fontFamily: 'monospace', 
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.02)' 
+                    }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)', animation: 'pulse 2s infinite' }}></span>
+                        Built for African Schools
+                    </div>
+
+                    <h2 style={{ fontSize: '32px', fontWeight: 500, margin: '0 0 8px 0', color: 'var(--text-secondary)' }}>
+                        Welcome to
+                    </h2>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '20px', marginBottom: '32px', width: '100%' }}>
+                        <img src="./img/feesfoundry-logo.svg" alt="FeesFoundry" style={{ height: '72px', width: 'auto' }} />
+                        <h1 style={{ fontSize: '84px', fontWeight: 800, margin: 0, letterSpacing: '-2px', lineHeight: 1 }}>
+                            Fees<span style={{ fontWeight: 400 }}>Foundry</span>
+                        </h1>
+                    </div>
+
+                    <p style={{ fontSize: '20px', color: 'var(--text-secondary)', marginBottom: '48px', maxWidth: '580px', lineHeight: 1.6 }}>
+                        Replace your receipt books and filing cabinets with a simple desktop system. Pull up any student's full school fees history in seconds and record a payment.
+                    </p>
+
+                    <div style={{ display: 'flex', gap: '16px' }}>
+                        <button 
+                            onClick={() => navigate('/login')}
+                            style={{ padding: '18px 40px', backgroundColor: 'var(--primary)', color: 'white', borderRadius: '9999px', fontSize: '18px', fontWeight: 'bold', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(249, 115, 22, 0.3)', transition: 'transform 0.2s, background-color 0.2s' }}
+                            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#ea580c'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'var(--primary)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                        >
+                            Sign In to Dashboard
+                        </button>
+                        <button 
+                            style={{ padding: '18px 40px', backgroundColor: 'var(--surface)', color: 'var(--text-primary)', borderRadius: '9999px', fontSize: '18px', fontWeight: 'bold', border: '1px solid var(--border)', cursor: 'pointer', transition: 'background-color 0.2s, transform 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
+                            onMouseOver={(e) => { e.currentTarget.style.backgroundColor = 'var(--secondary)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'var(--surface)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                        >
+                            Documentation
+                        </button>
+                    </div>
+                </div>
+
+                {/* Right Column - Spinning Globe */}
+                <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start', alignItems: 'center', overflow: 'visible' }}>
+                    <div style={{ width: '500px', height: '500px', position: 'relative' }}>
+                        <SphereCanvas />
+                    </div>
+                </div>
+
+            </div>
         </div>
+
+        <div style={{ position: 'absolute', bottom: '40px', left: 0, right: 0, textAlign: 'center' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'monospace' }}>
+                <span style={{ fontWeight: 700 }}>Fees</span><span style={{ fontWeight: 400 }}>Foundry</span> • v1.2.0 • Build 2026
+            </span>
         </div>
     </div>
   );

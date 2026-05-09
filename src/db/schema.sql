@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
   full_name          TEXT    NOT NULL,
   username           TEXT    NOT NULL UNIQUE COLLATE NOCASE,
   password_hash      TEXT    NOT NULL,
-  role               TEXT    NOT NULL CHECK(role IN ('admin', 'bursar', 'viewer')),
+  role               TEXT    NOT NULL CHECK(role IN ('admin', 'user')),
   is_active          INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
   created_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
@@ -147,8 +147,8 @@ CREATE TABLE IF NOT EXISTS payments (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   student_id      INTEGER NOT NULL REFERENCES students(id) ON DELETE RESTRICT,
   year_id         INTEGER NOT NULL REFERENCES academic_years(id) ON DELETE RESTRICT,
-  term_id         INTEGER NOT NULL REFERENCES terms(id) ON DELETE RESTRICT,
-  grade_id        INTEGER NOT NULL REFERENCES grades(id) ON DELETE RESTRICT,
+  term_id         INTEGER REFERENCES terms(id) ON DELETE SET NULL,
+  grade_id        INTEGER REFERENCES grades(id) ON DELETE SET NULL,
   amount_paid_cents INTEGER NOT NULL CHECK(amount_paid_cents > 0),
   payment_date    TEXT    NOT NULL,
   receipt_number  TEXT    NOT NULL UNIQUE,
@@ -195,7 +195,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
   entity     TEXT,
   entity_id  INTEGER,
   details    TEXT,
-  logged_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+  logged_at  TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_activity_log_user_id   ON activity_log(user_id);

@@ -6,4 +6,9 @@ contextBridge.exposeInMainWorld('api', {
   dbGet: (sql: string, params: any[]) => ipcRenderer.invoke('db-get', sql, params),
   fsBackup: () => ipcRenderer.invoke('fs-backup'),
   fsRestore: () => ipcRenderer.invoke('fs-restore'),
+  printToPdf: (options: { html: string; filename: string; title: string }) =>
+    ipcRenderer.invoke('print-to-pdf', options),
+  openFileForPrint: (filePath: string) => ipcRenderer.invoke('open-file-for-print', filePath),
+  getPrintOutputDir: () => ipcRenderer.invoke('get-print-output-dir'),
+  autoDebitFees: () => ipcRenderer.invoke('auto-debit-fees'),
 });

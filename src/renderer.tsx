@@ -4,6 +4,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import './index.css';
 import { db } from './lib/db-client';
 import { AuthProvider, useAuth } from './lib/auth-context';
+import { ToastProvider } from './components/Toast';
+import PageHeader from './components/PageHeader';
 import SetupWizard from './components/SetupWizard';
 import { Welcome } from './components/auth/Welcome';
 import { Login } from './components/auth/Login';
@@ -31,6 +33,7 @@ function AppInner() {
   const [isSetup, setIsSetup] = useState(false);
   const [view, setView] = useState('dashboard');
   const [schoolName, setSchoolName] = useState('');
+  const [activeTerm, setActiveTerm] = useState('');
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
@@ -41,12 +44,30 @@ function AppInner() {
     checkSetup();
   }, []);
 
+  // Auto-debit fees on app load
   useEffect(() => {
-    const loadSchoolName = async () => {
+    if (isSetup) {
+      window.api.autoDebitFees().catch(console.error);
+    }
+  }, [isSetup]);
+
+  useEffect(() => {
+    const loadSchoolDetails = async () => {
       const setting = await db.get("SELECT value FROM app_settings WHERE key = 'school_name'");
       setSchoolName(setting?.value || '');
+
+      const termRes = await db.get(`
+        SELECT t.label 
+        FROM terms t 
+        JOIN academic_years y ON t.year_id = y.id 
+        ORDER BY y.label DESC, t.term_number ASC 
+        LIMIT 1
+      `);
+      if (termRes && termRes.label) {
+        setActiveTerm(termRes.label);
+      }
     };
-    if (isSetup) loadSchoolName();
+    if (isSetup) loadSchoolDetails();
   }, [isSetup]);
 
   const handleLogout = () => {
@@ -64,39 +85,48 @@ function AppInner() {
       <Routes>
         <Route path="/" element={<Welcome />} />
         <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
-        <Route path="/dashboard" element={
-          user ? (
-            <div className="app-layout">
-              <Sidebar activeView={view} onViewChange={setView} />
-              <main className="main-content">
-                <TopBar
-                  pageTitle={pageTitles[view] || 'Dashboard'}
-                  schoolName={schoolName}
-                  userName={user.full_name || user.username}
-                  userRole={user.role}
+        <Route
+          path="/dashboard"
+          element={
+            user ? (
+              <div className="app-layout">
+                <Sidebar
+                  activeView={view}
+                  onViewChange={setView}
                   onSettingsClick={() => setShowSettings(true)}
                   onLogout={handleLogout}
                 />
-                <div className="page-content">
-                  {view === 'dashboard' && <Dashboard />}
-                  {view === 'accounts' && <StudentAccounts />}
-                  {view === 'fees' && <FeeStructureManager />}
-                  {view === 'payments' && <PaymentManager />}
-                  {view === 'logs' && <ActivityLog />}
-                  {view === 'backup' && <BackupManager />}
-                </div>
-              </main>
-              {showSettings && (
-                <SettingsModal
-                  user={user}
-                  schoolName={schoolName}
-                  onSchoolNameUpdate={handleSchoolNameUpdate}
-                  onClose={() => setShowSettings(false)}
-                />
-              )}
-            </div>
-          ) : <Navigate to="/login" />
-        } />
+                <main className="main-content">
+                  <TopBar
+                    pageTitle={pageTitles[view] || 'Dashboard'}
+                    schoolName={schoolName}
+                    activeTerm={activeTerm}
+                    userName={user.full_name || user.username}
+                    userRole={user.role}
+                  />
+                  <div className="page-content">
+                    {view === 'dashboard' && <Dashboard />}
+                    {view === 'accounts' && <StudentAccounts />}
+                    {view === 'fees' && <FeeStructureManager />}
+                    {view === 'payments' && <PaymentManager />}
+                    {view === 'logs' && <ActivityLog />}
+                    {view === 'backup' && <BackupManager />}
+                  </div>
+                </main>
+                {showSettings && (
+                  <SettingsModal
+                    user={user}
+                    schoolName={schoolName}
+                    onSchoolNameUpdate={handleSchoolNameUpdate}
+                    onClose={() => setShowSettings(false)}
+                  />
+                )}
+              </div>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
       </Routes>
     </Router>
   );
@@ -104,7 +134,9 @@ function AppInner() {
 
 const App = () => (
   <AuthProvider>
-    <AppInner />
+    <ToastProvider>
+      <AppInner />
+    </ToastProvider>
   </AuthProvider>
 );
 

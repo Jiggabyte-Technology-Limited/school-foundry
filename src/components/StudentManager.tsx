@@ -38,7 +38,7 @@ interface FinancialHistory {
 }
 
 const StudentManager: React.FC = () => {
-  const { user } = useAuth();
+  const { user, canManageStudents } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
@@ -86,6 +86,15 @@ const StudentManager: React.FC = () => {
       loadFinancialHistory(selectedStudent.id);
     }
   }, [selectedStudent]);
+
+  if (!canManageStudents) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
+        <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
+        <p>You do not have permission to manage students.</p>
+      </div>
+    );
+  }
 
   const loadInitialData = async () => {
     const [gradeList, yearList] = await Promise.all([
