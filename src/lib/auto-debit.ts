@@ -16,6 +16,8 @@ export async function autoDebitFees(): Promise<{ applied: number; message: strin
       fs.amount_cents,
       t.label as term_label,
       t.start_date,
+      t.end_date,
+      sye.created_at as enrolled_at,
       sye.student_id
     FROM fee_structure fs
     JOIN terms t ON fs.term_id = t.id
@@ -23,6 +25,7 @@ export async function autoDebitFees(): Promise<{ applied: number; message: strin
     LEFT JOIN student_fees sf ON sf.fee_structure_id = fs.id AND sf.student_id = sye.student_id
     WHERE t.start_date IS NOT NULL 
       AND t.start_date <= ?
+      AND (t.end_date IS NULL OR date(t.end_date) >= date(sye.created_at))
       AND sf.id IS NULL
     ORDER BY t.start_date, fs.grade_id
     `,

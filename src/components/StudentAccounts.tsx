@@ -3,9 +3,6 @@ import { db } from '../lib/db-client';
 import StudentWizard from './StudentWizard';
 import EditStudentModal from './EditStudentModal';
 import PaymentWizard from './PaymentWizard';
-import StudentList from './StudentList';
-import StatementPrintView from './StatementPrintView';
-import GradeOverview from './GradeOverview';
 import StudentStatementPreview from './StudentStatementPreview';
 import { useAuth } from '../lib/auth-context';
 import { generateStudentStatementHtml, printDocument } from '../lib/print-service';
@@ -31,7 +28,6 @@ const StudentAccounts: React.FC = () => {
   const [statementData, setStatementData] = useState<any>(null);
   const [showPrintView, setShowPrintView] = useState(false);
   const [isPrintingAll, setIsPrintingAll] = useState(false);
-  const [allStatementsData, setAllStatementsData] = useState<any[]>([]);
 
   const filteredStudents = students.filter(s => {
     const matchesSearch =
@@ -56,7 +52,7 @@ const StudentAccounts: React.FC = () => {
                        'Payment' as type, t.label as term_label
                 FROM payments p
                 LEFT JOIN terms t ON p.term_id = t.id
-                WHERE p.student_id = ? AND p.year_id = ?
+                WHERE p.student_id = ? AND p.year_id = ? AND p.is_voided = 0
                 ORDER BY p.payment_date`,
             [student.id, selectedYear]
           ),
@@ -66,8 +62,10 @@ const StudentAccounts: React.FC = () => {
                        t.label as term_label, fs.fee_type
                 FROM student_fees sf
                 JOIN fee_structure fs ON sf.fee_structure_id = fs.id
+                JOIN student_year_enrollment sye ON sye.student_id = sf.student_id AND sye.year_id = fs.year_id
                 LEFT JOIN terms t ON fs.term_id = t.id
                 WHERE sf.student_id = ? AND fs.year_id = ?
+                  AND (t.end_date IS NULL OR date(t.end_date) >= date(sye.created_at))
                 ORDER BY sf.debit_date`,
             [student.id, selectedYear]
           ),
@@ -212,7 +210,16 @@ const StudentAccounts: React.FC = () => {
       let query = `
         SELECT s.id, s.full_name, g.label as grade_label, g.id as grade_id,
           s.guardian_name, s.guardian_contact, s.guardian_name_2, s.guardian_contact_2, s.guardian_email,
-          COALESCE((SELECT SUM(sf.amount_cents) FROM student_fees sf JOIN fee_structure fs ON sf.fee_structure_id = fs.id WHERE sf.student_id = s.id AND fs.year_id = ?), 0) as invoiced,
+          COALESCE((
+            SELECT SUM(sf.amount_cents)
+            FROM student_fees sf
+            JOIN fee_structure fs ON sf.fee_structure_id = fs.id
+            JOIN terms t ON fs.term_id = t.id
+            JOIN student_year_enrollment enrollment ON enrollment.student_id = sf.student_id AND enrollment.year_id = fs.year_id
+            WHERE sf.student_id = s.id
+              AND fs.year_id = ?
+              AND (t.end_date IS NULL OR date(t.end_date) >= date(enrollment.created_at))
+          ), 0) as invoiced,
           COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as paid
         FROM students s
         LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
@@ -274,8 +281,10 @@ const StudentAccounts: React.FC = () => {
                        t.label as term_label, fs.fee_type
                 FROM student_fees sf
                 JOIN fee_structure fs ON sf.fee_structure_id = fs.id
+                JOIN student_year_enrollment sye ON sye.student_id = sf.student_id AND sye.year_id = fs.year_id
                 LEFT JOIN terms t ON fs.term_id = t.id
                 WHERE sf.student_id = ? AND fs.year_id = ?
+                  AND (t.end_date IS NULL OR date(t.end_date) >= date(sye.created_at))
                 ORDER BY sf.debit_date`,
           [student.id, selectedYear]
         ),

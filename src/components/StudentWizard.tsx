@@ -215,10 +215,33 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
 
       // Create enrollment for current year
       if (form.grade_id && currentYear && result.lastInsertRowid) {
+        const studentId = result.lastInsertRowid;
         await db.run(
           'INSERT INTO student_year_enrollment (student_id, year_id, grade_id) VALUES (?, ?, ?)',
-          [result.lastInsertRowid, currentYear.id, form.grade_id]
+          [studentId, currentYear.id, form.grade_id]
         );
+
+        const today = new Date().toISOString().split('T')[0];
+        const activeFees = await db.all(
+          `
+          SELECT fs.id, fs.amount_cents, t.start_date
+          FROM fee_structure fs
+          JOIN terms t ON fs.term_id = t.id
+          WHERE fs.year_id = ?
+            AND fs.grade_id = ?
+            AND t.start_date IS NOT NULL
+            AND date(t.start_date) <= date(?)
+            AND (t.end_date IS NULL OR date(t.end_date) >= date(?))
+        `,
+          [currentYear.id, form.grade_id, today, today]
+        );
+
+        for (const fee of activeFees) {
+          await db.run(
+            'INSERT OR IGNORE INTO student_fees (student_id, fee_structure_id, debit_date, amount_cents) VALUES (?, ?, ?, ?)',
+            [studentId, fee.id, today, fee.amount_cents]
+          );
+        }
       }
 
       await db.run(
