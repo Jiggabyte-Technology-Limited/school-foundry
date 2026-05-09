@@ -70,7 +70,9 @@ h6 {
 
 .topbar-left {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 
 .topbar-center {
@@ -1072,6 +1074,7 @@ td {
   border-radius: var(--border-radius-lg);
   border: 1px solid var(--border);
   overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .fee-matrix-grid {
@@ -1088,31 +1091,47 @@ td {
 }
 
 .fee-matrix-cell {
-  padding: 16px;
+  padding: 18px 16px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
 }
 
+.fee-matrix-row:nth-child(even)
+  .fee-matrix-cell:not(.fee-matrix-header-cell):not(.fee-matrix-grade-cell):not(
+    .fee-matrix-total-cell
+  ) {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.fee-matrix-row:hover .fee-matrix-cell {
+  background-color: rgba(249, 115, 22, 0.04);
+}
+
+.fee-matrix-row:hover .fee-matrix-grade-cell {
+  background-color: rgba(249, 115, 22, 0.08);
+}
+
 .fee-matrix-header-cell {
   background-color: var(--secondary);
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+  font-weight: 800;
+  font-size: 0.8rem;
+  color: var(--text);
   text-transform: uppercase;
-  letter-spacing: 0.025em;
+  letter-spacing: 0.05em;
+  padding: 20px 16px;
+  border-bottom: 2px solid var(--primary);
 }
 
 .fee-matrix-grade-cell {
   background-color: var(--color-light-sage);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .fee-matrix-total-cell {
-  background-color: var(--secondary);
   font-weight: 700;
   font-family: var(--font-mono);
-  font-size: 1.1rem;
+  font-size: 1rem;
   justify-content: flex-end;
 }
 

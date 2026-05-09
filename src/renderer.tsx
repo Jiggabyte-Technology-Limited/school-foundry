@@ -5,6 +5,7 @@ import './index.css';
 import { db } from './lib/db-client';
 import { AuthProvider, useAuth } from './lib/auth-context';
 import { ToastProvider } from './components/Toast';
+import PageHeader from './components/PageHeader';
 import SetupWizard from './components/SetupWizard';
 import { Welcome } from './components/auth/Welcome';
 import { Login } from './components/auth/Login';
@@ -42,6 +43,13 @@ function AppInner() {
     };
     checkSetup();
   }, []);
+
+  // Auto-debit fees on app load
+  useEffect(() => {
+    if (isSetup) {
+      window.api.autoDebitFees().catch(console.error);
+    }
+  }, [isSetup]);
 
   useEffect(() => {
     const loadSchoolDetails = async () => {

@@ -357,6 +357,7 @@ export function generateStudentStatementHtml(data: {
   totalPaid: string;
   balance: string;
   fees: Array<{
+    date: string;
     termLabel: string;
     description: string;
     amount: string;
@@ -386,23 +387,36 @@ export function generateStudentStatementHtml(data: {
     payments,
   } = data;
 
-  const feeRows = fees
-    .map(
-      f => `
-    <tr style="border-bottom: 1px solid #e5e7eb;">
-      <td style="padding: 10px 8px;">${f.termLabel}: ${f.description}</td>
-      <td style="padding: 10px 8px; text-align: right; font-weight: 600;">$${f.amount}</td>
-    </tr>
-  `
-    )
-    .join('');
+  // Combine and sort all transactions by date
+  const transactions = [
+    ...fees.map(f => ({
+      date: f.date ? f.date.split('T')[0] : '',
+      type: 'Debit',
+      details: `${f.termLabel}: School Fees`,
+      amount: f.amount,
+      isCredit: false,
+    })),
+    ...payments.map(p => ({
+      date: p.date ? p.date.split('T')[0] : '',
+      type: 'Payment',
+      details: `Receipt Number: ${p.ref}`,
+      amount: p.amount,
+      isCredit: true,
+    })),
+  ].sort((a, b) => {
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return new Date(a.date).getTime() - new Date(b.date).getTime();
+  });
 
-  const paymentRows = payments
+  const transactionRows = transactions
     .map(
-      p => `
+      t => `
     <tr style="border-bottom: 1px solid #e5e7eb;">
-      <td style="padding: 10px 8px;">Payment - ${p.date} (Ref: ${p.ref})</td>
-      <td style="padding: 10px 8px; text-align: right; font-weight: 600; color: #059669;">-$${p.amount}</td>
+      <td style="padding: 10px 8px;">${t.date}</td>
+      <td style="padding: 10px 8px;"><span style="padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background-color: ${t.isCredit ? '#D1FAE5' : '#FEE2E2'}; color: ${t.isCredit ? '#065F46' : '#991B1B'};">${t.type}</span></td>
+      <td style="padding: 10px 8px;">${t.details}</td>
+      <td style="padding: 10px 8px; text-align: right; font-weight: 600; color: ${t.isCredit ? '#059669' : '#dc2626'};">${t.isCredit ? '-' : '+'}$${t.amount}</td>
     </tr>
   `
     )
@@ -474,13 +488,14 @@ export function generateStudentStatementHtml(data: {
     <table>
       <thead>
         <tr>
-          <th>Detail</th>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Details</th>
           <th style="text-align: right;">Amount</th>
         </tr>
       </thead>
       <tbody>
-        ${feeRows}
-        ${paymentRows}
+        ${transactionRows}
       </tbody>
     </table>
     

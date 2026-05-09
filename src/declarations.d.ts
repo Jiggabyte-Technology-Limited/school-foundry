@@ -1,10 +1,10 @@
-declare module "*.css";
-declare module "*.svg";
-declare module "*.png";
-declare module "*.jpg";
-declare module "*.jpeg";
-declare module "*.gif";
-declare module "*.webp";
+declare module '*.css';
+declare module '*.svg';
+declare module '*.png';
+declare module '*.jpg';
+declare module '*.jpeg';
+declare module '*.gif';
+declare module '*.webp';
 
 interface Window {
   api: {
@@ -16,5 +16,6 @@ interface Window {
     printToPdf: (options: { html: string; filename: string; title: string }) => Promise<any>;
     openFileForPrint: (filePath: string) => Promise<any>;
     getPrintOutputDir: () => Promise<string>;
+    autoDebitFees: () => Promise<{ success: boolean; error?: string }>;
   };
 }

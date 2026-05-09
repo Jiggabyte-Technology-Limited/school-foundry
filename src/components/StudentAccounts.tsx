@@ -46,6 +46,7 @@ const StudentAccounts: React.FC = () => {
   const [grades, setGrades] = useState<Grade[]>([]);
   const [selectedGrade, setSelectedGrade] = useState<number | null>(null);
   const [termsList, setTermsList] = useState<Term[]>([]);
+  const [currentPeriod, setCurrentPeriod] = useState<Term | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,7 +76,7 @@ const StudentAccounts: React.FC = () => {
         const [payments, fees] = await Promise.all([
           db.all(
             `
-                SELECT p.payment_date as date, p.receipt_number as ref, p.amount_paid_cents as amount,
+                SELECT DATE(p.payment_date) as date, p.receipt_number as ref, p.amount_paid_cents as amount,
                        'Payment' as type, t.label as term_label
                 FROM payments p
                 LEFT JOIN terms t ON p.term_id = t.id
@@ -85,13 +86,14 @@ const StudentAccounts: React.FC = () => {
           ),
           db.all(
             `
-                SELECT fs.description, fs.amount_cents as amount, 'Fee' as type,
+                SELECT sf.debit_date as date, fs.description, sf.amount_cents as amount, 'Fee' as type,
                        t.label as term_label, fs.fee_type
-                FROM fee_structure fs
+                FROM student_fees sf
+                JOIN fee_structure fs ON sf.fee_structure_id = fs.id
                 LEFT JOIN terms t ON fs.term_id = t.id
-                WHERE fs.grade_id = ? AND fs.year_id = ?
-                AND (t.start_date IS NULL OR t.start_date <= date('now'))`,
-            [student.grade_id, selectedYear]
+                WHERE sf.student_id = ? AND fs.year_id = ?
+                ORDER BY sf.debit_date`,
+            [student.id, selectedYear]
           ),
         ]);
 
@@ -112,8 +114,8 @@ const StudentAccounts: React.FC = () => {
         console.error(`Error loading statement for student ${student.id}:`, err);
       }
     }
-    // Get current term for statements
-    const currentTerm = termsList.length > 0 ? termsList[0].label : '';
+    // Get current period for statements
+    const currentTerm = currentPeriod?.label || (termsList.length > 0 ? termsList[0].label : '');
 
     // Generate PDFs for each student and print them
     for (const data of statements) {
@@ -133,6 +135,7 @@ const StudentAccounts: React.FC = () => {
         totalPaid: (data.totalPaid / 100).toFixed(2),
         balance: (data.balance / 100).toFixed(2),
         fees: data.fees.map((f: any) => ({
+          date: f.date,
           termLabel: f.term_label,
           description: f.description,
           amount: (f.amount / 100).toFixed(2),
@@ -205,10 +208,23 @@ const StudentAccounts: React.FC = () => {
   const loadTermsForYear = async (yearId: number) => {
     try {
       const terms = await db.all(
-        'SELECT id, label FROM terms WHERE year_id = ? ORDER BY start_date ASC',
+        'SELECT id, label, start_date, end_date FROM terms WHERE year_id = ? ORDER BY term_number ASC',
         [yearId]
       );
       setTermsList(terms);
+
+      // Find current period based on today's date
+      const now = new Date().toISOString().split('T')[0];
+      const currentPeriod = terms.find(
+        (t: any) => t.start_date && t.end_date && t.start_date <= now && t.end_date >= now
+      );
+
+      // If no current period found, use first upcoming or last
+      const activePeriod =
+        currentPeriod || terms.find((t: any) => t.end_date >= now) || terms[terms.length - 1];
+      if (activePeriod) {
+        setCurrentPeriod(activePeriod);
+      }
     } catch (err) {
       console.error('Error loading terms:', err);
     }
@@ -220,7 +236,7 @@ const StudentAccounts: React.FC = () => {
       let query = `
         SELECT s.id, s.full_name, g.label as grade_label, g.id as grade_id,
           s.guardian_name, s.guardian_contact, s.guardian_name_2, s.guardian_contact_2, s.guardian_email,
-          COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) as invoiced,
+          COALESCE((SELECT SUM(sf.amount_cents) FROM student_fees sf JOIN fee_structure fs ON sf.fee_structure_id = fs.id WHERE sf.student_id = s.id AND fs.year_id = ?), 0) as invoiced,
           COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as paid
         FROM students s
         LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
@@ -319,7 +335,7 @@ const StudentAccounts: React.FC = () => {
       const [payments, fees] = await Promise.all([
         db.all(
           `
-                SELECT p.payment_date as date, p.receipt_number as ref, p.amount_paid_cents as amount,
+                SELECT DATE(p.payment_date) as date, p.receipt_number as ref, p.amount_paid_cents as amount,
                        'Payment' as type, t.label as term_label
                 FROM payments p
                 LEFT JOIN terms t ON p.term_id = t.id
@@ -329,13 +345,14 @@ const StudentAccounts: React.FC = () => {
         ),
         db.all(
           `
-                SELECT fs.description, fs.amount_cents as amount, 'Fee' as type,
+                SELECT sf.debit_date as date, fs.description, sf.amount_cents as amount, 'Fee' as type,
                        t.label as term_label, fs.fee_type
-                FROM fee_structure fs
+                FROM student_fees sf
+                JOIN fee_structure fs ON sf.fee_structure_id = fs.id
                 LEFT JOIN terms t ON fs.term_id = t.id
-                WHERE fs.grade_id = ? AND fs.year_id = ?
-                AND (t.start_date IS NULL OR t.start_date <= date('now'))`,
-          [student.grade_id, selectedYear]
+                WHERE sf.student_id = ? AND fs.year_id = ?
+                ORDER BY sf.debit_date`,
+          [student.id, selectedYear]
         ),
       ]);
 
@@ -616,8 +633,9 @@ const StudentAccounts: React.FC = () => {
                       '[StudentAccounts] Print overview clicked, currentOverview:',
                       currentOverview
                     );
-                    // Get current term
-                    const currentTerm = termsList.length > 0 ? termsList[0].label : '';
+                    // Get current period
+                    const currentTerm =
+                      currentPeriod?.label || (termsList.length > 0 ? termsList[0].label : '');
                     console.log(
                       '[StudentAccounts] Generating HTML with schoolName:',
                       schoolName,
@@ -725,7 +743,10 @@ const StudentAccounts: React.FC = () => {
                     : 'Master Financial Overview'}
                 </div>
                 <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                  {termsList.length > 0 && <span>Term: {termsList[0].label}</span>}
+                  {currentPeriod && <span>Period: {currentPeriod.label}</span>}
+                  {!currentPeriod && termsList.length > 0 && (
+                    <span>Period: {termsList[0].label}</span>
+                  )}
                   <span style={{ margin: '0 8px' }}>|</span>
                   <span>
                     Generated:{' '}
@@ -1228,7 +1249,10 @@ const StudentAccounts: React.FC = () => {
                   : 'Master Financial Overview'}
               </div>
               <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                {termsList.length > 0 && <span>Term: {termsList[0].label}</span>}
+                {currentPeriod && <span>Period: {currentPeriod.label}</span>}
+                {!currentPeriod && termsList.length > 0 && (
+                  <span>Period: {termsList[0].label}</span>
+                )}
                 <span style={{ margin: '0 8px' }}>|</span>
                 <span>
                   Generated:{' '}

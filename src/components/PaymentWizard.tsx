@@ -48,7 +48,6 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
   );
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [form, setForm] = useState({
-    term_id: '',
     amount: '',
     receipt_number: '',
     payment_method: 'cash',
@@ -100,10 +99,6 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
 
       setStudents(studentList);
       setTerms(termList);
-
-      if (termList.length > 0) {
-        setForm(f => ({ ...f, term_id: String(termList[0].id) }));
-      }
 
       // Generate unique receipt number
       const timestamp = Date.now().toString().slice(-6);
@@ -190,10 +185,6 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
           setError('Please enter a valid amount');
           return false;
         }
-        if (!form.term_id) {
-          setError('Please select a term');
-          return false;
-        }
         break;
     }
     return true;
@@ -233,7 +224,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
         INSERT INTO payments (
             student_id, 
             year_id, 
-            term_id, 
+            term_id,
             grade_id,
             receipt_number, 
             amount_paid_cents, 
@@ -242,18 +233,17 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
             notes,
             recorded_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), ?, ?, ?)
-      `,
+        VALUES (?, ?, NULL, ?, ?, ?, datetime('now', 'localtime'), ?, ?, ?)
+        `,
         [
           selectedStudent.id,
           currentYear.id,
-          form.term_id,
           enrollment.grade_id,
           form.receipt_number,
           amountCents,
           form.payment_method,
           form.notes,
-          user?.id || 1, // Fallback to 1 if no user (should not happen with auth)
+          user?.id || 1,
         ]
       );
 
@@ -275,11 +265,10 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
         `
         SELECT p.id, p.student_id, p.year_id, p.receipt_number, p.amount_paid_cents, p.payment_date, p.is_voided, p.void_reason,
                s.full_name as student_name, s.guardian_name, s.guardian_contact, 
-               y.label as year_label, t.label as term_label, u.username as recorded_by_name
+               y.label as year_label, u.username as recorded_by_name
         FROM payments p
         JOIN students s ON p.student_id = s.id
         JOIN academic_years y ON p.year_id = y.id
-        JOIN terms t ON p.term_id = t.id
         LEFT JOIN users u ON p.recorded_by = u.id
         WHERE p.id = ?
       `,
@@ -304,10 +293,6 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
 
   const formatCurrency = (cents: number) => {
     return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  const getSelectedTermLabel = () => {
-    return terms.find(t => t.id === Number(form.term_id))?.label || '';
   };
 
   const renderStepContent = () => {
@@ -635,22 +620,6 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                     </button>
                   )}
                 </div>
-                <div className="wizard-field">
-                  <label style={{ color: '#000', fontWeight: 600 }}>
-                    Term <span className="required">*</span>
-                  </label>
-                  <select
-                    value={form.term_id}
-                    onChange={e => setForm({ ...form, term_id: e.target.value })}
-                    style={{ color: '#000' }}
-                  >
-                    {terms.map(term => (
-                      <option key={term.id} value={term.id}>
-                        {term.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -734,17 +703,6 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
               >
                 <span style={{ color: 'var(--color-sage-placeholder)' }}>Grade</span>
                 <span>{selectedStudent?.grade_label}</span>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '12px 0',
-                  borderBottom: '1px solid var(--color-light-sage)',
-                }}
-              >
-                <span style={{ color: 'var(--color-sage-placeholder)' }}>Term</span>
-                <span>{getSelectedTermLabel()}</span>
               </div>
               <div
                 style={{

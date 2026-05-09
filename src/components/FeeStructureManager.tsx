@@ -14,6 +14,7 @@ interface Term {
   label: string;
   start_date: string | null;
   end_date: string | null;
+  period_type?: string;
 }
 interface Grade {
   id: number;
@@ -59,6 +60,15 @@ const FeeStructureManager: React.FC = () => {
   });
   const [editingTermId, setEditingTermId] = useState<number | null>(null);
 
+  // Auto-generate state
+  const [autoGenType, setAutoGenType] = useState<'monthly' | 'quarterly' | 'half_year' | 'custom'>(
+    'quarterly'
+  );
+  const [customPeriodCount, setCustomPeriodCount] = useState<number>(3);
+
+  // Same amount per grade state: [gradeId] = boolean
+  const [sameAmountPerGrade, setSameAmountPerGrade] = useState<Record<number, boolean>>({});
+
   useEffect(() => {
     loadInitialData();
   }, []);
@@ -85,8 +95,13 @@ const FeeStructureManager: React.FC = () => {
 
     // Build Matrix
     const newMatrix: Record<number, Record<number, MatrixCell>> = {};
+    const newSameAmount: Record<number, boolean> = {};
     grades.forEach(g => {
       newMatrix[g.id] = {};
+      const gradeFees = feeList.filter(f => f.grade_id === g.id);
+      const sameAmount =
+        gradeFees.length > 0 && gradeFees.every(f => f.same_amount_all_periods === 1);
+      newSameAmount[g.id] = sameAmount;
       termList.forEach(t => {
         const existingFee = feeList.find(f => f.grade_id === g.id && f.term_id === t.id);
         newMatrix[g.id][t.id] = {
@@ -98,16 +113,35 @@ const FeeStructureManager: React.FC = () => {
       });
     });
     setMatrix(newMatrix);
+    setSameAmountPerGrade(newSameAmount);
   };
 
   const handleMatrixChange = (gradeId: number, termId: number, value: string) => {
-    setMatrix(prev => ({
-      ...prev,
-      [gradeId]: {
-        ...prev[gradeId],
-        [termId]: { ...prev[gradeId][termId], amount: value, isUnsaved: true },
-      },
-    }));
+    const isSameAmount = sameAmountPerGrade[gradeId];
+    const termIndex = terms.findIndex(t => t.id === termId);
+
+    setMatrix(prev => {
+      const newMatrix = { ...prev };
+      newMatrix[gradeId] = { ...prev[gradeId] };
+
+      if (isSameAmount && termIndex === 0) {
+        // When "Same All" is enabled and editing first period, update all periods
+        terms.forEach(t => {
+          newMatrix[gradeId][t.id] = {
+            ...prev[gradeId][t.id],
+            amount: value,
+            isUnsaved: true,
+          };
+        });
+      } else {
+        newMatrix[gradeId][termId] = {
+          ...prev[gradeId][termId],
+          amount: value,
+          isUnsaved: true,
+        };
+      }
+      return newMatrix;
+    });
   };
 
   const saveCell = async (gradeId: number, termId: number) => {
@@ -119,6 +153,51 @@ const FeeStructureManager: React.FC = () => {
       return;
     }
 
+    const isSameAmount = sameAmountPerGrade[gradeId];
+    const termIndex = terms.findIndex(t => t.id === termId);
+
+    // If "Same All" is enabled and editing first period, save all periods
+    if (isSameAmount && termIndex === 0) {
+      const amountCents = Math.round(parseFloat(cell.amount || '0') * 100);
+
+      // Set all to saving
+      setMatrix(prev => {
+        const newMatrix = { ...prev };
+        newMatrix[gradeId] = { ...prev[gradeId] };
+        terms.forEach(t => {
+          newMatrix[gradeId][t.id] = { ...prev[gradeId][t.id], isSaving: true };
+        });
+        return newMatrix;
+      });
+
+      try {
+        // Save each period
+        for (const t of terms) {
+          const tCell = matrix[gradeId][t.id];
+          const tAmountCents = Math.round(parseFloat(cell.amount || '0') * 100);
+          if (tCell?.id) {
+            await db.run(
+              'UPDATE fee_structure SET amount_cents = ?, updated_at = datetime("now") WHERE id = ?',
+              [tAmountCents, tCell.id]
+            );
+          } else {
+            await db.run(
+              'INSERT INTO fee_structure (year_id, term_id, grade_id, amount_cents, same_amount_all_periods) VALUES (?, ?, ?, ?, 1)',
+              [selectedYear, t.id, gradeId, tAmountCents]
+            );
+          }
+        }
+
+        // Reload to get proper IDs
+        loadYearData(selectedYear);
+      } catch (err) {
+        console.error('Failed to save fees:', err);
+        loadYearData(selectedYear);
+      }
+      return;
+    }
+
+    // Original single cell save logic
     setMatrix(prev => ({
       ...prev,
       [gradeId]: { ...prev[gradeId], [termId]: { ...prev[gradeId][termId], isSaving: true } },
@@ -136,7 +215,7 @@ const FeeStructureManager: React.FC = () => {
           'INSERT INTO fee_structure (year_id, term_id, grade_id, amount_cents) VALUES (?, ?, ?, ?)',
           [selectedYear, termId, gradeId, amountCents]
         );
-        handleMatrixChange(gradeId, termId, cell.amount); // Triggers update to cell ID
+        handleMatrixChange(gradeId, termId, cell.amount);
         setMatrix(prev => ({
           ...prev,
           [gradeId]: {
@@ -212,8 +291,8 @@ const FeeStructureManager: React.FC = () => {
     }
     showToast(
       'success',
-      editingTermId ? 'Term Updated' : 'Term Added',
-      `Term ${termForm.label} has been ${editingTermId ? 'updated' : 'added'}.`
+      editingTermId ? 'Period Updated' : 'Period Added',
+      `Payment period ${termForm.label} has been ${editingTermId ? 'updated' : 'added'}.`
     );
     setTermForm({ term_number: '', label: '', start_date: '', end_date: '' });
     setEditingTermId(null);
@@ -231,9 +310,163 @@ const FeeStructureManager: React.FC = () => {
   };
 
   const deleteTerm = async (id: number) => {
-    if (!window.confirm('Delete this term and all associated fees?')) return;
+    if (!window.confirm('Delete this payment period and all associated fees?')) return;
     await db.run('DELETE FROM terms WHERE id = ?', [id]);
     if (selectedYear) loadYearData(selectedYear);
+  };
+
+  // Auto-generate payment periods
+  const generatePaymentPeriods = async () => {
+    if (!selectedYear) return;
+
+    let periodLabels: string[] = [];
+    let count = 0;
+    let periodType = autoGenType;
+    const yearLabel =
+      years.find(y => y.id === selectedYear)?.label || new Date().getFullYear().toString();
+    const baseYear = parseInt(yearLabel) || new Date().getFullYear();
+
+    if (autoGenType === 'monthly') {
+      periodLabels = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ];
+      count = 12;
+    } else if (autoGenType === 'quarterly') {
+      periodLabels = ['Term 1', 'Term 2', 'Term 3', 'Term 4'];
+      count = 4;
+    } else if (autoGenType === 'half_year') {
+      periodLabels = ['Half 1', 'Half 2'];
+      count = 2;
+    } else {
+      count = customPeriodCount;
+      for (let i = 1; i <= count; i++) {
+        periodLabels.push(`Period ${i}`);
+      }
+    }
+
+    // Clear existing terms for this year
+    await db.run('DELETE FROM terms WHERE year_id = ?', [selectedYear]);
+
+    // Calculate dates based on period type
+    const getDatesForPeriod = (index: number): { start: string; end: string } => {
+      if (autoGenType === 'monthly') {
+        const startMonth = index;
+        const startDate = new Date(baseYear, startMonth, 1);
+        const endDate = new Date(baseYear, startMonth + 1, 0);
+        return {
+          start: startDate.toISOString().split('T')[0],
+          end: endDate.toISOString().split('T')[0],
+        };
+      } else if (autoGenType === 'quarterly') {
+        const monthsPerQuarter = 3;
+        const startMonth = index * monthsPerQuarter;
+        const startDate = new Date(baseYear, startMonth, 1);
+        const endDate = new Date(baseYear, startMonth + monthsPerQuarter, 0);
+        return {
+          start: startDate.toISOString().split('T')[0],
+          end: endDate.toISOString().split('T')[0],
+        };
+      } else if (autoGenType === 'half_year') {
+        const monthsPerHalf = 6;
+        const startMonth = index * monthsPerHalf;
+        const startDate = new Date(baseYear, startMonth, 1);
+        const endDate = new Date(baseYear, startMonth + monthsPerHalf, 0);
+        return {
+          start: startDate.toISOString().split('T')[0],
+          end: endDate.toISOString().split('T')[0],
+        };
+      } else {
+        // Custom - assume equal distribution across 12 months
+        const monthsPerPeriod = Math.floor(12 / count);
+        const startMonth = index * monthsPerPeriod;
+        const startDate = new Date(baseYear, startMonth, 1);
+        const endDate =
+          index === count - 1
+            ? new Date(baseYear, 11, 31)
+            : new Date(baseYear, startMonth + monthsPerPeriod, 0);
+        return {
+          start: startDate.toISOString().split('T')[0],
+          end: endDate.toISOString().split('T')[0],
+        };
+      }
+    };
+
+    // Insert new periods with calculated dates
+    for (let i = 0; i < count; i++) {
+      const { start, end } = getDatesForPeriod(i);
+      await db.run(
+        'INSERT INTO terms (year_id, term_number, label, period_type, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)',
+        [selectedYear, i + 1, periodLabels[i], periodType, start, end]
+      );
+    }
+
+    // Set "Same All" to true by default for all grades
+    const newSameAmount: Record<number, boolean> = {};
+    grades.forEach(g => {
+      newSameAmount[g.id] = true;
+    });
+    setSameAmountPerGrade(newSameAmount);
+
+    showToast(
+      'success',
+      'Payment Periods Generated',
+      `${count} payment periods have been created.`
+    );
+    loadYearData(selectedYear);
+  };
+
+  // Toggle same amount for all periods for a grade
+  const toggleSameAmount = async (gradeId: number) => {
+    if (!canManageFees) {
+      alert('You do not have permission to modify the fee structure.');
+      return;
+    }
+
+    const newValue = !sameAmountPerGrade[gradeId];
+    setSameAmountPerGrade(prev => ({ ...prev, [gradeId]: newValue }));
+
+    // Update all fee_structure records for this grade/year
+    await db.run(
+      'UPDATE fee_structure SET same_amount_all_periods = ? WHERE year_id = ? AND grade_id = ?',
+      [newValue ? 1 : 0, selectedYear, gradeId]
+    );
+
+    // If turning on, copy first period's amount to all other periods
+    if (newValue && terms.length > 1) {
+      const firstTermId = terms[0].id;
+      const firstCell = matrix[gradeId]?.[firstTermId];
+      if (firstCell?.id) {
+        const amountCents = Math.round(parseFloat(firstCell.amount || '0') * 100);
+        for (let i = 1; i < terms.length; i++) {
+          const termId = terms[i].id;
+          const existingCell = matrix[gradeId]?.[termId];
+          if (existingCell?.id) {
+            await db.run(
+              'UPDATE fee_structure SET amount_cents = ?, same_amount_all_periods = 1 WHERE id = ?',
+              [amountCents, existingCell.id]
+            );
+          } else {
+            await db.run(
+              'INSERT INTO fee_structure (year_id, term_id, grade_id, amount_cents, same_amount_all_periods) VALUES (?, ?, ?, ?, 1)',
+              [selectedYear, termId, gradeId, amountCents]
+            );
+          }
+        }
+        // Reload to reflect changes
+        loadYearData(selectedYear);
+      }
+    }
   };
 
   return (
@@ -405,8 +638,49 @@ const FeeStructureManager: React.FC = () => {
                 <line x1="8" y1="2" x2="8" y2="6" />
                 <line x1="3" y1="10" x2="21" y2="10" />
               </svg>
-              Terms Setup
+              Payment Periods Setup
             </h4>
+
+            {/* Auto-generate section */}
+            <div
+              className="flex-col gap-2 mb-3"
+              style={{ padding: '12px', backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 8 }}
+            >
+              <span
+                style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-sage-placeholder)' }}
+              >
+                Auto-generate Periods:
+              </span>
+              <div className="flex-row gap-2">
+                <select
+                  className="input-default"
+                  value={autoGenType}
+                  onChange={e => setAutoGenType(e.target.value as any)}
+                  style={{ flex: 1 }}
+                >
+                  <option value="monthly">Monthly (12)</option>
+                  <option value="quarterly">Quarterly (4)</option>
+                  <option value="half_year">Half Year (2)</option>
+                  <option value="custom">Custom</option>
+                </select>
+                {autoGenType === 'custom' && (
+                  <input
+                    className="input-default"
+                    type="number"
+                    min="1"
+                    max="12"
+                    value={customPeriodCount}
+                    onChange={e => setCustomPeriodCount(Number(e.target.value))}
+                    style={{ width: 60 }}
+                    placeholder="#"
+                  />
+                )}
+                <button className="btn btn-primary" onClick={generatePaymentPeriods}>
+                  Generate
+                </button>
+              </div>
+            </div>
+
             <div className="flex-col gap-2">
               <div className="flex-row gap-2">
                 <input
@@ -419,7 +693,7 @@ const FeeStructureManager: React.FC = () => {
                 />
                 <input
                   className="input-default flex-1"
-                  placeholder="Term Name"
+                  placeholder="Period Name"
                   value={termForm.label}
                   onChange={e => setTermForm({ ...termForm, label: e.target.value })}
                 />
@@ -440,7 +714,7 @@ const FeeStructureManager: React.FC = () => {
               </div>
               <div className="flex-row gap-2">
                 <button className="btn btn-primary flex-1" onClick={saveTerm}>
-                  {editingTermId ? 'Update Term' : 'Add Term'}
+                  {editingTermId ? 'Update Period' : 'Add Period'}
                 </button>
                 {editingTermId && (
                   <button
@@ -455,56 +729,90 @@ const FeeStructureManager: React.FC = () => {
                 )}
               </div>
             </div>
-            <div className="mt-3 chip-list">
-              {terms.map(t => (
-                <div key={t.id} className="chip flex-between gap-2" style={{ minWidth: '100%' }}>
-                  <div className="flex-col" style={{ gap: 0 }}>
-                    <span style={{ fontWeight: 600 }}>{t.label}</span>
-                    {t.start_date && (
-                      <span style={{ fontSize: 10, opacity: 0.6 }}>
-                        {new Date(t.start_date).toLocaleDateString()} -{' '}
-                        {t.end_date ? new Date(t.end_date).toLocaleDateString() : '...'}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex-row gap-2">
-                    <button
-                      onClick={() => startEditTerm(t)}
-                      style={{
-                        border: 'none',
-                        background: 'none',
-                        color: 'var(--color-accent-teal)',
-                        cursor: 'pointer',
-                        padding: 4,
-                      }}
-                    >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => deleteTerm(t.id)}
-                      style={{
-                        border: 'none',
-                        background: 'none',
-                        color: 'var(--color-posthog-orange)',
-                        cursor: 'pointer',
-                        padding: 4,
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
+          </div>
+          <div className="mt-3 chip-list">
+            {terms.map(t => (
+              <div key={t.id} className="chip flex-between gap-2" style={{ minWidth: '100%' }}>
+                <div className="flex-col" style={{ gap: 0 }}>
+                  <span style={{ fontWeight: 600 }}>{t.label}</span>
+                  {t.start_date && (
+                    <span style={{ fontSize: 10, opacity: 0.6 }}>
+                      {new Date(t.start_date).toLocaleDateString()} -{' '}
+                      {t.end_date ? new Date(t.end_date).toLocaleDateString() : '...'}
+                    </span>
+                  )}
                 </div>
-              ))}
+                <div className="flex-row gap-2">
+                  <button
+                    onClick={() => startEditTerm(t)}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: 'var(--color-accent-teal)',
+                      cursor: 'pointer',
+                      padding: 4,
+                    }}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => deleteTerm(t.id)}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: 'var(--color-posthog-orange)',
+                      cursor: 'pointer',
+                      padding: 4,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {/* Manual Debit Button */}
+            <div
+              className="mt-3"
+              style={{ padding: '12px', backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 8 }}
+            >
+              <button
+                className="btn btn-sage"
+                onClick={async () => {
+                  try {
+                    const result = await window.api.autoDebitFees();
+                    if (result.success) {
+                      showToast(
+                        'success',
+                        'Debit Complete',
+                        'Check console (F12) for details. Fees should now appear on student accounts.'
+                      );
+                    } else {
+                      showToast(
+                        'info',
+                        'No Fees Debited',
+                        'No pending fees found. Make sure: 1) Students are enrolled, 2) Fee structure is set, 3) Payment periods have start dates.'
+                      );
+                    }
+                  } catch (err) {
+                    console.error('Auto-debit error:', err);
+                    showToast('error', 'Error', 'Failed to debit fees. Check console for details.');
+                  }
+                }}
+                style={{ width: '100%' }}
+              >
+                Apply Fees to Students
+              </button>
             </div>
           </div>
         </div>
@@ -514,24 +822,42 @@ const FeeStructureManager: React.FC = () => {
       <div className="fee-matrix-container">
         <div
           className="fee-matrix-grid"
-          style={{ gridTemplateColumns: `240px repeat(${terms.length}, 1fr) 180px` }}
+          style={{ gridTemplateColumns: `200px 80px repeat(${terms.length}, 1fr) 160px` }}
         >
           {/* Header Row */}
           <div className="fee-matrix-header">
             <div className="fee-matrix-cell fee-matrix-header-cell">Grade / Form</div>
+            <div
+              className="fee-matrix-cell fee-matrix-header-cell text-center"
+              style={{ fontSize: '0.7rem' }}
+            >
+              Same All?
+            </div>
             {terms.map(t => (
               <div key={t.id} className="fee-matrix-cell fee-matrix-header-cell text-center">
                 <div className="flex-col items-center" style={{ gap: 2 }}>
                   <span>{t.label}</span>
-                  {t.start_date && (
-                    <span style={{ fontSize: 10, opacity: 0.6 }}>
-                      Starts: {new Date(t.start_date).toLocaleDateString()}
+                  {(t.start_date || t.end_date) && (
+                    <span style={{ fontSize: 9, opacity: 0.6, whiteSpace: 'nowrap' }}>
+                      {t.start_date
+                        ? new Date(t.start_date).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                          })
+                        : 'No start'}
+                      {' - '}
+                      {t.end_date
+                        ? new Date(t.end_date).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                          })
+                        : 'No end'}
                     </span>
                   )}
                 </div>
               </div>
             ))}
-            <div className="fee-matrix-cell fee-matrix-header-cell text-right">Annual Total</div>
+            <div className="fee-matrix-cell fee-matrix-header-cell text-right">Total</div>
           </div>
 
           {/* Data Rows */}
@@ -542,10 +868,29 @@ const FeeStructureManager: React.FC = () => {
                 <div className="fee-matrix-cell fee-matrix-grade-cell">
                   <span className="fee-grade-badge">{g.label}</span>
                 </div>
+                <div className="fee-matrix-cell" style={{ justifyContent: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={sameAmountPerGrade[g.id] || false}
+                    onChange={() => toggleSameAmount(g.id)}
+                    disabled={!canManageFees}
+                    style={{
+                      width: 18,
+                      height: 18,
+                      cursor: canManageFees ? 'pointer' : 'not-allowed',
+                    }}
+                    title={
+                      sameAmountPerGrade[g.id]
+                        ? 'Same amount for all payment periods'
+                        : 'Click to set same amount for all periods'
+                    }
+                  />
+                </div>
                 {terms.map(t => {
                   const cell = matrix[g.id]?.[t.id];
                   if (!cell) return <div key={t.id} className="fee-matrix-cell" />;
                   gradeTotal += parseFloat(cell.amount || '0');
+                  const isSameAmount = sameAmountPerGrade[g.id];
                   return (
                     <div key={t.id} className="fee-matrix-cell">
                       <div className="fee-input-wrapper">
@@ -557,8 +902,16 @@ const FeeStructureManager: React.FC = () => {
                           value={cell.amount}
                           onChange={e => handleMatrixChange(g.id, t.id, e.target.value)}
                           onBlur={() => saveCell(g.id, t.id)}
-                          readOnly={!canManageFees}
-                          style={{ cursor: !canManageFees ? 'default' : 'text' }}
+                          readOnly={!canManageFees || (isSameAmount && terms.indexOf(t) > 0)}
+                          style={{
+                            cursor: !canManageFees
+                              ? 'default'
+                              : isSameAmount && terms.indexOf(t) > 0
+                                ? 'not-allowed'
+                                : 'text',
+                            backgroundColor:
+                              isSameAmount && terms.indexOf(t) > 0 ? 'rgba(0,0,0,0.05)' : 'white',
+                          }}
                         />
                         {cell.isUnsaved && (
                           <div
@@ -605,7 +958,7 @@ const FeeStructureManager: React.FC = () => {
 
         {grades.length === 0 && (
           <div style={{ padding: 60, textAlign: 'center', color: 'var(--color-sage-placeholder)' }}>
-            No grades defined. Use the Configuration panel to add grades and terms.
+            No grades defined. Use the Configuration panel to add grades and payment periods.
           </div>
         )}
       </div>

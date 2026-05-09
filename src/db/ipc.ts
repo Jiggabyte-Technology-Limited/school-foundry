@@ -2,6 +2,7 @@ import { ipcMain, dialog, app, shell, BrowserWindow } from 'electron';
 import db from './init';
 import * as fs from 'fs';
 import * as path from 'path';
+import { checkAndDebitFees } from '../lib/auto-debit';
 
 function getDbPath(): string {
   return path.join(app.getPath('userData'), 'data.db');
@@ -174,5 +175,16 @@ export function setupIpcHandlers() {
 
   ipcMain.handle('get-print-output-dir', () => {
     return path.join(app.getPath('userData'), 'print-output');
+  });
+
+  // Auto-debit fees handler
+  ipcMain.handle('auto-debit-fees', async () => {
+    try {
+      await checkAndDebitFees();
+      return { success: true };
+    } catch (err) {
+      console.error('[IPC] auto-debit-fees error:', err);
+      return { success: false, error: String(err) };
+    }
   });
 }

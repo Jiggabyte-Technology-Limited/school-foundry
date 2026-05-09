@@ -447,7 +447,7 @@ const PaymentManager: React.FC = () => {
         FROM payments p
         JOIN students s ON p.student_id = s.id
         JOIN academic_years y ON p.year_id = y.id
-        JOIN terms t ON p.term_id = t.id
+        LEFT JOIN terms t ON p.term_id = t.id
         LEFT JOIN users u ON p.recorded_by = u.id
         WHERE p.is_voided = 0
         ORDER BY p.payment_date DESC
@@ -653,7 +653,7 @@ const PaymentManager: React.FC = () => {
         FROM payments p
         JOIN students s ON p.student_id = s.id
         JOIN academic_years y ON p.year_id = y.id
-        JOIN terms t ON p.term_id = t.id
+        LEFT JOIN terms t ON p.term_id = t.id
         LEFT JOIN users u ON p.recorded_by = u.id
         WHERE p.is_voided = 0 ${dateFilter}
         ORDER BY p.payment_date DESC
@@ -680,7 +680,7 @@ const PaymentManager: React.FC = () => {
         FROM payments p
         JOIN students s ON p.student_id = s.id
         JOIN academic_years y ON p.year_id = y.id
-        JOIN terms t ON p.term_id = t.id
+        LEFT JOIN terms t ON p.term_id = t.id
         LEFT JOIN users u ON p.recorded_by = u.id
         WHERE p.id = ?
       `,
@@ -783,7 +783,7 @@ const PaymentManager: React.FC = () => {
         FROM payments p
         JOIN students s ON p.student_id = s.id
         JOIN academic_years y ON p.year_id = y.id
-        JOIN terms t ON p.term_id = t.id
+        LEFT JOIN terms t ON p.term_id = t.id
         LEFT JOIN users u ON p.recorded_by = u.id
         WHERE p.id = ?
       `,
@@ -1516,6 +1516,17 @@ const PaymentManager: React.FC = () => {
               >
                 Student Full Name
               </th>
+              <th
+                style={{
+                  textAlign: 'center',
+                  padding: '10px',
+                  borderBottom: '2px solid var(--border)',
+                  fontSize: '12px',
+                  width: '80px',
+                }}
+              >
+                View
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -1612,13 +1623,34 @@ const PaymentManager: React.FC = () => {
                   >
                     {log.student_name || '-'}
                   </td>
+                  <td
+                    style={{
+                      padding: '10px',
+                      borderBottom: '1px solid var(--border)',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <button
+                      className="btn btn-outline"
+                      onClick={e => {
+                        e.stopPropagation();
+                        handleViewReceiptFromActivity(log);
+                      }}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '11px',
+                      }}
+                    >
+                      View
+                    </button>
+                  </td>
                 </tr>
               );
             })}
             {activityLogs.length === 0 && (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={7}
                   style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)' }}
                 >
                   No payment activity yet
