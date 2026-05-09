@@ -1326,6 +1326,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           full_name: '',
                           username: '',
                           password: '',
+                          confirmPassword: '',
                           role: 'user',
                         });
                       } else {
@@ -1336,6 +1337,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             full_name: '',
                             username: '',
                             password: '',
+                            confirmPassword: '',
                             role: 'user',
                           });
                         setShowAddUser(!showAddUser);
@@ -1554,6 +1556,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                               full_name: '',
                               username: '',
                               password: '',
+                              confirmPassword: '',
                               role: 'user',
                             });
                             setShowAddUser(false);

@@ -32,6 +32,7 @@ declare global {
       printToPdf: (options: PrintToPdfOptions) => Promise<PrintToPdfResult>;
       openFileForPrint: (filePath: string) => Promise<OpenFileResult>;
       getPrintOutputDir: () => Promise<string>;
+      autoDebitFees: () => Promise<{ success: boolean; error?: string }>;
     };
   }
 }

@@ -391,48 +391,46 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions
-                    .filter(t => (t.isCredit ? showPaid : showOwing))
-                    .map((item, i) => (
-                      <tr key={i} className="hover:bg-secondary">
-                        <td
-                          className="text-mono"
-                          style={{ fontSize: '12px', color: 'var(--text-secondary)' }}
-                        >
-                          {item.date}
-                        </td>
-                        <td>
-                          <span
-                            style={{
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '10px',
-                              fontWeight: 700,
-                              backgroundColor: item.isCredit ? '#D1FAE5' : '#FEE2E2',
-                              color: item.isCredit ? '#065F46' : '#991B1B',
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            {item.type}
-                          </span>
-                        </td>
-                        <td className="text-display" style={{ fontSize: '13px', fontWeight: 600 }}>
-                          {item.details}
-                        </td>
-                        <td
-                          className="text-mono"
+                  {transactions.map((item, i) => (
+                    <tr key={i} className="hover:bg-secondary">
+                      <td
+                        className="text-mono"
+                        style={{ fontSize: '12px', color: 'var(--text-secondary)' }}
+                      >
+                        {item.date}
+                      </td>
+                      <td>
+                        <span
                           style={{
-                            fontSize: '14px',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
                             fontWeight: 700,
-                            textAlign: 'right',
-                            color: item.isCredit ? '#10B981' : '#dc2626',
+                            backgroundColor: item.isCredit ? '#D1FAE5' : '#FEE2E2',
+                            color: item.isCredit ? '#065F46' : '#991B1B',
+                            textTransform: 'uppercase',
                           }}
                         >
-                          {item.isCredit ? '-' : '+'}${(item.amount / 100).toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  {transactions.filter(t => (t.isCredit ? showPaid : showOwing)).length === 0 && (
+                          {item.type}
+                        </span>
+                      </td>
+                      <td className="text-display" style={{ fontSize: '13px', fontWeight: 600 }}>
+                        {item.details}
+                      </td>
+                      <td
+                        className="text-mono"
+                        style={{
+                          fontSize: '14px',
+                          fontWeight: 700,
+                          textAlign: 'right',
+                          color: item.isCredit ? '#10B981' : '#dc2626',
+                        }}
+                      >
+                        {item.isCredit ? '+' : '-'}${Math.abs(item.amount / 100).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                  {transactions.length === 0 && (
                     <tr>
                       <td
                         colSpan={4}
@@ -468,8 +466,15 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
               <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>
                 Account Balance
               </span>
-              <span style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>
-                ${(statementData.balance / 100).toFixed(2)}
+              <span
+                style={{
+                  fontSize: '24px',
+                  fontWeight: 700,
+                  color: statementData.balance > 0 ? '#dc2626' : '#10B981',
+                }}
+              >
+                {statementData.balance > 0 ? '+$' : statementData.balance < 0 ? '+$' : ''}
+                {Math.abs(statementData.balance / 100).toFixed(2)}
               </span>
             </div>
 
@@ -527,40 +532,37 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {transactions
-                  .filter(t => (t.isCredit ? showPaid : showOwing))
-                  .slice(10)
-                  .map((item, i) => (
-                    <tr key={i}>
-                      <td style={{ fontSize: '12px', color: '#6b7280' }}>{item.date}</td>
-                      <td>
-                        <span
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            fontSize: '10px',
-                            fontWeight: 700,
-                            backgroundColor: item.isCredit ? '#D1FAE5' : '#FEE2E2',
-                            color: item.isCredit ? '#065F46' : '#991B1B',
-                            textTransform: 'uppercase',
-                          }}
-                        >
-                          {item.type}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '13px', fontWeight: 600 }}>{item.details}</td>
-                      <td
+                {transactions.slice(10).map((item, i) => (
+                  <tr key={i}>
+                    <td style={{ fontSize: '12px', color: '#6b7280' }}>{item.date}</td>
+                    <td>
+                      <span
                         style={{
-                          fontSize: '14px',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontSize: '10px',
                           fontWeight: 700,
-                          textAlign: 'right',
-                          color: item.isCredit ? '#10B981' : '#dc2626',
+                          backgroundColor: item.isCredit ? '#D1FAE5' : '#FEE2E2',
+                          color: item.isCredit ? '#065F46' : '#991B1B',
+                          textTransform: 'uppercase',
                         }}
                       >
-                        {item.isCredit ? '-' : '+'}${(item.amount / 100).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
+                        {item.type}
+                      </span>
+                    </td>
+                    <td style={{ fontSize: '13px', fontWeight: 600 }}>{item.details}</td>
+                    <td
+                      style={{
+                        fontSize: '14px',
+                        fontWeight: 700,
+                        textAlign: 'right',
+                        color: item.isCredit ? '#10B981' : '#dc2626',
+                      }}
+                    >
+                      {item.isCredit ? '+' : '-'}${Math.abs(item.amount / 100).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
             <div
@@ -578,8 +580,15 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
               <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>
                 Account Balance
               </span>
-              <span style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>
-                ${(statementData.balance / 100).toFixed(2)}
+              <span
+                style={{
+                  fontSize: '24px',
+                  fontWeight: 700,
+                  color: statementData.balance > 0 ? '#dc2626' : '#10B981',
+                }}
+              >
+                {statementData.balance > 0 ? '+$' : statementData.balance < 0 ? '+$' : ''}
+                {Math.abs(statementData.balance / 100).toFixed(2)}
               </span>
             </div>
             <div

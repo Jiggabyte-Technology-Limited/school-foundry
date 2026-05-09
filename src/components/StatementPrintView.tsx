@@ -70,6 +70,7 @@ const StatementPrintView: React.FC<StatementPrintViewProps> = ({
       totalPaid: (statementData.totalPaid / 100).toFixed(2),
       balance: (statementData.balance / 100).toFixed(2),
       fees: statementData.fees.map((f: any) => ({
+        date: f.date,
         termLabel: f.term_label,
         description: f.description,
         amount: (f.amount / 100).toFixed(2),
@@ -135,6 +136,7 @@ const StatementPrintView: React.FC<StatementPrintViewProps> = ({
             <button className="btn btn-primary" onClick={onRetry}>Retry Connection</button>
           </div>
         ) : statementData ? (
+          <>
           <div style={{ backgroundColor: 'white', padding: '20mm', minHeight: '297mm', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '4px' }}>
             <div style={{ textAlign: 'center', borderBottom: '2px solid #f97316', paddingBottom: '20px', marginBottom: '24px' }}>
               {schoolLogo && (
@@ -208,7 +210,7 @@ const StatementPrintView: React.FC<StatementPrintViewProps> = ({
                         {item.description} 
                         <span style={{ marginLeft: '8px', padding: '2px 6px', backgroundColor: '#FEF3C7', color: '#92400E', borderRadius: '4px', fontSize: '9px', fontWeight: 800, border: '1px solid #FDE68A', textTransform: 'uppercase' }}>Debit</span>
                       </td>    
-                      <td className="text-mono" style={{ fontSize: '14px', fontWeight: 700, textAlign: 'right' }}>${(item.amount/100).toFixed(2)}</td>
+                      <td className="text-mono" style={{ fontSize: '14px', fontWeight: 700, textAlign: 'right', color: '#dc2626' }}>-${Math.abs(item.amount/100).toFixed(2)}</td>
                     </tr>
                   ))}
                   {statementData.payments.map((item:any, i:any) => (
@@ -218,7 +220,7 @@ const StatementPrintView: React.FC<StatementPrintViewProps> = ({
                         Credit Receipt #{item.ref.split('-')[1]?.substring(0,6) || item.ref}
                         <span style={{ marginLeft: '8px', padding: '2px 6px', backgroundColor: '#D1FAE5', color: '#065F46', borderRadius: '4px', fontSize: '9px', fontWeight: 800, border: '1px solid #A7F3D0', textTransform: 'uppercase' }}>Credit</span>
                       </td>
-                      <td className="text-mono" style={{ fontSize: '14px', fontWeight: 700, textAlign: 'right', color: '#10B981' }}>-${(item.amount/100).toFixed(2)}</td>
+                      <td className="text-mono" style={{ fontSize: '14px', fontWeight: 700, textAlign: 'right', color: '#10B981' }}>+${(item.amount/100).toFixed(2)}</td>
                     </tr>
                   ))}
                   {statementData.fees.length === 0 && statementData.payments.length === 0 && (  
@@ -230,7 +232,7 @@ const StatementPrintView: React.FC<StatementPrintViewProps> = ({
 
             <div style={{ marginTop: '20px', padding: '16px', border: '2px solid #374151', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb' }}>
               <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>Account Balance</span>
-              <span style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>${(statementData.balance/100).toFixed(2)}</span>
+              <span style={{ fontSize: '24px', fontWeight: 700, color: statementData.balance > 0 ? '#dc2626' : '#10B981' }}>{statementData.balance > 0 ? '+$' : statementData.balance < 0 ? '+$' : ''}{Math.abs(statementData.balance/100).toFixed(2)}</span>
             </div>
 
             <div style={{ marginTop: '30px', paddingTop: '16px', borderTop: '2px dashed #e5e7eb', textAlign: 'center', fontSize: '11px', color: '#6b7280' }}>
@@ -259,21 +261,21 @@ const StatementPrintView: React.FC<StatementPrintViewProps> = ({
                     <tr key={`fee2-${i}`}>
                       <td style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>{item.term_label || 'Term -'}</td>       
                       <td style={{ fontSize: '13px', fontWeight: 600 }}>{item.description}</td>    
-                      <td style={{ fontSize: '14px', fontWeight: 700, textAlign: 'right' }}>${(item.amount/100).toFixed(2)}</td>
+                      <td style={{ fontSize: '14px', fontWeight: 700, textAlign: 'right', color: '#10B981' }}>-${(item.amount/100).toFixed(2)}</td>
                     </tr>
                   ))}
                   {statementData.payments.slice(10).map((item:any, i:any) => (
                     <tr key={`pay2-${i}`}>
                       <td style={{ fontSize: '12px', color: '#6b7280' }}>{item.date}</td>
                       <td style={{ fontSize: '13px', fontWeight: 600 }}>Credit Receipt #{item.ref.split('-')[1]?.substring(0,6) || item.ref}</td>
-                      <td style={{ fontSize: '14px', fontWeight: 700, textAlign: 'right', color: '#10B981' }}>-${(item.amount/100).toFixed(2)}</td>
+                      <td style={{ fontSize: '14px', fontWeight: 700, textAlign: 'right', color: '#10B981' }}>+${(item.amount/100).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               <div style={{ marginTop: '20px', padding: '16px', border: '2px solid #374151', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f9fafb' }}>
                 <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>Account Balance</span>
-                <span style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>${(statementData.balance/100).toFixed(2)}</span>
+                <span style={{ fontSize: '24px', fontWeight: 700, color: statementData.balance > 0 ? '#dc2626' : '#10B981' }}>{statementData.balance > 0 ? '+$' : statementData.balance < 0 ? '+$' : ''}{Math.abs(statementData.balance/100).toFixed(2)}</span>
               </div>
               <div style={{ position: 'absolute', bottom: '20mm', left: '20mm', right: '20mm', paddingTop: '12px', borderTop: '2px dashed #e5e7eb', textAlign: 'center', fontSize: '11px', color: '#6b7280' }}>
                 <div>This statement was generated using <span style={{ fontWeight: 600, color: '#f97316' }}>FeesFoundry</span> - a product of <span style={{ color: '#374151' }}>Jiggabyte Technology Limited</span></div>
@@ -281,6 +283,7 @@ const StatementPrintView: React.FC<StatementPrintViewProps> = ({
               </div>
             </div>
           )}
+          </>
         ) : (
           <div style={{ textAlign: 'center', padding: '96px 0', color: 'var(--text-secondary)', opacity: 0.4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }} className="text-display">
             Record Entry Pending

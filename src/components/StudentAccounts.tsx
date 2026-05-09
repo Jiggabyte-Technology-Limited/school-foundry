@@ -8,7 +8,7 @@ import StatementPrintView from './StatementPrintView';
 import GradeOverview from './GradeOverview';
 import StudentStatementPreview from './StudentStatementPreview';
 import { useAuth } from '../lib/auth-context';
-import { generateOverviewHtml, printDocument } from '../lib/print-service';
+import { generateOverviewHtml, generateStudentStatementHtml, printDocument } from '../lib/print-service';
 
 interface Student {
   id: number;
@@ -339,7 +339,7 @@ const StudentAccounts: React.FC = () => {
                        'Payment' as type, t.label as term_label
                 FROM payments p
                 LEFT JOIN terms t ON p.term_id = t.id
-                WHERE p.student_id = ? AND p.year_id = ?
+                WHERE p.student_id = ? AND p.year_id = ? AND p.is_voided = 0
                 ORDER BY p.payment_date`,
           [student.id, selectedYear]
         ),
@@ -570,10 +570,11 @@ const StudentAccounts: React.FC = () => {
                       style={{
                         fontWeight: 700,
                         textAlign: 'right',
-                        color: s.balance > 0 ? 'var(--primary)' : '#10B981',
+                        color: s.balance > 0 ? '#dc2626' : '#10B981',
                       }}
                     >
-                      ${(s.balance / 100).toFixed(2)}
+                      {s.balance > 0 ? '+' : s.balance < 0 ? '+' : ''}$
+                      {Math.abs(s.balance / 100).toFixed(2)}
                     </td>
                   </tr>
                 );
@@ -622,7 +623,7 @@ const StudentAccounts: React.FC = () => {
         )}
 
         {!showPrintView && currentOverview && (
-          <>
+          <div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button
                 className="btn btn-primary"
@@ -835,8 +836,15 @@ const StudentAccounts: React.FC = () => {
                   >
                     Amount Outstanding
                   </div>
-                  <div style={{ fontSize: '22px', fontWeight: 700, color: '#dc2626' }}>
-                    ${(currentOverview.balance / 100).toFixed(2)}
+                  <div
+                    style={{
+                      fontSize: '22px',
+                      fontWeight: 700,
+                      color: currentOverview.balance > 0 ? '#dc2626' : '#10B981',
+                    }}
+                  >
+                    {currentOverview.balance > 0 ? '+$' : currentOverview.balance < 0 ? '+$' : ''}
+                    {Math.abs(currentOverview.balance / 100).toFixed(2)}
                   </div>
                 </div>
               </div>
@@ -872,8 +880,16 @@ const StudentAccounts: React.FC = () => {
                         {currentOverview.isGrade && (
                           <td style={{ color: '#6b7280' }}>{row.studentId}</td>
                         )}
-                        <td className="text-mono" style={{ fontWeight: 700, textAlign: 'right' }}>
-                          ${(row.balance / 100).toFixed(2)}
+                        <td
+                          className="text-mono"
+                          style={{
+                            fontWeight: 700,
+                            textAlign: 'right',
+                            color: row.balance > 0 ? '#dc2626' : '#10B981',
+                          }}
+                        >
+                          {row.balance > 0 ? '+$' : row.balance < 0 ? '+$' : ''}
+                          {Math.abs(row.balance / 100).toFixed(2)}
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           <span
@@ -910,469 +926,44 @@ const StudentAccounts: React.FC = () => {
                 <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>
                   Total Outstanding Balance
                 </span>
-                <span style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>
-                  ${(currentOverview.balance / 100).toFixed(2)}
+                <span
+                  style={{
+                    fontSize: '24px',
+                    fontWeight: 700,
+                    color: currentOverview.balance > 0 ? '#dc2626' : currentOverview.balance < 0 ? '#10B981' : '#059669',
+                  }}
+                >
+                  {currentOverview.balance > 0 ? '+$' : currentOverview.balance < 0 ? '+$' : ''}
+                  {Math.abs(currentOverview.balance / 100).toFixed(2)}
                 </span>
               </div>
 
               <div
                 style={{
-                  marginTop: '30px',
-                  paddingTop: '16px',
-                  borderTop: '2px dashed #e5e7eb',
-                  textAlign: 'center',
-                  fontSize: '11px',
-                  color: '#6b7280',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: '#374151',
+                  marginBottom: '12px',
+                  paddingBottom: '8px',
+                  borderBottom: '1px solid #e5e7eb',
                 }}
               >
-                <div>
-                  This report was generated using{' '}
-                  <span style={{ fontWeight: 600, color: '#f97316' }}>FeesFoundry</span> - a product
-                  of <span style={{ color: '#374151' }}>Jiggabyte Technology Limited</span>
-                </div>
-                <div style={{ marginTop: '4px', fontStyle: 'italic' }}>
-                  For support, contact your school administrator or visit www.jiggabyte.co.zm
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {!showPrintView && !currentOverview && (
-          <div
-            className="card-surface"
-            style={{
-              padding: '64px',
-              textAlign: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '24px',
-            }}
-          >
-            <div
-              style={{
-                width: '64px',
-                height: '64px',
-                backgroundColor: 'var(--secondary)',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <svg
-                width="32"
-                height="32"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{ opacity: 0.2, color: 'var(--text-secondary)' }}
-              >
-                <rect x="3" y="4" width="18" height="16" rx="2" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-                <path d="M7 15h.01"></path>
-                <path d="M11 15h.01"></path>
-              </svg>
-            </div>
-            <p className="metric-label" style={{ opacity: 0.4 }}>
-              Syncing Financial Data Layer...
-            </p>
-          </div>
-        )}
-      </div>
-      {showWizard && (
-        <StudentWizard
-          onClose={() => setShowWizard(false)}
-          onSuccess={() => {
-            setShowWizard(false);
-            loadStudents(selectedGrade);
-          }}
-        />
-      )}
-      {showPaymentWizard && (
-        <PaymentWizard
-          onClose={() => setShowPaymentWizard(false)}
-          onSuccess={handlePaymentSuccess}
-          preSelectedStudent={selectedStudent?.id}
-        />
-      )}
-      {showEditModal && selectedStudent && selectedYear && (
-        <EditStudentModal
-          studentId={selectedStudent.id}
-          yearId={selectedYear}
-          onClose={() => setShowEditModal(false)}
-          onSuccess={() => {
-            setShowEditModal(false);
-            viewStatement(selectedStudent);
-            loadStudents(selectedGrade);
-          }}
-        />
-      )}
-
-      {/* Print All Statements Hidden View */}
-      {allStatementsData.length > 0 && (
-        <div className="print-only" style={{ display: 'block', backgroundColor: 'white' }}>
-          {allStatementsData.map((data, idx) => (
-            <div
-              key={idx}
-              className="a4-page"
-              style={{
-                position: 'relative',
-                padding: '20mm',
-                pageBreakAfter: 'always',
-                color: 'black',
-                minHeight: 'auto',
-                boxShadow: 'none',
-                border: 'none',
-              }}
-            >
-              <div
-                style={{
-                  textAlign: 'center',
-                  borderBottom: '2px solid #EEE',
-                  paddingBottom: '24px',
-                  marginBottom: '24px',
-                }}
-              >
-                {schoolLogo && (
-                  <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>
-                    <img
-                      src={schoolLogo}
-                      alt="School Logo"
-                      style={{ maxHeight: '60px', maxWidth: '150px' }}
-                    />
-                  </div>
-                )}
-                <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 4px 0' }}>
-                  {schoolName}
-                </h2>
-                <div style={{ fontSize: '12px', opacity: 0.6 }}>
-                  Statement of Account • {data.generatedAt}
-                </div>
+                {currentOverview.isGrade ? 'Student Details' : 'Grade Details'}
               </div>
 
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: '24px',
-                }}
-              >
-                <div>
-                  <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 8px 0' }}>
-                    {data.student.full_name}
-                  </h3>
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: '16px',
-                      alignItems: 'center',
-                      marginBottom: '8px',
-                    }}
-                  >
-                    <span style={{ fontSize: '14px', fontWeight: 700 }}>
-                      {data.student.grade_label}
-                    </span>
-                    <span style={{ fontSize: '12px' }}>ID: {data.student.id}</span>
-                  </div>
-                  <div style={{ fontSize: '12px' }}>
-                    <div>
-                      Guardian: {data.student.guardian_name} | {data.student.guardian_contact}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div
-                    style={{
-                      padding: '4px 10px',
-                      border: '1px solid #000',
-                      fontSize: '10px',
-                      fontWeight: 800,
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    {data.balance > 0 ? 'Owing' : 'Paid'}
-                  </div>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '12px',
-                  marginBottom: '24px',
-                }}
-              >
-                <div style={{ border: '1px solid #EEE', padding: '12px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>Invoiced</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700 }}>
-                    ${(data.totalFees / 100).toFixed(2)}
-                  </div>
-                </div>
-                <div style={{ border: '1px solid #EEE', padding: '12px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>Paid</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700 }}>
-                    ${(data.totalPaid / 100).toFixed(2)}
-                  </div>
-                </div>
-                <div style={{ border: '1px solid #000', padding: '12px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '10px', textTransform: 'uppercase' }}>Balance</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700 }}>
-                    ${(data.balance / 100).toFixed(2)}
-                  </div>
-                </div>
-              </div>
-
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid #000' }}>
-                    <th style={{ textAlign: 'left', padding: '8px' }}>Detail</th>
-                    <th style={{ textAlign: 'right', padding: '8px' }}>Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.fees.map((item: any, i: number) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #EEE' }}>
-                      <td style={{ padding: '8px' }}>
-                        {item.term_label}: {item.description}
-                      </td>
-                      <td style={{ padding: '8px', textAlign: 'right' }}>
-                        ${(item.amount / 100).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                  {data.payments.map((item: any, i: number) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #EEE' }}>
-                      <td style={{ padding: '8px' }}>
-                        Payment - {item.date} (Ref: {item.ref})
-                      </td>
-                      <td style={{ padding: '8px', textAlign: 'right' }}>
-                        -${(item.amount / 100).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              <div
-                style={{
-                  marginTop: '20px',
-                  padding: '16px',
-                  border: '2px solid #374151',
-                  borderRadius: '8px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  backgroundColor: '#f9fafb',
-                }}
-              >
-                <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>
-                  Account Balance
-                </span>
-                <span style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>
-                  ${(data.balance / 100).toFixed(2)}
-                </span>
-              </div>
-
-              <div
-                style={{
-                  marginTop: '30px',
-                  paddingTop: '16px',
-                  borderTop: '2px dashed #e5e7eb',
-                  textAlign: 'center',
-                  fontSize: '11px',
-                  color: '#6b7280',
-                }}
-              >
-                <div>
-                  This statement was generated using{' '}
-                  <span style={{ fontWeight: 600, color: '#f97316' }}>FeesFoundry</span> - a product
-                  of <span style={{ color: '#374151' }}>Jiggabyte Technology Limited</span>
-                </div>
-                <div style={{ marginTop: '4px', fontStyle: 'italic' }}>
-                  For support, contact your school administrator or visit www.jiggabyte.co.zm
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Print Overview Hidden View - always rendered for printing */}
-      {currentOverview && (
-        <div className="print-only" style={{ display: 'block', backgroundColor: 'white' }}>
-          <div
-            className="a4-page"
-            style={{
-              position: 'relative',
-              padding: '20mm',
-              pageBreakAfter: 'always',
-              color: 'black',
-              minHeight: 'auto',
-              boxShadow: 'none',
-              border: 'none',
-            }}
-          >
-            <div
-              style={{
-                textAlign: 'center',
-                borderBottom: '2px solid #f97316',
-                paddingBottom: '20px',
-                marginBottom: '24px',
-              }}
-            >
-              {schoolLogo && (
-                <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}>
-                  <img
-                    src={schoolLogo}
-                    alt="School Logo"
-                    style={{ maxHeight: '60px', maxWidth: '150px' }}
-                  />
-                </div>
-              )}
-              <h2
-                style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 8px 0', color: '#1f2937' }}
-              >
-                {schoolName}
-              </h2>
-              <div
-                style={{ fontSize: '16px', fontWeight: 600, color: '#f97316', marginBottom: '8px' }}
-              >
-                {currentOverview.isGrade
-                  ? `Grade Report: ${grades.find(g => g.id === selectedGrade)?.label}`
-                  : 'Master Financial Overview'}
-              </div>
-              <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                {currentPeriod && <span>Period: {currentPeriod.label}</span>}
-                {!currentPeriod && termsList.length > 0 && (
-                  <span>Period: {termsList[0].label}</span>
-                )}
-                <span style={{ margin: '0 8px' }}>|</span>
-                <span>
-                  Generated:{' '}
-                  {new Date().toLocaleDateString('en-GB', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                  })}
-                </span>
-                {schoolContact && (
-                  <>
-                    <span style={{ margin: '0 8px' }}>|</span>
-                    <span>Contact: {schoolContact}</span>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '16px',
-                marginBottom: '28px',
-              }}
-            >
-              <div
-                style={{
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  textAlign: 'center',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: '11px',
-                    textTransform: 'uppercase',
-                    color: '#6b7280',
-                    marginBottom: '4px',
-                  }}
-                >
-                  Total Fees Charged
-                </div>
-                <div style={{ fontSize: '22px', fontWeight: 700, color: '#374151' }}>
-                  ${(currentOverview.totalInvoiced / 100).toFixed(2)}
-                </div>
-              </div>
-              <div
-                style={{
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  textAlign: 'center',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: '11px',
-                    textTransform: 'uppercase',
-                    color: '#6b7280',
-                    marginBottom: '4px',
-                  }}
-                >
-                  Total Paid
-                </div>
-                <div style={{ fontSize: '22px', fontWeight: 700, color: '#059669' }}>
-                  ${(currentOverview.totalPaid / 100).toFixed(2)}
-                </div>
-              </div>
-              <div
-                style={{
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  textAlign: 'center',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: '11px',
-                    textTransform: 'uppercase',
-                    color: '#6b7280',
-                    marginBottom: '4px',
-                  }}
-                >
-                  Amount Outstanding
-                </div>
-                <div style={{ fontSize: '22px', fontWeight: 700, color: '#dc2626' }}>
-                  ${(currentOverview.balance / 100).toFixed(2)}
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                fontSize: '13px',
-                fontWeight: 600,
-                color: '#374151',
-                marginBottom: '12px',
-                paddingBottom: '8px',
-                borderBottom: '1px solid #e5e7eb',
-              }}
-            >
-              {currentOverview.isGrade ? 'Student Details' : 'Grade Details'}
-            </div>
-
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #374151' }}>
-                  <th
-                    style={{
-                      textAlign: 'left',
-                      padding: '12px 10px',
-                      fontWeight: 600,
-                      fontSize: '12px',
-                      color: '#374151',
-                      backgroundColor: '#f9fafb',
-                    }}
-                  >
+                  <tr style={{ borderBottom: '2px solid #374151' }}>
+                    <th
+                      style={{
+                        textAlign: 'left',
+                        padding: '12px 10px',
+                        fontWeight: 600,
+                        fontSize: '12px',
+                        color: '#374151',
+                        backgroundColor: '#f9fafb',
+                      }}
+                    >
                     Name
                   </th>
                   {currentOverview.isGrade && (
@@ -1422,8 +1013,16 @@ const StudentAccounts: React.FC = () => {
                     {currentOverview.isGrade && (
                       <td style={{ padding: '12px 10px', color: '#6b7280' }}>{row.studentId}</td>
                     )}
-                    <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 600 }}>
-                      ${(row.balance / 100).toFixed(2)}
+                    <td
+                      style={{
+                        padding: '12px 10px',
+                        textAlign: 'right',
+                        fontWeight: 600,
+                        color: row.balance > 0 ? '#dc2626' : '#10B981',
+                      }}
+                    >
+                      {row.balance > 0 ? '+$' : row.balance < 0 ? '+$' : ''}
+                      {Math.abs(row.balance / 100).toFixed(2)}
                     </td>
                     <td style={{ padding: '12px 10px', textAlign: 'center' }}>
                       <span
@@ -1459,8 +1058,8 @@ const StudentAccounts: React.FC = () => {
               <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>
                 Total Outstanding Balance
               </span>
-              <span style={{ fontSize: '24px', fontWeight: 700, color: '#dc2626' }}>
-                ${(currentOverview.balance / 100).toFixed(2)}
+              <span style={{ fontSize: '24px', fontWeight: 700, color: currentOverview.balance > 0 ? '#dc2626' : '#10B981' }}>
+                {currentOverview.balance > 0 ? '+$' : currentOverview.balance < 0 ? '+$' : ''}{Math.abs(currentOverview.balance / 100).toFixed(2)}
               </span>
             </div>
 
@@ -1484,8 +1083,9 @@ const StudentAccounts: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

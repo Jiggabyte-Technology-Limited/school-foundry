@@ -464,7 +464,9 @@ const FeeStructureManager: React.FC = () => {
           }
         }
         // Reload to reflect changes
-        loadYearData(selectedYear);
+        if (selectedYear) {
+          loadYearData(selectedYear);
+        }
       }
     }
   };
