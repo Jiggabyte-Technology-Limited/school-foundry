@@ -13,10 +13,19 @@ const BackupManager: React.FC = () => {
     try {
       const success = await db.backup();
       if (success) {
-        setMessage({ type: 'success', text: 'Backup created successfully! The file has been saved to your documents folder.' });
+        setMessage({
+          type: 'success',
+          text: 'Backup created successfully! The file has been saved to your documents folder.',
+        });
         await db.run(
           'INSERT INTO activity_log (user_id, username, action, entity, details) VALUES (?, ?, ?, ?, ?)',
-          [user?.id ?? null, user?.username ?? 'System', 'database_backup', 'app_settings', 'Database backup created']
+          [
+            user?.id ?? null,
+            user?.username ?? 'System',
+            'database_backup',
+            'app_settings',
+            'Database backup created',
+          ]
         );
       } else {
         setMessage({ type: 'error', text: 'Backup failed. Please try again.' });
@@ -29,16 +38,23 @@ const BackupManager: React.FC = () => {
   };
 
   const handleRestore = async () => {
-    if (!confirm('Are you sure you want to restore from a backup? This will replace all current data.')) {
+    if (
+      !confirm(
+        'Are you sure you want to restore from a backup? This will replace all current data.'
+      )
+    ) {
       return;
     }
-    
+
     setLoading('restore');
     setMessage(null);
     try {
       const success = await db.restore();
       if (success) {
-        setMessage({ type: 'success', text: 'Database restored successfully! Please restart the application for changes to take effect.' });
+        setMessage({
+          type: 'success',
+          text: 'Database restored successfully! Please restart the application for changes to take effect.',
+        });
       } else {
         setMessage({ type: 'error', text: 'Restore failed or was cancelled.' });
       }
@@ -63,7 +79,9 @@ const BackupManager: React.FC = () => {
       <h2 className="mb-4">Backup & Restore</h2>
 
       {message && (
-        <div className={`message-box mb-4 ${message.type === 'success' ? 'message-success' : 'message-error'}`}>
+        <div
+          className={`message-box mb-4 ${message.type === 'success' ? 'message-success' : 'message-error'}`}
+        >
           {message.text}
         </div>
       )}
@@ -72,7 +90,14 @@ const BackupManager: React.FC = () => {
         {/* Backup Section */}
         <div className="card">
           <div className="backup-icon">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="17 8 12 3 7 8" />
               <line x1="12" y1="3" x2="12" y2="15" />
@@ -80,15 +105,16 @@ const BackupManager: React.FC = () => {
           </div>
           <h3>Create Backup</h3>
           <p className="backup-description">
-            Export your entire database to a secure backup file. This includes all students, payments, fee structures, and settings.
+            Export your entire database to a secure backup file. This includes all learners,
+            payments, fee structures, and settings.
           </p>
           <ul className="backup-list">
             <li>Backup file is saved to your documents folder</li>
             <li>File format: SQLite database (.db)</li>
             <li>Recommended: Create weekly backups</li>
           </ul>
-          <button 
-            className="btn btn-primary w-full" 
+          <button
+            className="btn btn-primary w-full"
             onClick={handleBackup}
             disabled={loading !== null}
           >
@@ -99,7 +125,14 @@ const BackupManager: React.FC = () => {
         {/* Restore Section */}
         <div className="card">
           <div className="backup-icon" style={{ color: '#dc2626' }}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
@@ -107,15 +140,16 @@ const BackupManager: React.FC = () => {
           </div>
           <h3>Restore from Backup</h3>
           <p className="backup-description">
-            Import a previously created backup file. This will replace all current data with the data from the backup.
+            Import a previously created backup file. This will replace all current data with the
+            data from the backup.
           </p>
           <ul className="backup-list">
             <li>Select a .db backup file when prompted</li>
             <li>All current data will be overwritten</li>
             <li>Application restart required after restore</li>
           </ul>
-          <button 
-            className="btn btn-danger w-full" 
+          <button
+            className="btn btn-danger w-full"
             onClick={handleRestore}
             disabled={loading !== null}
           >
@@ -132,21 +166,31 @@ const BackupManager: React.FC = () => {
             <span className="instruction-number">1</span>
             <div>
               <strong>Creating a Backup</strong>
-              <p>Click &quot;Create Backup&quot; to export your database. A file dialog will appear allowing you to choose where to save the backup file. The file will be named with the current date and time.</p>
+              <p>
+                Click &quot;Create Backup&quot; to export your database. A file dialog will appear
+                allowing you to choose where to save the backup file. The file will be named with
+                the current date and time.
+              </p>
             </div>
           </div>
           <div className="instruction-item">
             <span className="instruction-number">2</span>
             <div>
               <strong>Storing Backups</strong>
-              <p>Store your backup files in a safe location, preferably on an external drive or cloud storage. Keep multiple backups from different dates for added security.</p>
+              <p>
+                Store your backup files in a safe location, preferably on an external drive or cloud
+                storage. Keep multiple backups from different dates for added security.
+              </p>
             </div>
           </div>
           <div className="instruction-item">
             <span className="instruction-number">3</span>
             <div>
               <strong>Restoring Data</strong>
-              <p>To restore, click &quot;Restore from Backup&quot; and select your backup file. After the restore completes, restart the application to see the restored data.</p>
+              <p>
+                To restore, click &quot;Restore from Backup&quot; and select your backup file. After
+                the restore completes, restart the application to see the restored data.
+              </p>
             </div>
           </div>
         </div>

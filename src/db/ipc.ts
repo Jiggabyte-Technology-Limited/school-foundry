@@ -2,6 +2,7 @@ import { ipcMain, dialog, app, shell, BrowserWindow } from 'electron';
 import db from './init';
 import * as fs from 'fs';
 import * as path from 'path';
+import JSZip from 'jszip';
 import { checkAndDebitFees } from '../lib/auto-debit';
 
 function getDbPath(): string {
@@ -176,6 +177,86 @@ export function setupIpcHandlers() {
   ipcMain.handle('get-print-output-dir', () => {
     return path.join(app.getPath('userData'), 'print-output');
   });
+
+  ipcMain.handle(
+    'print-statements-to-zip',
+    async (_event, options: { statements: { html: string; filename: string }[] }) => {
+      let pdfWindow = null;
+      try {
+        const printDir = path.join(app.getPath('userData'), 'print-output');
+        if (!fs.existsSync(printDir)) {
+          fs.mkdirSync(printDir, { recursive: true });
+        }
+
+        const pdfFiles: { name: string; data: Buffer }[] = [];
+
+        for (const stmt of options.statements) {
+          pdfWindow = new BrowserWindow({
+            width: 800,
+            height: 600,
+            show: false,
+            webPreferences: {
+              nodeIntegration: false,
+              contextIsolation: true,
+            },
+          });
+
+          await pdfWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(stmt.html)}`);
+
+          const pdfData = await pdfWindow.webContents.printToPDF({
+            printBackground: true,
+            pageSize: 'A4',
+            margins: {
+              marginType: 'custom',
+              top: 0.4,
+              bottom: 0.4,
+              left: 0.4,
+              right: 0.4,
+            },
+          });
+
+          pdfFiles.push({
+            name: `${stmt.filename}.pdf`,
+            data: Buffer.from(pdfData),
+          });
+
+          pdfWindow.close();
+          pdfWindow = null;
+        }
+
+        const zip = new JSZip();
+        for (const file of pdfFiles) {
+          zip.file(file.name, file.data);
+        }
+
+        const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+
+        const now = new Date();
+        const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const result = await dialog.showSaveDialog({
+          defaultPath: `Student_Statements_${timestamp}.zip`,
+          filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
+        });
+
+        if (!result.canceled && result.filePath) {
+          fs.writeFileSync(result.filePath, zipBuffer);
+          return { success: true, filePath: result.filePath };
+        }
+
+        return { success: false, canceled: true };
+      } catch (err) {
+        console.error('[IPC] print-statements-to-zip error:', err);
+        if (pdfWindow) {
+          try {
+            pdfWindow.close();
+          } catch (e) {
+            /* ignore */
+          }
+        }
+        return { success: false, error: String(err) };
+      }
+    }
+  );
 
   // Auto-debit fees handler
   ipcMain.handle('auto-debit-fees', async () => {

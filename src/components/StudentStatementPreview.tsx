@@ -1,5 +1,19 @@
 import React from 'react';
 import { printDocument, generateStudentStatementHtml } from '../lib/print-service';
+import { getCurrencySymbol } from '../lib/currency';
+
+/*
+ * IMPORTANT DEVELOPMENT NOTE FOR AI MODELS AND DEVELOPERS:
+ * ==========================================================
+ * The UI preview (what users see on screen) MUST always match exactly what gets printed.
+ * This is critical because the UI is showing the user exactly what will be printed.
+ *
+ * When making changes to receipt or statement functionality:
+ * 1. Always update BOTH the UI preview component AND the print template
+ * 2. Test by printing and comparing side-by-side with the UI preview
+ * 3. Any data filtering in the print function MUST be replicated in the UI preview
+ * 4. This applies to: PaymentReceiptPreview, StudentStatementPreview, and any other preview components
+ */
 
 interface StudentStatementPreviewProps {
   statementData: any;
@@ -75,6 +89,7 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
         schoolContact: schoolContact || undefined,
         currentTerm: termsList.length > 0 ? termsList[0].label : undefined,
         generatedAt: statementData.generatedAt,
+        currencySymbol: getCurrencySymbol(),
         studentName: statementData.student.full_name,
         grade: statementData.student.grade_label,
         studentId: String(statementData.student.id),
@@ -217,9 +232,10 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
         className="a4-page"
         style={{
           position: 'relative',
-          margin: 0,
+          marginTop: '0px',
           minHeight: 'auto',
           height: 'auto',
+          maxHeight: 'none',
           overflow: 'visible',
         }}
       >
@@ -411,32 +427,6 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
                 >
                   {statementData.balance > 0 ? 'Owing' : 'Paid'}
                 </span>
-                <button
-                  className="btn btn-outline"
-                  onClick={onEditProfile}
-                  style={{
-                    padding: '4px 12px',
-                    fontSize: '11px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                  Edit Profile
-                </button>
               </div>
             </div>
 
@@ -498,7 +488,9 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
                           color: item.isCredit ? '#10B981' : '#dc2626',
                         }}
                       >
-                        {item.isCredit ? '+' : '-'}${Math.abs(item.amount / 100).toFixed(2)}
+                        {item.isCredit ? '+' : '-'}
+                        {getCurrencySymbol()}
+                        {Math.abs(item.amount / 100).toFixed(2)}
                       </td>
                     </tr>
                   ))}
@@ -515,7 +507,7 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
                         }}
                         className="text-display"
                       >
-                        No transactional records exist for this student account
+                        No transactional records exist for this learner account
                       </td>
                     </tr>
                   )}
@@ -545,8 +537,11 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
                   color: statementData.balance > 0 ? '#dc2626' : '#10B981',
                 }}
               >
-                {statementData.balance > 0 ? '+$' : statementData.balance < 0 ? '+$' : ''}
-                {Math.abs(statementData.balance / 100).toFixed(2)}
+                {statementData.balance > 0
+                  ? `-${getCurrencySymbol()}${Math.abs(statementData.balance / 100).toFixed(2)}`
+                  : statementData.balance < 0
+                    ? `+${getCurrencySymbol()}${Math.abs(statementData.balance / 100).toFixed(2)}`
+                    : `${getCurrencySymbol()}0.00`}
               </span>
             </div>
 
@@ -562,7 +557,7 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
             >
               <div>
                 This statement was generated using{' '}
-                <span style={{ fontWeight: 600, color: '#f97316' }}>FeesFoundry</span> - a product
+                <span style={{ fontWeight: 600, color: '#f97316' }}>SchoolFoundry</span> - a product
                 of <span style={{ color: '#374151' }}>Jiggabyte Technology Limited</span>
               </div>
               <div style={{ marginTop: '4px', fontStyle: 'italic' }}>

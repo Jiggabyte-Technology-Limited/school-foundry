@@ -27,6 +27,7 @@ export async function autoDebitFees(): Promise<{ applied: number; message: strin
       AND t.start_date <= ?
       AND (t.end_date IS NULL OR date(t.end_date) >= date(sye.created_at))
       AND sf.id IS NULL
+      AND sye.is_active = 1
     ORDER BY t.start_date, fs.grade_id
     `,
       [today],

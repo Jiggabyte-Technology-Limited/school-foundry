@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
 import { useToast } from './Toast';
+import { getCurrencySymbol } from '../lib/currency';
 import Receipt from './Receipt';
 
 interface PaymentWizardProps {
   onClose: () => void;
   onSuccess: () => void;
   preSelectedStudent?: number;
+  yearId?: number;
 }
 
 type Step = 'student' | 'payment' | 'confirm';
@@ -17,6 +19,7 @@ interface Student {
   full_name: string;
   grade_label: string;
   balance: number;
+  is_active: number;
 }
 
 interface Term {
@@ -28,6 +31,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
   onClose,
   onSuccess,
   preSelectedStudent,
+  yearId: propYearId,
 }) => {
   const { user, canRecordPayments } = useAuth();
   const { showToast } = useToast();
@@ -83,8 +87,8 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
       const [studentList, termList] = await Promise.all([
         db.all(
           `
-          SELECT s.id, s.full_name, g.label as grade_label,
-            COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
+          SELECT s.id, s.full_name, g.label as grade_label, s.is_active,
+            COALESCE((SELECT SUM(sf.amount_cents) FROM student_fees sf JOIN fee_structure fs ON sf.fee_structure_id = fs.id WHERE sf.student_id = s.id AND fs.year_id = ?), 0) -
             COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
           FROM students s
           JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
@@ -115,8 +119,8 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
         } else {
           const studentData = await db.get(
             `
-            SELECT s.id, s.full_name, g.label as grade_label,
-              COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
+            SELECT s.id, s.full_name, g.label as grade_label, s.is_active,
+              COALESCE((SELECT SUM(sf.amount_cents) FROM student_fees sf JOIN fee_structure fs ON sf.fee_structure_id = fs.id WHERE sf.student_id = s.id AND fs.year_id = ?), 0) -
               COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
             FROM students s
             JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
@@ -140,8 +144,8 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
     }
 
     // If not found (or list empty), fetch from DB
-    // Use currentYear if available, otherwise fetch latest year
-    let yearId = currentYear?.id;
+    // Use propYearId if provided, otherwise use currentYear or fetch latest
+    let yearId = propYearId || currentYear?.id;
     if (!yearId) {
       const yearData = await db.get('SELECT id FROM academic_years ORDER BY label DESC LIMIT 1');
       yearId = yearData?.id;
@@ -150,8 +154,8 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
     if (yearId) {
       const studentData = await db.get(
         `
-        SELECT s.id, s.full_name, g.label as grade_label,
-          COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
+        SELECT s.id, s.full_name, g.label as grade_label, s.is_active,
+          COALESCE((SELECT SUM(sf.amount_cents) FROM student_fees sf JOIN fee_structure fs ON sf.fee_structure_id = fs.id WHERE sf.student_id = s.id AND fs.year_id = ?), 0) -
           COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
         FROM students s
         JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
@@ -176,7 +180,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
     switch (currentStep) {
       case 'student':
         if (!selectedStudentId) {
-          setError('Please select a student');
+          setError('Please select a learner');
           return false;
         }
         break;
@@ -203,6 +207,13 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
 
   const handleSubmit = async () => {
     if (!selectedStudent || !currentYear) return;
+
+    // Check if learner is active
+    if (selectedStudent.is_active === 0) {
+      setError('Cannot record payment for inactive learner');
+      return;
+    }
+
     setIsLoading(true);
     setError('');
 
@@ -216,7 +227,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
       );
 
       if (!enrollment) {
-        throw new Error('Student is not enrolled for the selected academic year.');
+        throw new Error('Learner is not enrolled for the selected academic year.');
       }
 
       const result = await db.run(
@@ -256,7 +267,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
           'payment_recorded',
           'payments',
           result.lastInsertRowid || result.lastID,
-          `Payment of $${form.amount} recorded for ${selectedStudent.full_name} (${form.receipt_number})`,
+          `Payment of ${getCurrencySymbol()}${form.amount} recorded for ${selectedStudent.full_name} (${form.receipt_number})`,
         ]
       );
 
@@ -279,7 +290,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
         showToast(
           'success',
           'Payment Recorded',
-          `Payment of $${form.amount} recorded for ${selectedStudent.full_name}.`
+          `Payment of ${getCurrencySymbol()}${form.amount} recorded for ${selectedStudent.full_name}.`
         );
         setShowReceipt(newPayment);
       }
@@ -292,7 +303,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
   };
 
   const formatCurrency = (cents: number) => {
-    return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${getCurrencySymbol()}${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const renderStepContent = () => {
@@ -305,10 +316,10 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
               Step 1 of 3
             </div>
             <h2 className="wizard-title" style={{ textAlign: 'left', fontSize: 20 }}>
-              Select Student
+              Select Learner
             </h2>
             <p className="wizard-subtitle" style={{ textAlign: 'left', marginBottom: 24 }}>
-              Search and select the student to record a payment for.
+              Search and select the learner to record a payment for.
             </p>
 
             <div className="wizard-field" style={{ marginBottom: 16 }}>
@@ -338,7 +349,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                     color: 'var(--color-sage-placeholder)',
                   }}
                 >
-                  No students found
+                  No learners found
                 </div>
               ) : (
                 filteredStudents.map(student => (
@@ -423,7 +434,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                   color: 'var(--color-sage-placeholder)',
                 }}
               >
-                Loading student records...
+                Loading learner records...
               </div>
             ) : (
               <div>
@@ -525,41 +536,6 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                     </div>
                   </div>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  style={{
-                    width: '100%',
-                    marginBottom: 20,
-                    padding: '10px 16px',
-                    fontSize: 13,
-                    backgroundColor: '#fff',
-                    color: '#374151',
-                    border: '1px solid #d1d5db',
-                    borderRadius: 'var(--border-radius-md)',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                  }}
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                    <rect x="6" y="14" width="12" height="8"></rect>
-                  </svg>
-                  Print Statement
-                </button>
               </div>
             )}
 
@@ -580,7 +556,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                         fontWeight: 600,
                       }}
                     >
-                      $
+                      {getCurrencySymbol()}
                     </span>
                     <input
                       type="number"
@@ -677,7 +653,8 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                 Payment Amount
               </div>
               <div style={{ fontSize: 36, fontWeight: 700, color: 'var(--color-accent-emerald)' }}>
-                ${parseFloat(form.amount || '0').toFixed(2)}
+                {getCurrencySymbol()}
+                {parseFloat(form.amount || '0').toFixed(2)}
               </div>
             </div>
 
@@ -690,7 +667,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                   borderBottom: '1px solid var(--color-light-sage)',
                 }}
               >
-                <span style={{ color: 'var(--color-sage-placeholder)' }}>Student</span>
+                <span style={{ color: 'var(--color-sage-placeholder)' }}>Learner</span>
                 <span style={{ fontWeight: 600 }}>{selectedStudent?.full_name}</span>
               </div>
               <div

@@ -1,6 +1,7 @@
 import React from 'react';
 import { generateOverviewHtml, printDocument } from '../../lib/print-service';
 import { formatCurrencyCents, getBalanceColor } from './formatters';
+import { getCurrencySymbol } from '../../lib/currency';
 import type { Grade, OverviewData, Term } from './types';
 
 interface FinancialOverviewPanelProps {
@@ -45,6 +46,7 @@ const FinancialOverviewPanel: React.FC<FinancialOverviewPanelProps> = ({
           month: 'long',
           year: 'numeric',
         }),
+        currencySymbol: getCurrencySymbol(),
         totalInvoiced: (overview.totalInvoiced / 100).toFixed(2),
         totalPaid: (overview.totalPaid / 100).toFixed(2),
         balance: (overview.balance / 100).toFixed(2),
@@ -98,7 +100,17 @@ const FinancialOverviewPanel: React.FC<FinancialOverviewPanelProps> = ({
         </button>
       </div>
 
-      <div className="a4-page" style={{ position: 'relative', margin: 0 }}>
+      <div
+        className="a4-page"
+        style={{
+          position: 'relative',
+          marginTop: '24px',
+          minHeight: 'auto',
+          height: 'auto',
+          maxHeight: 'none',
+          overflow: 'visible',
+        }}
+      >
         <div
           style={{
             textAlign: 'center',
@@ -152,12 +164,12 @@ const FinancialOverviewPanel: React.FC<FinancialOverviewPanelProps> = ({
         >
           <SummaryCard
             label="Total Fees Charged"
-            amount={`$${(overview.totalInvoiced / 100).toFixed(2)}`}
+            amount={`${getCurrencySymbol()}${(overview.totalInvoiced / 100).toFixed(2)}`}
             color="#374151"
           />
           <SummaryCard
             label="Total Paid"
-            amount={`$${(overview.totalPaid / 100).toFixed(2)}`}
+            amount={`${getCurrencySymbol()}${(overview.totalPaid / 100).toFixed(2)}`}
             color="#059669"
           />
           <SummaryCard
@@ -177,7 +189,7 @@ const FinancialOverviewPanel: React.FC<FinancialOverviewPanelProps> = ({
             borderBottom: '1px solid #e5e7eb',
           }}
         >
-          {overview.isGrade ? 'Student Details' : 'Grade Details'}
+          {overview.isGrade ? 'Learner Details' : 'Grade Details'}
         </div>
 
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -259,7 +271,7 @@ const FinancialOverviewPanel: React.FC<FinancialOverviewPanelProps> = ({
         >
           <div>
             This report was generated using{' '}
-            <span style={{ fontWeight: 600, color: '#f97316' }}>FeesFoundry</span> - a product of{' '}
+            <span style={{ fontWeight: 600, color: '#f97316' }}>SchoolFoundry</span> - a product of{' '}
             <span style={{ color: '#374151' }}>Jiggabyte Technology Limited</span>
           </div>
           <div style={{ marginTop: '4px', fontStyle: 'italic' }}>

@@ -473,6 +473,8 @@ input[type='password'],
 input[type='email'],
 input[type='number'],
 input[type='date'],
+input[type='tel'],
+input[type='url'],
 textarea,
 select {
   width: 100%;
@@ -1073,7 +1075,7 @@ td {
   background-color: var(--surface);
   border-radius: var(--border-radius-lg);
   border: 1px solid var(--border);
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
@@ -1100,11 +1102,11 @@ td {
 .fee-matrix-row:nth-child(even)
   .fee-matrix-cell:not(.fee-matrix-header-cell):not(.fee-matrix-grade-cell):not(
     .fee-matrix-total-cell
-  ) {
+  ):not(.fee-matrix-cell-copy-all) {
   background-color: rgba(0, 0, 0, 0.02);
 }
 
-.fee-matrix-row:hover .fee-matrix-cell {
+.fee-matrix-row:hover .fee-matrix-cell:not(.fee-matrix-cell-copy-all) {
   background-color: rgba(249, 115, 22, 0.04);
 }
 
@@ -1126,6 +1128,24 @@ td {
 .fee-matrix-grade-cell {
   background-color: var(--color-light-sage);
   font-weight: 700;
+  position: sticky;
+  left: 0;
+  z-index: 10;
+}
+
+.fee-matrix-cell-copy-all {
+  position: sticky;
+  left: 200px;
+  z-index: 10;
+  background-color: var(--surface);
+}
+
+.fee-matrix-row:nth-child(even) .fee-matrix-cell-copy-all {
+  background-color: #f3f4f6;
+}
+
+.fee-matrix-row:hover .fee-matrix-cell-copy-all {
+  background-color: #fef3c7;
 }
 
 .fee-matrix-total-cell {
@@ -1606,6 +1626,29 @@ td {
 
 .toast-info .toast-icon {
   color: var(--color-accent-blue);
+}
+
+.toast-loading {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  border-left: 4px solid #fb923c;
+}
+
+.toast-loading .toast-icon {
+  color: white;
+}
+
+.toast-loading .toast-title,
+.toast-loading .toast-message {
+  color: white;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Message Box */

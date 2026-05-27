@@ -9,12 +9,14 @@ interface StudentAccountsFiltersProps {
   searchQuery: string;
   filteredStudents: Student[];
   isPrintingAll: boolean;
+  showInactive: boolean;
   onAddStudent: () => void;
   onSelectGrade: (gradeId: number | null) => void;
   onTogglePaid: () => void;
   onToggleOwing: () => void;
   onSearchChange: (value: string) => void;
   onPrintAll: () => void;
+  onToggleInactive: () => void;
 }
 
 const StudentAccountsFilters: React.FC<StudentAccountsFiltersProps> = ({
@@ -25,17 +27,19 @@ const StudentAccountsFilters: React.FC<StudentAccountsFiltersProps> = ({
   searchQuery,
   filteredStudents,
   isPrintingAll,
+  showInactive,
   onAddStudent,
   onSelectGrade,
   onTogglePaid,
   onToggleOwing,
   onSearchChange,
   onPrintAll,
+  onToggleInactive,
 }) => (
   <>
     <div className="flex-between">
       <h2 style={{ margin: 0, fontSize: '28px', fontWeight: 600 }} className="text-display">
-        Student Accounts
+        Learner Accounts
       </h2>
       <button className="btn btn-primary" onClick={onAddStudent}>
         <svg
@@ -51,7 +55,7 @@ const StudentAccountsFilters: React.FC<StudentAccountsFiltersProps> = ({
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
-        Add Student
+        Add Learner
       </button>
     </div>
 
@@ -60,21 +64,61 @@ const StudentAccountsFilters: React.FC<StudentAccountsFiltersProps> = ({
         <div className="metric-label" style={{ margin: 0 }}>
           Filter by Grade/Form
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            className={`btn ${showPaid ? 'btn-success' : 'btn-outline'}`}
-            onClick={onTogglePaid}
-            style={{ padding: '4px 12px', fontSize: '11px', opacity: showPaid ? 1 : 0.5 }}
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              color: '#374151',
+            }}
           >
+            <input
+              type="checkbox"
+              checked={showPaid}
+              onChange={onTogglePaid}
+              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+            />
             Paid in Full
-          </button>
-          <button
-            className={`btn ${showOwing ? 'btn-primary' : 'btn-outline'}`}
-            onClick={onToggleOwing}
-            style={{ padding: '4px 12px', fontSize: '11px', opacity: showOwing ? 1 : 0.5 }}
+          </label>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              color: '#374151',
+            }}
           >
+            <input
+              type="checkbox"
+              checked={showOwing}
+              onChange={onToggleOwing}
+              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+            />
             Owing
-          </button>
+          </label>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              color: '#374151',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={onToggleInactive}
+              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+            />
+            Inactive
+          </label>
         </div>
       </div>
 
@@ -98,7 +142,7 @@ const StudentAccountsFilters: React.FC<StudentAccountsFiltersProps> = ({
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: '12px' }}>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
         <div style={{ position: 'relative', flex: 1 }}>
           <input
             className="input-default text-display"
@@ -131,6 +175,16 @@ const StudentAccountsFilters: React.FC<StudentAccountsFiltersProps> = ({
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
           </div>
+          <div
+            style={{
+              fontSize: '12px',
+              color: 'var(--text-secondary)',
+              marginTop: '4px',
+              marginLeft: '2px',
+            }}
+          >
+            {filteredStudents.length} learner{filteredStudents.length !== 1 ? 's' : ''} found
+          </div>
         </div>
         <button
           className="btn btn-outline"
@@ -148,11 +202,11 @@ const StudentAccountsFilters: React.FC<StudentAccountsFiltersProps> = ({
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <polyline points="6 9 6 2 18 2 18 9"></polyline>
-            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-            <rect x="6" y="14" width="12" height="8"></rect>
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
           </svg>
-          {isPrintingAll ? 'Preparing...' : 'Print All Statements'}
+          {isPrintingAll ? 'Preparing...' : 'Download Statements'}
         </button>
       </div>
     </div>

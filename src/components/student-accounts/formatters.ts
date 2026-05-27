@@ -1,3 +1,5 @@
+import { getCurrencySymbol } from '../../lib/currency';
+
 export const BALANCE_COLORS = {
   owing: '#dc2626',
   paid: '#10B981',
@@ -12,5 +14,5 @@ export function getBalanceColor(cents: number): string {
 
 export function formatCurrencyCents(cents: number): string {
   const prefix = cents === 0 ? '' : '+';
-  return `${prefix}$${Math.abs(cents / 100).toFixed(2)}`;
+  return `${prefix}${getCurrencySymbol()}${Math.abs(cents / 100).toFixed(2)}`;
 }

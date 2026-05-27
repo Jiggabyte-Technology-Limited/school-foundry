@@ -43,7 +43,7 @@ const StudentList: React.FC<StudentListProps> = ({
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div className="flex-between">
         <h2 style={{ margin: 0, fontSize: '28px', fontWeight: 600 }} className="text-display">
-          Student Accounts
+          Learner Accounts
         </h2>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button className="btn btn-primary" onClick={() => {}}>
@@ -60,7 +60,7 @@ const StudentList: React.FC<StudentListProps> = ({
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            Add Student
+            Add Learner
           </button>
         </div>
       </div>
@@ -198,8 +198,11 @@ const StudentList: React.FC<StudentListProps> = ({
                       color: s.balance > 0 ? '#dc2626' : '#10B981',
                     }}
                   >
-                    {s.balance > 0 ? '+$' : s.balance < 0 ? '+$' : ''}
-                    {Math.abs(s.balance / 100).toFixed(2)}
+                    {s.balance > 0
+                      ? `-$${Math.abs(s.balance / 100).toFixed(2)}`
+                      : s.balance < 0
+                        ? `+$${Math.abs(s.balance / 100).toFixed(2)}`
+                        : '$0.00'}
                   </td>
                 </tr>
               );
@@ -216,7 +219,7 @@ const StudentList: React.FC<StudentListProps> = ({
                   }}
                   className="text-display"
                 >
-                  No students found matching your filters
+                  No learners found matching your filters
                 </td>
               </tr>
             )}

@@ -236,8 +236,11 @@ const GradeOverview: React.FC<GradeOverviewProps> = ({
                 color: currentOverview.balance > 0 ? '#dc2626' : '#10B981',
               }}
             >
-              {currentOverview.balance > 0 ? '+$' : '-$'}
-              {Math.abs(currentOverview.balance / 100).toFixed(2)}
+              {currentOverview.balance > 0
+                ? `-$${Math.abs(currentOverview.balance / 100).toFixed(2)}`
+                : currentOverview.balance < 0
+                  ? `+$${Math.abs(currentOverview.balance / 100).toFixed(2)}`
+                  : '$0.00'}
             </div>
           </div>
         </div>
@@ -252,7 +255,7 @@ const GradeOverview: React.FC<GradeOverviewProps> = ({
             borderBottom: '1px solid #e5e7eb',
           }}
         >
-          {currentOverview.isGrade ? 'Student Details' : 'Grade Details'}
+          {currentOverview.isGrade ? 'Learner Details' : 'Grade Details'}
         </div>
         <div style={{ flex: 1, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -279,8 +282,11 @@ const GradeOverview: React.FC<GradeOverviewProps> = ({
                       color: row.balance > 0 ? '#dc2626' : row.balance < 0 ? '#10B981' : '#059669',
                     }}
                   >
-                    {row.balance > 0 ? '+$' : row.balance < 0 ? '+$' : ''}
-                    {Math.abs(row.balance / 100).toFixed(2)}
+                    {row.balance > 0
+                      ? `-$${Math.abs(row.balance / 100).toFixed(2)}`
+                      : row.balance < 0
+                        ? `+$${Math.abs(row.balance / 100).toFixed(2)}`
+                        : '$0.00'}
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     <span
@@ -324,8 +330,11 @@ const GradeOverview: React.FC<GradeOverviewProps> = ({
               color: currentOverview.balance > 0 ? '#dc2626' : '#10B981',
             }}
           >
-            {currentOverview.balance > 0 ? '+$' : currentOverview.balance < 0 ? '+$' : ''}
-            {Math.abs(currentOverview.balance / 100).toFixed(2)}
+            {currentOverview.balance > 0
+              ? `-$${Math.abs(currentOverview.balance / 100).toFixed(2)}`
+              : currentOverview.balance < 0
+                ? `+$${Math.abs(currentOverview.balance / 100).toFixed(2)}`
+                : '$0.00'}
           </span>
         </div>
 
@@ -341,7 +350,7 @@ const GradeOverview: React.FC<GradeOverviewProps> = ({
         >
           <div>
             This report was generated using{' '}
-            <span style={{ fontWeight: 600, color: '#f97316' }}>FeesFoundry</span> - a product of{' '}
+            <span style={{ fontWeight: 600, color: '#f97316' }}>SchoolFoundry</span> - a product of{' '}
             <span style={{ color: '#374151' }}>Jiggabyte Technology Limited</span>
           </div>
           <div style={{ marginTop: '4px', fontStyle: 'italic' }}>

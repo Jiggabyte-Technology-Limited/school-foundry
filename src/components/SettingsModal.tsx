@@ -23,6 +23,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [localSchoolAddress, setLocalSchoolAddress] = useState('');
   const [localSchoolPhone, setLocalSchoolPhone] = useState('');
   const [localSchoolEmail, setLocalSchoolEmail] = useState('');
+  const [voidKey, setVoidKey] = useState('1234');
   const [users, setUsers] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
@@ -36,6 +37,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   });
   const [showAddUser, setShowAddUser] = useState(false);
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
+  const [schoolFeesTerms, setSchoolFeesTerms] = useState('');
   const [activeTab, setActiveTab] = useState<'school' | 'users' | 'profile'>(
     user.role === 'admin' ? 'school' : 'profile'
   );
@@ -90,13 +92,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const loadSettings = async () => {
     const settings = await db.all(
-      "SELECT key, value FROM app_settings WHERE key IN ('school_logo', 'school_address', 'school_phone', 'school_email')"
+      "SELECT key, value FROM app_settings WHERE key IN ('school_logo', 'school_address', 'school_phone', 'school_email', 'void_key', 'school_fees_terms')"
     );
     settings.forEach(s => {
       if (s.key === 'school_logo') setSchoolLogo(s.value);
       if (s.key === 'school_address') setLocalSchoolAddress(s.value || '');
       if (s.key === 'school_phone') setLocalSchoolPhone(s.value || '');
       if (s.key === 'school_email') setLocalSchoolEmail(s.value || '');
+      if (s.key === 'void_key') setVoidKey(s.value || '1234');
+      if (s.key === 'school_fees_terms') setSchoolFeesTerms(s.value || '');
     });
   };
 
@@ -123,6 +127,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       await db.run("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('school_email', ?)", [
         localSchoolEmail,
       ]);
+      await db.run("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('void_key', ?)", [
+        voidKey,
+      ]);
+      await db.run(
+        "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('school_fees_terms', ?)",
+        [schoolFeesTerms]
+      );
 
       onSchoolNameUpdate(localSchoolName);
       showToast('success', 'Settings Saved', 'School information has been updated.');
@@ -855,6 +866,66 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             placeholder="admin@school.com"
                           />
                         </div>
+                      </div>
+
+                      {/* Void Key */}
+                      <div style={{ marginTop: '16px' }}>
+                        <label
+                          style={{
+                            display: 'block',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            marginBottom: '6px',
+                            color: 'var(--text-secondary)',
+                          }}
+                        >
+                          Void Key (for non-admin void authorization)
+                        </label>
+                        <input
+                          type="text"
+                          value={voidKey}
+                          onChange={e => setVoidKey(e.target.value)}
+                          className="input-default"
+                          style={{
+                            width: '100%',
+                            color: 'var(--text-primary)',
+                            outline: 'none',
+                          }}
+                          placeholder="Enter void key"
+                        />
+                      </div>
+
+                      {/* School Fees Terms and Conditions */}
+                      <div style={{ marginTop: '16px' }}>
+                        <label
+                          style={{
+                            display: 'block',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            marginBottom: '6px',
+                            color: 'var(--text-secondary)',
+                          }}
+                        >
+                          School Fees Terms and Conditions (appears on printed documents)
+                        </label>
+                        <textarea
+                          value={schoolFeesTerms}
+                          onChange={e => setSchoolFeesTerms(e.target.value)}
+                          rows={4}
+                          style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            fontSize: '14px',
+                            borderRadius: '8px',
+                            border: '1px solid var(--border)',
+                            backgroundColor: 'var(--background)',
+                            color: 'var(--text-primary)',
+                            outline: 'none',
+                            resize: 'vertical',
+                            fontFamily: 'inherit',
+                          }}
+                          placeholder="E.g., Fees are due by the first week of each term. Late payments will incur a 5% penalty..."
+                        />
                       </div>
 
                       <div style={{ marginTop: '12px' }}>
