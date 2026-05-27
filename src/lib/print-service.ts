@@ -348,7 +348,7 @@ export function generateStudentStatementHtml(data: {
   <meta charset="UTF-8">
   ${getBasePrintStyles()}
   <style>
-    .statement-container { padding: 20mm; font-family: Arial, Helvetica, sans-serif; }
+    .statement-container { padding: 10mm; font-family: Arial, Helvetica, sans-serif; }
     .header { text-align: center; border-bottom: 2px solid #f97316; padding-bottom: 20px; margin-bottom: 24px; }
     .header .logo { margin-bottom: 12px; }
     .header .logo img { max-height: 60px; max-width: 150px; }
@@ -366,7 +366,7 @@ export function generateStudentStatementHtml(data: {
     .section-title { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
     th { text-align: left; padding: 12px 8px; border-bottom: 2px solid #374151; font-weight: 600; font-size: 12px; color: #374151; background-color: #f9fafb; }
-    .footer { position: absolute; bottom: 20mm; left: 20mm; right: 20mm; padding-top: 12px; border-top: 2px dashed #e5e7eb; text-align: center; font-size: 11px; color: #6b7280; }
+    .footer { position: absolute; bottom: 10mm; left: 10mm; right: 10mm; padding-top: 12px; border-top: 2px dashed #e5e7eb; text-align: center; font-size: 11px; color: #6b7280; }
     .footer .branding { font-weight: 600; color: #f97316; }
     .footer .company { color: #374151; }
     .footer .contact { margin-top: 4px; font-style: italic; }
