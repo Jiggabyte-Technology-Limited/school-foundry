@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld('api', {
   openFileForPrint: (filePath: string) => ipcRenderer.invoke('open-file-for-print', filePath),
   getPrintOutputDir: () => ipcRenderer.invoke('get-print-output-dir'),
   autoDebitFees: () => ipcRenderer.invoke('auto-debit-fees'),
+  printStatementsToZip: (statements: { html: string; filename: string }[]) =>
+    ipcRenderer.invoke('print-statements-to-zip', { statements }),
 });

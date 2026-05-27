@@ -15,7 +15,7 @@ type Step = 'details' | 'guardian' | 'enrollment' | 'confirm';
 const STEPS: { id: Step; label: string; icon: React.ReactElement }[] = [
   {
     id: 'details',
-    label: 'Student Details',
+    label: 'Learner Details',
     icon: (
       <svg
         width="16"
@@ -119,7 +119,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
     return (
       <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
         <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
-        <p>You do not have permission to manage students.</p>
+        <p>You do not have permission to manage learners.</p>
       </div>
     );
   }
@@ -147,7 +147,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
     switch (currentStep) {
       case 'details':
         if (!form.full_name.trim()) {
-          setError('Please enter the student name');
+          setError('Please enter the learner name');
           return false;
         }
         break;
@@ -215,10 +215,40 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
 
       // Create enrollment for current year
       if (form.grade_id && currentYear && result.lastInsertRowid) {
+        const studentId = result.lastInsertRowid;
         await db.run(
           'INSERT INTO student_year_enrollment (student_id, year_id, grade_id) VALUES (?, ?, ?)',
-          [result.lastInsertRowid, currentYear.id, form.grade_id]
+          [studentId, currentYear.id, form.grade_id]
         );
+
+        const today = new Date().toISOString().split('T')[0];
+        // Get enrollment date to only debit terms that start on or after enrollment
+        const enrollment = await db.get(
+          'SELECT created_at FROM student_year_enrollment WHERE student_id = ? AND year_id = ?',
+          [studentId, currentYear.id]
+        );
+        const enrolledDate = enrollment?.created_at ? enrollment.created_at.split('T')[0] : today;
+
+        const activeFees = await db.all(
+          `
+          SELECT fs.id, fs.amount_cents, t.start_date
+          FROM fee_structure fs
+          JOIN terms t ON fs.term_id = t.id
+          WHERE fs.year_id = ?
+            AND fs.grade_id = ?
+            AND t.start_date IS NOT NULL
+            AND date(t.start_date) <= date(?)
+            AND (t.end_date IS NULL OR date(t.end_date) >= date(?))
+        `,
+          [currentYear.id, form.grade_id, today, enrolledDate]
+        );
+
+        for (const fee of activeFees) {
+          await db.run(
+            'INSERT OR IGNORE INTO student_fees (student_id, fee_structure_id, debit_date, amount_cents) VALUES (?, ?, ?, ?)',
+            [studentId, fee.id, today, fee.amount_cents]
+          );
+        }
       }
 
       await db.run(
@@ -233,11 +263,11 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
         ]
       );
 
-      showToast('success', 'Student Added', `${form.full_name} has been successfully enrolled.`);
+      showToast('success', 'Learner Added', `${form.full_name} has been successfully enrolled.`);
       onSuccess();
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Failed to add student. Please try again.');
+      setError(err.message || 'Failed to add learner. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -260,7 +290,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
               Student Details
             </h2>
             <p className="wizard-subtitle" style={{ textAlign: 'left', marginBottom: 24 }}>
-              Enter the basic information about the student.
+              Enter the basic information about the learner.
             </p>
 
             <div className="wizard-form">
@@ -272,7 +302,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                   type="text"
                   value={form.full_name}
                   onChange={e => setForm({ ...form, full_name: e.target.value })}
-                  placeholder="Enter student's full name"
+                  placeholder="Enter learner's full name"
                   autoFocus
                 />
               </div>
@@ -418,7 +448,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
               Enrollment
             </h2>
             <p className="wizard-subtitle" style={{ textAlign: 'left', marginBottom: 24 }}>
-              Select the grade level for this student.
+              Select the grade level for this learner.
             </p>
 
             <div className="wizard-form">
@@ -431,7 +461,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                   style={{ backgroundColor: 'var(--color-sage-cream)', cursor: 'not-allowed' }}
                 />
                 <p style={{ fontSize: 12, color: 'var(--color-sage-placeholder)', marginTop: 4 }}>
-                  Students are automatically enrolled in the current academic year
+                  Learners are automatically enrolled in the current academic year
                 </p>
               </div>
 
@@ -492,7 +522,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
               Confirm Details
             </h2>
             <p className="wizard-subtitle" style={{ textAlign: 'left', marginBottom: 24 }}>
-              Please review the information before adding this student.
+              Please review the information before adding this learner.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -504,7 +534,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                 }}
               >
                 <h4 style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--color-accent-teal)' }}>
-                  Student Information
+                  Learner Information
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
@@ -611,7 +641,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
         style={{ maxWidth: 600 }}
       >
         <div className="modal-header">
-          <h2>Add New Student</h2>
+          <h2>Add New Learner</h2>
           <button className="modal-close" onClick={onClose}>
             <svg
               width="20"
@@ -765,7 +795,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                   onClick={handleSubmit}
                   disabled={isLoading}
                 >
-                  {isLoading ? 'Adding Student...' : 'Add Student'}
+                  {isLoading ? 'Adding Learner...' : 'Add Learner'}
                   <svg
                     width="16"
                     height="16"

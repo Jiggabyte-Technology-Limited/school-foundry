@@ -1,5 +1,19 @@
 import React from 'react';
 import { printDocument, generateStudentStatementHtml } from '../lib/print-service';
+import { getCurrencySymbol } from '../lib/currency';
+
+/*
+ * IMPORTANT DEVELOPMENT NOTE FOR AI MODELS AND DEVELOPERS:
+ * ==========================================================
+ * The UI preview (what users see on screen) MUST always match exactly what gets printed.
+ * This is critical because the UI is showing the user exactly what will be printed.
+ *
+ * When making changes to receipt or statement functionality:
+ * 1. Always update BOTH the UI preview component AND the print template
+ * 2. Test by printing and comparing side-by-side with the UI preview
+ * 3. Any data filtering in the print function MUST be replicated in the UI preview
+ * 4. This applies to: PaymentReceiptPreview, StudentStatementPreview, and any other preview components
+ */
 
 interface StudentStatementPreviewProps {
   statementData: any;
@@ -32,6 +46,11 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
   onRecordPayment,
   onRetry,
 }) => {
+  const [printStatus, setPrintStatus] = React.useState<
+    'idle' | 'generating' | 'opening' | 'ready' | 'error'
+  >('idle');
+  const [printMessage, setPrintMessage] = React.useState('');
+
   // Combine and sort transactions
   const transactions = React.useMemo(() => {
     if (!statementData) return [];
@@ -60,38 +79,58 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
 
   const handlePrint = async () => {
     if (!statementData) return;
-    const html = generateStudentStatementHtml({
-      schoolName,
-      schoolLogo: schoolLogo || undefined,
-      schoolContact: schoolContact || undefined,
-      currentTerm: termsList.length > 0 ? termsList[0].label : undefined,
-      generatedAt: statementData.generatedAt,
-      studentName: statementData.student.full_name,
-      grade: statementData.student.grade_label,
-      studentId: String(statementData.student.id),
-      guardianName: statementData.student.guardian_name,
-      guardianContact: statementData.student.guardian_contact,
-      isOwing: statementData.balance > 0,
-      totalInvoiced: (statementData.totalFees / 100).toFixed(2),
-      totalPaid: (statementData.totalPaid / 100).toFixed(2),
-      balance: (statementData.balance / 100).toFixed(2),
-      fees: statementData.fees.map((f: any) => ({
-        date: f.date,
-        termLabel: f.term_label,
-        description: f.description,
-        amount: (f.amount / 100).toFixed(2),
-      })),
-      payments: statementData.payments.map((p: any) => ({
-        date: p.date,
-        ref: p.ref,
-        amount: (p.amount / 100).toFixed(2),
-      })),
-    });
-    await printDocument({
-      html,
-      filename: `statement_${statementData.student.full_name.replace(/\s+/g, '_')}_${statementData.student.id}`,
-      title: `Statement - ${statementData.student.full_name}`,
-    });
+    setPrintStatus('generating');
+    setPrintMessage('Generating statement document...');
+
+    try {
+      const html = generateStudentStatementHtml({
+        schoolName,
+        schoolLogo: schoolLogo || undefined,
+        schoolContact: schoolContact || undefined,
+        currentTerm: termsList.length > 0 ? termsList[0].label : undefined,
+        generatedAt: statementData.generatedAt,
+        currencySymbol: getCurrencySymbol(),
+        studentName: statementData.student.full_name,
+        grade: statementData.student.grade_label,
+        studentId: String(statementData.student.id),
+        guardianName: statementData.student.guardian_name,
+        guardianContact: statementData.student.guardian_contact,
+        isOwing: statementData.balance > 0,
+        totalInvoiced: (statementData.totalFees / 100).toFixed(2),
+        totalPaid: (statementData.totalPaid / 100).toFixed(2),
+        balance: (statementData.balance / 100).toFixed(2),
+        fees: statementData.fees.map((f: any) => ({
+          date: f.date,
+          termLabel: f.term_label,
+          description: f.description,
+          amount: (f.amount / 100).toFixed(2),
+        })),
+        payments: statementData.payments.map((p: any) => ({
+          date: p.date,
+          ref: p.ref,
+          amount: (p.amount / 100).toFixed(2),
+        })),
+      });
+
+      setPrintStatus('opening');
+      setPrintMessage('Opening Document...');
+      const filePath = await printDocument({
+        html,
+        filename: `statement_${statementData.student.full_name.replace(/\s+/g, '_')}_${statementData.student.id}`,
+        title: `Statement - ${statementData.student.full_name}`,
+      });
+
+      if (filePath) {
+        setPrintStatus('ready');
+        setPrintMessage('Document generated and ready to print. Opening Document complete.');
+      } else {
+        setPrintStatus('error');
+        setPrintMessage('The document could not be opened. Please try again.');
+      }
+    } catch (err) {
+      setPrintStatus('error');
+      setPrintMessage(err instanceof Error ? err.message : 'The document could not be generated.');
+    }
   };
 
   return (
@@ -114,7 +153,11 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
             </svg>
             Exit
           </button>
-          <button className="btn btn-outline" onClick={handlePrint}>
+          <button
+            className="btn btn-outline"
+            onClick={handlePrint}
+            disabled={printStatus === 'generating' || printStatus === 'opening'}
+          >
             <svg
               width="18"
               height="18"
@@ -129,7 +172,9 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
               <rect x="6" y="14" width="12" height="8"></rect>
             </svg>
-            Print Statement
+            {printStatus === 'generating' || printStatus === 'opening'
+              ? 'Opening Document...'
+              : 'Print Statement'}
           </button>
           <button className="btn btn-primary" onClick={onRecordPayment}>
             <svg
@@ -150,7 +195,50 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
         </div>
       )}
 
-      <div className="a4-page" style={{ position: 'relative', margin: 0 }}>
+      {printStatus !== 'idle' && (
+        <div
+          className="card-surface"
+          style={{
+            borderColor: printStatus === 'error' ? '#FCA5A5' : '#FDBA74',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+          }}
+        >
+          <div>
+            <div
+              style={{ fontWeight: 700, color: printStatus === 'error' ? '#991B1B' : '#9A3412' }}
+            >
+              {printStatus === 'ready'
+                ? 'Document ready'
+                : printStatus === 'error'
+                  ? 'Document failed'
+                  : 'Preparing document'}
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              {printMessage}
+            </div>
+          </div>
+          {(printStatus === 'ready' || printStatus === 'error') && (
+            <button className="btn btn-outline" onClick={() => setPrintStatus('idle')}>
+              Close
+            </button>
+          )}
+        </div>
+      )}
+
+      <div
+        className="a4-page"
+        style={{
+          position: 'relative',
+          marginTop: '0px',
+          minHeight: 'auto',
+          height: 'auto',
+          maxHeight: 'none',
+          overflow: 'visible',
+        }}
+      >
         {isLoadingDetail && (
           <div
             style={{
@@ -339,32 +427,6 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
                 >
                   {statementData.balance > 0 ? 'Owing' : 'Paid'}
                 </span>
-                <button
-                  className="btn btn-outline"
-                  onClick={onEditProfile}
-                  style={{
-                    padding: '4px 12px',
-                    fontSize: '11px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                  Edit Profile
-                </button>
               </div>
             </div>
 
@@ -426,7 +488,9 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
                           color: item.isCredit ? '#10B981' : '#dc2626',
                         }}
                       >
-                        {item.isCredit ? '+' : '-'}${Math.abs(item.amount / 100).toFixed(2)}
+                        {item.isCredit ? '+' : '-'}
+                        {getCurrencySymbol()}
+                        {Math.abs(item.amount / 100).toFixed(2)}
                       </td>
                     </tr>
                   ))}
@@ -443,7 +507,7 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
                         }}
                         className="text-display"
                       >
-                        No transactional records exist for this student account
+                        No transactional records exist for this learner account
                       </td>
                     </tr>
                   )}
@@ -473,8 +537,11 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
                   color: statementData.balance > 0 ? '#dc2626' : '#10B981',
                 }}
               >
-                {statementData.balance > 0 ? '+$' : statementData.balance < 0 ? '+$' : ''}
-                {Math.abs(statementData.balance / 100).toFixed(2)}
+                {statementData.balance > 0
+                  ? `-${getCurrencySymbol()}${Math.abs(statementData.balance / 100).toFixed(2)}`
+                  : statementData.balance < 0
+                    ? `+${getCurrencySymbol()}${Math.abs(statementData.balance / 100).toFixed(2)}`
+                    : `${getCurrencySymbol()}0.00`}
               </span>
             </div>
 
@@ -490,123 +557,7 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
             >
               <div>
                 This statement was generated using{' '}
-                <span style={{ fontWeight: 600, color: '#f97316' }}>FeesFoundry</span> - a product
-                of <span style={{ color: '#374151' }}>Jiggabyte Technology Limited</span>
-              </div>
-              <div style={{ marginTop: '4px', fontStyle: 'italic' }}>
-                For support, contact your school administrator or visit www.jiggabyte.co.zm
-              </div>
-            </div>
-          </div>
-        )}
-
-        {statementData && statementData.fees.length + statementData.payments.length > 15 && (
-          <div style={{ marginTop: '24px' }}>
-            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-              <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>
-                Page 2 of 2
-              </div>
-              <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#1f2937' }}>
-                {statementData.student.full_name} - Continued
-              </h3>
-            </div>
-            <div
-              style={{
-                fontSize: '13px',
-                fontWeight: 600,
-                color: '#374151',
-                marginBottom: '12px',
-                paddingBottom: '8px',
-                borderBottom: '1px solid #e5e7eb',
-              }}
-            >
-              Transaction Details (Continued)
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Type</th>
-                  <th>Details</th>
-                  <th style={{ textAlign: 'right' }}>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.slice(10).map((item, i) => (
-                  <tr key={i}>
-                    <td style={{ fontSize: '12px', color: '#6b7280' }}>{item.date}</td>
-                    <td>
-                      <span
-                        style={{
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          backgroundColor: item.isCredit ? '#D1FAE5' : '#FEE2E2',
-                          color: item.isCredit ? '#065F46' : '#991B1B',
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        {item.type}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: '13px', fontWeight: 600 }}>{item.details}</td>
-                    <td
-                      style={{
-                        fontSize: '14px',
-                        fontWeight: 700,
-                        textAlign: 'right',
-                        color: item.isCredit ? '#10B981' : '#dc2626',
-                      }}
-                    >
-                      {item.isCredit ? '+' : '-'}${Math.abs(item.amount / 100).toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div
-              style={{
-                marginTop: '20px',
-                padding: '16px',
-                border: '2px solid #374151',
-                borderRadius: '8px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                backgroundColor: '#f9fafb',
-              }}
-            >
-              <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>
-                Account Balance
-              </span>
-              <span
-                style={{
-                  fontSize: '24px',
-                  fontWeight: 700,
-                  color: statementData.balance > 0 ? '#dc2626' : '#10B981',
-                }}
-              >
-                {statementData.balance > 0 ? '+$' : statementData.balance < 0 ? '+$' : ''}
-                {Math.abs(statementData.balance / 100).toFixed(2)}
-              </span>
-            </div>
-            <div
-              style={{
-                position: 'absolute',
-                bottom: '20mm',
-                left: '20mm',
-                right: '20mm',
-                paddingTop: '12px',
-                borderTop: '2px dashed #e5e7eb',
-                textAlign: 'center',
-                fontSize: '11px',
-                color: '#6b7280',
-              }}
-            >
-              <div>
-                This statement was generated using{' '}
-                <span style={{ fontWeight: 600, color: '#f97316' }}>FeesFoundry</span> - a product
+                <span style={{ fontWeight: 600, color: '#f97316' }}>SchoolFoundry</span> - a product
                 of <span style={{ color: '#374151' }}>Jiggabyte Technology Limited</span>
               </div>
               <div style={{ marginTop: '4px', fontStyle: 'italic' }}>

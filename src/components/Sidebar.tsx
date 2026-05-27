@@ -19,17 +19,15 @@ interface NavItem {
 
 const allNavItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid', roles: ['admin', 'user'] },
-  { id: 'accounts', label: 'Student Accounts', icon: 'file-text', roles: ['admin', 'user'] },
+  { id: 'accounts', label: 'Learner Accounts', icon: 'file-text', roles: ['admin', 'user'] },
   { id: 'payments', label: 'Payments', icon: 'credit-card', roles: ['admin', 'user'] },
-  { id: 'fees', label: 'Fee Structure', icon: 'dollar', roles: ['admin'] },
+  { id: 'fees', label: 'School Fees', icon: 'dollar', roles: ['admin'] },
   { id: 'logs', label: 'Logs', icon: 'list', roles: ['admin'] },
   { id: 'backup', label: 'Backup', icon: 'database', roles: ['admin'] },
 ];
 
 const iconPaths: Record<string, JSX.Element> = {
-  grid: (
-    <path d="M3 3h7v7H3V3zm11 0h7v7h-7V3zm0 11h7v7h-7v-7zm-11 0h7v7H3v-7z" />
-  ),
+  grid: <path d="M3 3h7v7H3V3zm11 0h7v7h-7V3zm0 11h7v7h-7v-7zm-11 0h7v7H3v-7z" />,
   'file-text': (
     <>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -78,7 +76,12 @@ const iconPaths: Record<string, JSX.Element> = {
   ),
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, onSettingsClick, onLogout }) => {
+const Sidebar: React.FC<SidebarProps> = ({
+  activeView,
+  onViewChange,
+  onSettingsClick,
+  onLogout,
+}) => {
   const { user } = useAuth();
   const role = (user?.role as RoleAccess) || 'user';
   const navItems = allNavItems.filter(item => item.roles.includes(role));
@@ -87,23 +90,28 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, onSettingsC
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-logo">
-          <img 
-            src="./img/feesfoundry-icon.svg" 
-            alt="FeesFoundry Logo" 
-            style={{ width: '35.2px', height: '35.2px' }} 
+          <img
+            src="./img/schoolfoundry-icon.svg"
+            alt="SchoolFoundry Logo"
+            style={{ width: '35.2px', height: '35.2px' }}
           />
         </div>
         <div className="sidebar-title">
-          <span className="sidebar-title-text" style={{ display: 'flex', color: 'var(--text-primary)', fontSize: '22px' }}>
-            <span style={{ fontWeight: 800 }}>Fees</span>
+          <span
+            className="sidebar-title-text"
+            style={{ display: 'flex', color: 'var(--text-primary)', fontSize: '22px' }}
+          >
+            <span style={{ fontWeight: 800 }}>School</span>
             <span style={{ fontWeight: 400 }}>Foundry</span>
           </span>
-          <span className="sidebar-title-sub" style={{ fontSize: '9px', marginTop: '2px' }}>Forging a Stronger Financial Future</span>
+          <span className="sidebar-title-sub" style={{ fontSize: '9px', marginTop: '2px' }}>
+            School Management System
+          </span>
         </div>
       </div>
 
       <nav className="sidebar-nav">
-        {navItems.map((item) => (
+        {navItems.map(item => (
           <button
             key={item.id}
             className={`sidebar-nav-item ${activeView === item.id ? 'active' : ''}`}
@@ -150,11 +158,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, onSettingsC
           <span className="text-display">Settings</span>
         </button>
 
-        <button
-          className="sidebar-nav-item"
-          onClick={onLogout}
-          style={{ color: '#ef4444' }}
-        >
+        <button className="sidebar-nav-item" onClick={onLogout} style={{ color: '#ef4444' }}>
           <svg
             className="sidebar-icon"
             width="18"
@@ -173,12 +177,29 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, onSettingsC
           <span className="text-display">Logout</span>
         </button>
       </nav>
-      
+
       <div style={{ marginTop: 'auto', padding: '1.5rem', borderTop: '1px solid var(--border)' }}>
-        <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '8px' }}>
+        <div
+          style={{
+            fontSize: '10px',
+            color: 'var(--text-secondary)',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            marginBottom: '8px',
+          }}
+        >
           v1.2.0 • Build 2026
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <div
+          style={{
+            fontSize: '11px',
+            color: 'var(--text-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+          }}
+        >
           &copy; Jiggabyte Technology Limited
         </div>
       </div>

@@ -4,6 +4,8 @@ import PaymentWizard from './PaymentWizard';
 import StudentWizard from './StudentWizard';
 import SynthetixCard from './ui/SynthetixCard';
 import Receipt from './Receipt';
+import StudentStatementPreview from './StudentStatementPreview';
+import { getCurrencySymbol } from '../lib/currency';
 
 interface GradeCount {
   label: string;
@@ -27,7 +29,11 @@ interface DashboardStats {
   notPaid: number;
 }
 
-const Dashboard: React.FC = () => {
+interface DashboardProps {
+  onViewStatement?: (studentId: number) => void;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
   const [stats, setStats] = useState<DashboardStats>({
     totalStudents: 0,
     gradeBreakdown: [],
@@ -55,12 +61,40 @@ const Dashboard: React.FC = () => {
   const [selectedStudentForPayment, setSelectedStudentForPayment] = useState<any>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentYear, setPaymentYear] = useState<number | null>(null);
+  const [paymentTerm, setPaymentTerm] = useState<number | null>(null);
   const [years, setYears] = useState<any[]>([]);
   const [recordingPayment, setRecordingPayment] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<any>(null);
   const [paymentError, setPaymentError] = useState('');
+  const [showStatementPreview, setShowStatementPreview] = useState(false);
+  const [statementData, setStatementData] = useState<any>(null);
+  const [statementLoading, setStatementLoading] = useState(false);
+  const [schoolName, setSchoolName] = useState('');
+  const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
+  const [schoolContact, setSchoolContact] = useState('');
+  const [termsList, setTermsList] = useState<any[]>([]);
 
   useEffect(() => {
+    // One-time migration: fix old payments with NULL term_id
+    (async () => {
+      try {
+        await db.run(`
+          UPDATE payments 
+          SET term_id = (
+            SELECT MIN(fs.term_id) 
+            FROM student_fees sf 
+            JOIN fee_structure fs ON sf.fee_structure_id = fs.id 
+            WHERE sf.student_id = payments.student_id AND fs.year_id = payments.year_id
+          )
+          WHERE term_id IS NULL AND student_id IN (
+            SELECT DISTINCT student_id FROM payments WHERE term_id IS NULL
+          )
+        `);
+      } catch (e) {
+        console.warn('Payment term migration skipped:', e);
+      }
+    })();
+
     fetchDashboardData();
     loadStudentsAndYears();
   }, []);
@@ -70,7 +104,7 @@ const Dashboard: React.FC = () => {
       const currentYear = await db.get('SELECT id FROM academic_years ORDER BY label DESC LIMIT 1');
       const [studentList, yearList] = await Promise.all([
         db.all(
-          `SELECT s.id, s.full_name, g.label as grade_label, sye.grade_id,
+          `SELECT s.id, s.full_name, g.label as grade_label, sye.grade_id, s.is_active,
           COALESCE((SELECT SUM(sf.amount_cents) FROM student_fees sf JOIN fee_structure fs ON sf.fee_structure_id = fs.id WHERE sf.student_id = s.id AND fs.year_id = ?), 0) -
           COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
           FROM students s
@@ -80,22 +114,153 @@ const Dashboard: React.FC = () => {
           ORDER BY s.full_name`,
           [currentYear?.id, currentYear?.id, currentYear?.id]
         ),
-        db.all('SELECT id, label FROM academic_years ORDER BY label DESC'),
+        db.all(`
+          SELECT y.id, y.label, 
+            (SELECT json_group_array(json_object('id', t.id, 'label', t.label)) 
+             FROM terms t WHERE t.year_id = y.id ORDER BY t.term_number) as terms_json
+          FROM academic_years y 
+          ORDER BY y.label DESC
+        `),
       ]);
       console.log('Loaded students:', studentList.length);
       console.log('Loaded years:', yearList.length);
+      // Parse terms from JSON string
+      const parsedYears = yearList.map((y: any) => ({
+        ...y,
+        terms: y.terms_json ? JSON.parse(y.terms_json) : [],
+      }));
       setStudents(studentList);
-      setYears(yearList);
-      if (yearList.length > 0) {
-        setPaymentYear(yearList[0].id);
+      setYears(parsedYears);
+      if (parsedYears.length > 0) {
+        setPaymentYear(parsedYears[0].id);
       }
     } catch (err) {
       console.error('Error loading students and years:', err);
     }
   };
 
+  // Load school settings and terms
+  useEffect(() => {
+    (async () => {
+      try {
+        const [nameSetting, logoSetting, phoneSetting, emailSetting, termsData] = await Promise.all(
+          [
+            db.get('SELECT value FROM settings WHERE key = ?', ['school_name']),
+            db.get('SELECT value FROM settings WHERE key = ?', ['school_logo']),
+            db.get('SELECT value FROM settings WHERE key = ?', ['school_phone']),
+            db.get('SELECT value FROM settings WHERE key = ?', ['school_email']),
+            db.all('SELECT id, label FROM terms ORDER BY term_number'),
+          ]
+        );
+        if (nameSetting) setSchoolName(nameSetting.value);
+        if (logoSetting) setSchoolLogo(logoSetting.value);
+        const contact = [phoneSetting?.value, emailSetting?.value].filter(Boolean).join(' | ');
+        setSchoolContact(contact);
+        setTermsList(termsData);
+      } catch (err) {
+        console.error('Error loading settings:', err);
+      }
+    })();
+  }, []);
+
+  const viewStatement = async (student: any) => {
+    if (!paymentYear) return;
+    setStatementLoading(true);
+    setShowStatementPreview(true);
+    try {
+      const [payments, fees] = await Promise.all([
+        db.all(
+          `SELECT p.id, p.receipt_number, p.amount_paid_cents as amount, p.payment_date, p.is_voided,
+                  t.label as term_label
+           FROM payments p
+           LEFT JOIN terms t ON p.term_id = t.id
+           WHERE p.student_id = ? AND p.year_id = ? AND p.is_voided = 0
+           ORDER BY p.payment_date`,
+          [student.id, paymentYear]
+        ),
+        db.all(
+          `SELECT sf.debit_date as date, fs.description, sf.amount_cents as amount, 'Fee' as type,
+                  t.label as term_label
+           FROM student_fees sf
+           JOIN fee_structure fs ON sf.fee_structure_id = fs.id
+           LEFT JOIN terms t ON fs.term_id = t.id
+           WHERE sf.student_id = ? AND fs.year_id = ?
+           ORDER BY sf.debit_date`,
+          [student.id, paymentYear]
+        ),
+      ]);
+      const totalFees = fees.reduce((sum: number, f: any) => sum + f.amount, 0);
+      const totalPaid = payments.reduce((sum: number, p: any) => sum + p.amount, 0);
+      const balance = totalFees - totalPaid;
+      setStatementData({
+        student,
+        payments,
+        fees,
+        totalFees,
+        totalPaid,
+        balance,
+        generatedAt: new Date().toLocaleDateString(),
+      });
+    } catch (err: any) {
+      console.error('Error loading statement:', err);
+    } finally {
+      setStatementLoading(false);
+    }
+  };
+
+  // Helper to find oldest term with outstanding balance
+  const findOldestOutstandingTerm = async (
+    studentId: number,
+    yearId: number
+  ): Promise<number | null> => {
+    const termBalances = await db.all(
+      `
+      WITH term_fees AS (
+        SELECT fs.term_id, SUM(sf.amount_cents) as debited
+        FROM student_fees sf
+        JOIN fee_structure fs ON sf.fee_structure_id = fs.id
+        WHERE sf.student_id = ? AND fs.year_id = ?
+        GROUP BY fs.term_id
+      ),
+      term_payments AS (
+        SELECT term_id, SUM(amount_paid_cents) as paid
+        FROM payments
+        WHERE student_id = ? AND year_id = ? AND is_voided = 0
+        GROUP BY term_id
+      )
+      SELECT tf.term_id, t.term_number, tf.debited - COALESCE(tp.paid, 0) as balance
+      FROM term_fees tf
+      JOIN terms t ON tf.term_id = t.id
+      LEFT JOIN term_payments tp ON tf.term_id = tp.term_id
+      WHERE tf.debited - COALESCE(tp.paid, 0) > 0
+      ORDER BY t.term_number ASC
+      LIMIT 1
+    `,
+      [studentId, yearId, studentId, yearId]
+    );
+
+    return termBalances.length > 0 ? termBalances[0].term_id : null;
+  };
+
   const handleRecordPayment = async () => {
-    if (!selectedStudentForPayment || !paymentAmount || !paymentYear) return;
+    if (!selectedStudentForPayment || !paymentAmount || !paymentYear) {
+      setPaymentError('Please fill in all required fields');
+      return;
+    }
+    // Check if learner is active
+    if (selectedStudentForPayment.is_active === 0) {
+      setPaymentError('Cannot record payment for inactive learner');
+      return;
+    }
+    // Auto-determine payment term if not set
+    let termToUse = paymentTerm;
+    if (!termToUse) {
+      termToUse = await findOldestOutstandingTerm(selectedStudentForPayment.id, paymentYear);
+    }
+    if (!termToUse) {
+      setPaymentError('No outstanding balance found for this learner');
+      return;
+    }
     setRecordingPayment(true);
     setPaymentError('');
     try {
@@ -114,14 +279,15 @@ const Dashboard: React.FC = () => {
       );
 
       if (!enrollment?.grade_id) {
-        throw new Error('Student is not enrolled for the selected academic year');
+        throw new Error('Learner is not enrolled for the selected academic year');
       }
 
       const result = await db.run(
-        'INSERT INTO payments (student_id, year_id, term_id, grade_id, receipt_number, amount_paid_cents, payment_date, payment_method, recorded_by) VALUES (?, ?, NULL, ?, ?, ?, datetime("now", "localtime"), ?, ?)',
+        'INSERT INTO payments (student_id, year_id, term_id, grade_id, receipt_number, amount_paid_cents, payment_date, payment_method, recorded_by) VALUES (?, ?, ?, ?, ?, ?, datetime("now", "localtime"), ?, ?)',
         [
           selectedStudentForPayment.id,
           paymentYear,
+          termToUse,
           enrollment.grade_id,
           receiptNumber,
           amountCents,
@@ -139,7 +305,7 @@ const Dashboard: React.FC = () => {
           'payment_recorded',
           'payments',
           result.lastInsertRowid || result.lastID,
-          `Payment of $${paymentAmount} recorded for ${selectedStudentForPayment.full_name} (${receiptNumber})`,
+          `Payment of ${getCurrencySymbol()}${paymentAmount} recorded for ${selectedStudentForPayment.full_name} (${receiptNumber})`,
         ]
       );
 
@@ -165,6 +331,7 @@ const Dashboard: React.FC = () => {
       setSelectedStudentForPayment(null);
       setStudentSearchQuery('');
       setPaymentAmount('');
+      setPaymentTerm(null);
       fetchDashboardData();
       loadStudentsAndYears(); // Reload students with updated balances
     } catch (err: any) {
@@ -197,7 +364,7 @@ const Dashboard: React.FC = () => {
         `
         SELECT g.label, COUNT(sye.student_id) as count
         FROM grades g
-        LEFT JOIN student_year_enrollment sye ON g.id = sye.grade_id AND sye.year_id = ?
+        LEFT JOIN student_year_enrollment sye ON g.id = sye.grade_id AND sye.year_id = ? AND sye.is_active = 1
         GROUP BY g.id, g.label
         ORDER BY g.id
       `,
@@ -241,7 +408,7 @@ const Dashboard: React.FC = () => {
             SUM(amount_paid_cents) as total_collected,
             SUM(CASE WHEN term_id = ? THEN amount_paid_cents ELSE 0 END) as term_collected
         FROM payments
-        WHERE year_id = ?
+        WHERE year_id = ? AND is_voided = 0
       `,
         [currentTerm?.id, currentYear.id]
       );
@@ -292,7 +459,7 @@ const Dashboard: React.FC = () => {
             `
             SELECT SUM(amount_paid_cents) as total
             FROM payments
-            WHERE year_id = ? AND term_id = ?
+            WHERE year_id = ? AND term_id = ? AND is_voided = 0
           `,
             [currentYear.id, term.id]
           );
@@ -314,7 +481,8 @@ const Dashboard: React.FC = () => {
                 SUM(sf.amount_cents) as expected_ytd
             FROM student_fees sf
             JOIN fee_structure fs ON sf.fee_structure_id = fs.id
-            WHERE fs.year_id = ?
+            JOIN students s ON sf.student_id = s.id
+            WHERE fs.year_id = ? AND s.is_active = 1
             GROUP BY sf.student_id
         ),
         student_paid AS (
@@ -322,7 +490,7 @@ const Dashboard: React.FC = () => {
                 student_id,
                 SUM(amount_paid_cents) as paid_total
             FROM payments
-            WHERE year_id = ?
+            WHERE year_id = ? AND is_voided = 0
             GROUP BY student_id
         )
         SELECT 
@@ -384,7 +552,8 @@ const Dashboard: React.FC = () => {
 
   const formatCurrency = (cents: number) => (
     <span className="text-mono">
-      ${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+      {getCurrencySymbol()}
+      {(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
     </span>
   );
 
@@ -392,8 +561,31 @@ const Dashboard: React.FC = () => {
 
   if (loading)
     return (
-      <div style={{ padding: '40px', textAlign: 'center' }} className="text-display">
-        Loading...
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '80px 40px',
+          gap: '16px',
+        }}
+        className="text-display"
+      >
+        <svg
+          width="40"
+          height="40"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--primary)"
+          strokeWidth="2.5"
+          style={{ animation: 'spin 1s linear infinite' }}
+        >
+          <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
+        </svg>
+        <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+          Loading dashboard...
+        </span>
       </div>
     );
 
@@ -679,7 +871,7 @@ const Dashboard: React.FC = () => {
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            Add Student
+            Add Learner
           </button>
         </div>
       </div>
@@ -701,7 +893,7 @@ const Dashboard: React.FC = () => {
           <div style={{ position: 'relative' }}>
             <input
               type="text"
-              placeholder="Start typing student name or ID..."
+              placeholder="Start typing learner name or ID..."
               value={studentSearchQuery}
               onChange={e => {
                 setStudentSearchQuery(e.target.value);
@@ -739,10 +931,18 @@ const Dashboard: React.FC = () => {
                 {filteredStudents.slice(0, 10).map(s => (
                   <div
                     key={s.id}
-                    onClick={() => {
+                    onClick={async () => {
                       setSelectedStudentForPayment(s);
                       setShowStudentDropdown(false);
                       setStudentSearchQuery('');
+
+                      // Auto-determine payment term: oldest term with outstanding balance
+                      if (paymentYear) {
+                        const termId = await findOldestOutstandingTerm(s.id, paymentYear);
+                        setPaymentTerm(termId);
+                      } else {
+                        setPaymentTerm(null);
+                      }
                     }}
                     style={{
                       padding: '12px 16px',
@@ -804,6 +1004,7 @@ const Dashboard: React.FC = () => {
                 onClick={() => {
                   setSelectedStudentForPayment(null);
                   setPaymentAmount('');
+                  setPaymentTerm(null);
                 }}
                 style={{
                   background: 'rgba(255,255,255,0.2)',
@@ -815,7 +1016,22 @@ const Dashboard: React.FC = () => {
                   borderRadius: '8px',
                 }}
               >
-                Change Student
+                Change Learner
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewStatement?.(selectedStudentForPayment.id)}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                }}
+              >
+                View Statement
               </button>
             </div>
 
@@ -849,7 +1065,11 @@ const Dashboard: React.FC = () => {
                     color: selectedStudentForPayment.balance > 0 ? '#dc2626' : '#059669',
                   }}
                 >
-                  ${(selectedStudentForPayment.balance / 100).toFixed(2)}
+                  {selectedStudentForPayment.balance > 0
+                    ? `-${getCurrencySymbol()}${Math.abs(selectedStudentForPayment.balance / 100).toFixed(2)}`
+                    : selectedStudentForPayment.balance < 0
+                      ? `+${getCurrencySymbol()}${Math.abs(selectedStudentForPayment.balance / 100).toFixed(2)}`
+                      : `${getCurrencySymbol()}0.00`}
                 </div>
               </div>
               <div
@@ -877,7 +1097,20 @@ const Dashboard: React.FC = () => {
                 <select
                   className="input-default"
                   value={paymentYear || ''}
-                  onChange={e => setPaymentYear(Number(e.target.value))}
+                  onChange={async e => {
+                    const newYear = Number(e.target.value);
+                    setPaymentYear(newYear);
+                    // Auto-set payment term for selected student
+                    if (selectedStudentForPayment) {
+                      const termId = await findOldestOutstandingTerm(
+                        selectedStudentForPayment.id,
+                        newYear
+                      );
+                      setPaymentTerm(termId);
+                    } else {
+                      setPaymentTerm(null);
+                    }
+                  }}
                   style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
                 >
                   {years.map(y => (
@@ -914,7 +1147,7 @@ const Dashboard: React.FC = () => {
                   <button
                     type="button"
                     onClick={() =>
-                      setPaymentAmount((selectedStudentForPayment.balance / 100).toFixed(2))
+                      setPaymentAmount(Math.abs(selectedStudentForPayment.balance / 100).toFixed(2))
                     }
                     style={{
                       marginTop: '8px',
@@ -929,7 +1162,8 @@ const Dashboard: React.FC = () => {
                       width: '100%',
                     }}
                   >
-                    Pay Balance (${(selectedStudentForPayment.balance / 100).toFixed(2)})
+                    Pay Balance (-${getCurrencySymbol()}$
+                    {Math.abs(selectedStudentForPayment.balance / 100).toFixed(2)})
                   </button>
                 )}
               </div>
@@ -1005,7 +1239,7 @@ const Dashboard: React.FC = () => {
 
         {/* Payment Status Overview - Full Width */}
         <SynthetixCard style={{ gridColumn: 'span 4' }}>
-          <div className="metric-label">Year-to-Date Student Payment Compliance</div>
+          <div className="metric-label">Year-to-Date Learner Payment Compliance</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
             <div
               style={{
@@ -1132,7 +1366,7 @@ const Dashboard: React.FC = () => {
 
         {/* Progress and Distribution - 50/50 split */}
         <SynthetixCard style={{ gridColumn: 'span 2' }}>
-          <div className="metric-label">Collection Progress by Term</div>
+          <div className="metric-label">Collection Progress by Payment Period</div>
           <PercentageChart data={stats.termlyData} style={{ marginTop: '24px' }} />
         </SynthetixCard>
 
@@ -1170,6 +1404,23 @@ const Dashboard: React.FC = () => {
           payment={selectedReceipt}
           onClose={() => setSelectedReceipt(null)}
           canVoid={false}
+        />
+      )}
+      {showStatementPreview && (
+        <StudentStatementPreview
+          statementData={statementData}
+          isLoadingDetail={statementLoading}
+          detailError={null}
+          schoolName={schoolName}
+          schoolLogo={schoolLogo}
+          schoolContact={schoolContact}
+          termsList={termsList}
+          showOwing={true}
+          showPaid={true}
+          onExit={() => setShowStatementPreview(false)}
+          onEditProfile={() => {}}
+          onRecordPayment={() => {}}
+          onRetry={() => viewStatement(selectedStudentForPayment)}
         />
       )}
     </div>

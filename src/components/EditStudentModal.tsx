@@ -44,7 +44,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
     return (
       <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
         <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
-        <p>You do not have permission to manage students.</p>
+        <p>You do not have permission to manage learners.</p>
       </div>
     );
   }
@@ -78,7 +78,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
       setGrades(gradeList);
     } catch (err: any) {
       console.error(err);
-      setError('Failed to load student data');
+      setError('Failed to load learner data');
     } finally {
       setIsLoading(false);
     }
@@ -151,11 +151,11 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
         ]
       );
 
-      showToast('success', 'Student Updated', `${form.full_name}'s details have been updated.`);
+      showToast('success', 'Learner Updated', `${form.full_name}'s details have been updated.`);
       onSuccess();
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Failed to update student');
+      setError(err.message || 'Failed to update learner');
     } finally {
       setIsSaving(false);
     }
@@ -187,7 +187,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
         style={{ maxWidth: 700 }}
       >
         <div className="modal-header">
-          <h2 className="text-display">Edit Student Profile</h2>
+          <h2 className="text-display">Edit Learner Profile</h2>
           <button className="modal-close" onClick={onClose}>
             <svg
               width="20"
@@ -229,7 +229,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
                   className="input-default"
                   value={form.full_name}
                   onChange={e => setForm({ ...form, full_name: e.target.value })}
-                  placeholder="Enter student's full name"
+                  placeholder="Enter learner's full name"
                 />
               </div>
 
@@ -369,7 +369,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
                   style={{ minHeight: '80px', paddingTop: '8px' }}
                   value={form.notes}
                   onChange={e => setForm({ ...form, notes: e.target.value })}
-                  placeholder="Additional information about the student..."
+                  placeholder="Additional information about the learner..."
                 />
               </div>
             </div>
@@ -389,7 +389,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
               Cancel
             </button>
             <button type="submit" className="btn btn-primary" disabled={isSaving}>
-              {isSaving ? 'Saving Changes...' : 'Update Student'}
+              {isSaving ? 'Saving Changes...' : 'Update Learner'}
             </button>
           </div>
         </form>

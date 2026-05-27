@@ -1,10 +1,50 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+  useSearchParams,
+} from 'react-router-dom';
 import './index.css';
 import { db } from './lib/db-client';
 import { AuthProvider, useAuth } from './lib/auth-context';
 import { ToastProvider } from './components/Toast';
+import { loadCurrency } from './lib/currency';
+
+// Global error handler to catch unhandled errors
+window.onerror = async (message, source, lineno, colno, error) => {
+  const errorMsg = error?.message || String(message);
+  const location = `${source}:${lineno}:${colno}`;
+  const details = `Uncaught error at ${location}: ${errorMsg}`;
+  console.error('Global error:', details);
+  try {
+    await db.run(
+      'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+      [null, 'System', 'error_uncaught', 'error', null, details]
+    );
+  } catch (e) {
+    console.error('Failed to log error:', e);
+  }
+  return false;
+};
+
+// Global unhandled promise rejection handler
+window.onunhandledrejection = async event => {
+  const errorMsg = event.reason?.message || String(event.reason);
+  const details = `Unhandled promise rejection: ${errorMsg}`;
+  console.error('Unhandled rejection:', details);
+  try {
+    await db.run(
+      'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+      [null, 'System', 'error_promise', 'error', null, details]
+    );
+  } catch (e) {
+    console.error('Failed to log rejection:', e);
+  }
+};
+
 import PageHeader from './components/PageHeader';
 import SetupWizard from './components/SetupWizard';
 import { Welcome } from './components/auth/Welcome';
@@ -21,7 +61,7 @@ import SettingsModal from './components/SettingsModal';
 
 const pageTitles: Record<string, string> = {
   dashboard: 'Dashboard',
-  accounts: 'Student Accounts',
+  accounts: 'Learner Accounts',
   fees: 'Fee Structure',
   payments: 'Payments',
   logs: 'Activity Logs',
@@ -32,6 +72,7 @@ function AppInner() {
   const { user, login, logout } = useAuth();
   const [isSetup, setIsSetup] = useState(false);
   const [view, setView] = useState('dashboard');
+  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [schoolName, setSchoolName] = useState('');
   const [activeTerm, setActiveTerm] = useState('');
   const [showSettings, setShowSettings] = useState(false);
@@ -40,6 +81,8 @@ function AppInner() {
     const checkSetup = async () => {
       const adminUser = await db.get('SELECT * FROM users LIMIT 1');
       setIsSetup(!!adminUser);
+      // Load currency early
+      loadCurrency().catch(console.error);
     };
     checkSetup();
   }, []);
@@ -83,7 +126,7 @@ function AppInner() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Welcome />} />
+        <Route path="/" element={<Welcome isSetup={isSetup} />} />
         <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
         <Route
           path="/dashboard"
@@ -105,10 +148,29 @@ function AppInner() {
                     userRole={user.role}
                   />
                   <div className="page-content">
-                    {view === 'dashboard' && <Dashboard />}
-                    {view === 'accounts' && <StudentAccounts />}
+                    {view === 'dashboard' && (
+                      <Dashboard
+                        onViewStatement={(studentId: number) => {
+                          setView('accounts');
+                          setSelectedStudentId(studentId);
+                        }}
+                      />
+                    )}
+                    {view === 'accounts' && (
+                      <StudentAccounts
+                        preselectedStudentId={selectedStudentId}
+                        onStatementViewed={() => setSelectedStudentId(null)}
+                      />
+                    )}
                     {view === 'fees' && <FeeStructureManager />}
-                    {view === 'payments' && <PaymentManager />}
+                    {view === 'payments' && (
+                      <PaymentManager
+                        onViewStatement={(studentId: number) => {
+                          setView('accounts');
+                          setSelectedStudentId(studentId);
+                        }}
+                      />
+                    )}
                     {view === 'logs' && <ActivityLog />}
                     {view === 'backup' && <BackupManager />}
                   </div>

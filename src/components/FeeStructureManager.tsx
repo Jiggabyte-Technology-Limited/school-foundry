@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
 import { useToast } from './Toast';
+import ConfigWizard from './ui/ConfigWizard';
+import { generateFeeStructureHtml, printDocument } from '../lib/print-service';
+import { getCurrencySymbol, getCurrencies, loadCurrency, setCurrency } from '../lib/currency';
 
 interface AcademicYear {
   id: number;
@@ -44,7 +47,14 @@ const FeeStructureManager: React.FC = () => {
   const [terms, setTerms] = useState<Term[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
-  const [showConfig, setShowConfig] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showConfig, setShowConfig] = useState(false); // Legacy - keeping for backward compat
+  const [showWizard, setShowWizard] = useState(false);
+  const [schoolName, setSchoolName] = useState('School Management');
+  const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
+  const [schoolContact, setSchoolContact] = useState('');
+  const [schoolFeesTerms, setSchoolFeesTerms] = useState('');
+  const [currencyCode, setCurrencyCode] = useState('USD');
 
   // Matrix State: [gradeId][termId] = MatrixCell
   const [matrix, setMatrix] = useState<Record<number, Record<number, MatrixCell>>>({});
@@ -77,13 +87,39 @@ const FeeStructureManager: React.FC = () => {
   }, [selectedYear]);
 
   const loadInitialData = async () => {
-    const [yearList, gradeList] = await Promise.all([
+    const [
+      yearList,
+      gradeList,
+      nameSetting,
+      logoSetting,
+      phoneSetting,
+      emailSetting,
+      feesTermsSetting,
+    ] = await Promise.all([
       db.all('SELECT * FROM academic_years ORDER BY label DESC'),
       db.all('SELECT * FROM grades ORDER BY id'),
+      db.get("SELECT value FROM app_settings WHERE key = 'school_name'"),
+      db.get("SELECT value FROM app_settings WHERE key = 'school_logo'"),
+      db.get("SELECT value FROM app_settings WHERE key = 'school_phone'"),
+      db.get("SELECT value FROM app_settings WHERE key = 'school_email'"),
+      db.get("SELECT value FROM app_settings WHERE key = 'school_fees_terms'"),
     ]);
     setYears(yearList);
     setGrades(gradeList);
     if (yearList.length > 0 && !selectedYear) setSelectedYear(yearList[0].id);
+
+    // Set school settings
+    setSchoolName(nameSetting?.value || 'School Management');
+    setSchoolLogo(logoSetting?.value || null);
+    const phone = phoneSetting?.value || '';
+    const email = emailSetting?.value || '';
+    setSchoolContact([phone, email].filter(Boolean).join(' | '));
+    setSchoolFeesTerms(feesTermsSetting?.value || '');
+
+    // Load currency from global utility
+    const curr = await loadCurrency();
+    setCurrencyCode(curr);
+    setLoading(false);
   };
 
   const loadYearData = async (yearId: number) => {
@@ -99,8 +135,8 @@ const FeeStructureManager: React.FC = () => {
     grades.forEach(g => {
       newMatrix[g.id] = {};
       const gradeFees = feeList.filter(f => f.grade_id === g.id);
-      const sameAmount =
-        gradeFees.length > 0 && gradeFees.every(f => f.same_amount_all_periods === 1);
+      // Default to true (Copy to All checked by default)
+      const sameAmount = true;
       newSameAmount[g.id] = sameAmount;
       termList.forEach(t => {
         const existingFee = feeList.find(f => f.grade_id === g.id && f.term_id === t.id);
@@ -149,7 +185,7 @@ const FeeStructureManager: React.FC = () => {
     if (!cell.isUnsaved || !selectedYear) return;
 
     if (!canManageFees) {
-      alert('You do not have permission to modify the fee structure.');
+      alert('You do not have permission to modify the school fees.');
       return;
     }
 
@@ -247,6 +283,85 @@ const FeeStructureManager: React.FC = () => {
     }
   };
 
+  const saveAllChanges = async () => {
+    if (!selectedYear || !canManageFees) return;
+
+    const unsavedCells: { gradeId: number; termId: number; cell: MatrixCell }[] = [];
+    Object.entries(matrix).forEach(([gradeId, termCells]) => {
+      Object.entries(termCells).forEach(([termId, cell]) => {
+        if (cell.isUnsaved) {
+          unsavedCells.push({ gradeId: Number(gradeId), termId: Number(termId), cell });
+        }
+      });
+    });
+
+    if (unsavedCells.length === 0) {
+      showToast('info', 'No Changes', 'All fee amounts are already saved.');
+      return;
+    }
+
+    // Mark all as saving
+    setMatrix(prev => {
+      const newMatrix = { ...prev };
+      unsavedCells.forEach(({ gradeId, termId }) => {
+        newMatrix[gradeId] = { ...newMatrix[gradeId] };
+        newMatrix[gradeId][termId] = { ...newMatrix[gradeId][termId], isSaving: true };
+      });
+      return newMatrix;
+    });
+
+    let savedCount = 0;
+    let errorCount = 0;
+
+    for (const { gradeId, termId, cell } of unsavedCells) {
+      try {
+        const amountCents = Math.round(parseFloat(cell.amount || '0') * 100);
+        if (cell.id) {
+          await db.run(
+            'UPDATE fee_structure SET amount_cents = ?, updated_at = datetime("now") WHERE id = ?',
+            [amountCents, cell.id]
+          );
+        } else {
+          const result = await db.run(
+            'INSERT INTO fee_structure (year_id, term_id, grade_id, amount_cents) VALUES (?, ?, ?, ?)',
+            [selectedYear, termId, gradeId, amountCents]
+          );
+          setMatrix(prev => ({
+            ...prev,
+            [gradeId]: {
+              ...prev[gradeId],
+              [termId]: { ...prev[gradeId][termId], id: result.lastInsertRowid || result.lastID },
+            },
+          }));
+        }
+        savedCount++;
+      } catch (err) {
+        console.error('Failed to save fee:', err);
+        errorCount++;
+      }
+    }
+
+    // Mark all as saved
+    setMatrix(prev => {
+      const newMatrix = { ...prev };
+      unsavedCells.forEach(({ gradeId, termId }) => {
+        newMatrix[gradeId] = { ...newMatrix[gradeId] };
+        newMatrix[gradeId][termId] = {
+          ...newMatrix[gradeId][termId],
+          isUnsaved: false,
+          isSaving: false,
+        };
+      });
+      return newMatrix;
+    });
+
+    if (errorCount > 0) {
+      showToast('error', 'Save Incomplete', `${savedCount} saved, ${errorCount} failed.`);
+    } else {
+      showToast('success', 'Fees Saved', `${savedCount} fee amount(s) have been saved.`);
+    }
+  };
+
   // Config Actions
   const addYear = async () => {
     if (!yearLabel.trim()) return;
@@ -259,7 +374,7 @@ const FeeStructureManager: React.FC = () => {
   const addGrade = async () => {
     if (!gradeLabel.trim()) return;
     await db.run('INSERT INTO grades (label) VALUES (?)', [gradeLabel]);
-    showToast('success', 'Grade Added', `Grade ${gradeLabel} has been added.`);
+    showToast('success', 'Grade/Form Added', `Grade/Form ${gradeLabel} has been added.`);
     setGradeLabel('');
     loadInitialData();
   };
@@ -429,7 +544,7 @@ const FeeStructureManager: React.FC = () => {
   // Toggle same amount for all periods for a grade
   const toggleSameAmount = async (gradeId: number) => {
     if (!canManageFees) {
-      alert('You do not have permission to modify the fee structure.');
+      alert('You do not have permission to modify the school fees.');
       return;
     }
 
@@ -471,13 +586,41 @@ const FeeStructureManager: React.FC = () => {
     }
   };
 
+  if (loading)
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '80px 40px',
+          gap: '16px',
+        }}
+        className="text-display"
+      >
+        <svg
+          width="40"
+          height="40"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--primary)"
+          strokeWidth="2.5"
+          style={{ animation: 'spin 1s linear infinite' }}
+        >
+          <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="12" />
+        </svg>
+        <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Loading fees...</span>
+      </div>
+    );
+
   return (
     <div className="page-content">
       <div className="flex-between mb-4">
         <div className="flex-col" style={{ gap: 4 }}>
-          <h1 style={{ margin: 0 }}>Fee Structure</h1>
+          <h1 style={{ margin: 0 }}>School Fees</h1>
           <p style={{ color: 'var(--color-sage-placeholder)', margin: 0 }}>
-            Manage and automate tuition fees across all grades.
+            Manage and automate tuition fees across all grades/forms.
           </p>
         </div>
         <div className="flex-row gap-3">
@@ -512,27 +655,106 @@ const FeeStructureManager: React.FC = () => {
               ))}
             </select>
           </div>
-          {canManageFees && (
-            <button
-              className={`config-toggle-btn ${showConfig ? 'active' : ''}`}
-              onClick={() => setShowConfig(!showConfig)}
+          <div
+            className="flex-row gap-2"
+            style={{
+              backgroundColor: 'white',
+              padding: '4px 12px',
+              borderRadius: 'var(--border-radius-lg)',
+              border: '1px solid var(--color-sage-border)',
+            }}
+          >
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-sage-placeholder)' }}>
+              CURRENCY:
+            </span>
+            <select
+              value={currencyCode}
+              onChange={async e => {
+                const newCode = e.target.value;
+                setCurrencyCode(newCode);
+                await setCurrency(newCode);
+              }}
+              style={{
+                border: 'none',
+                fontWeight: 700,
+                color: 'var(--primary)',
+                outline: 'none',
+                cursor: 'pointer',
+                fontSize: 13,
+              }}
+            >
+              {getCurrencies().map(c => (
+                <option key={c.code} value={c.code}>
+                  {c.code} - {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Setup Card */}
+      {canManageFees && (
+        <div
+          style={{
+            marginTop: 24,
+            padding: 20,
+            background: 'linear-gradient(135deg, var(--color-sage-cream) 0%, #f0fdf4 100%)',
+            borderRadius: 12,
+            border: '1px solid var(--color-accent-teal)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 12,
+                background: 'var(--color-accent-teal)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
             >
               <svg
-                width="18"
-                height="18"
+                width="24"
+                height="24"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="currentColor"
+                stroke="white"
                 strokeWidth="2"
               >
                 <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
                 <circle cx="12" cy="12" r="3" />
               </svg>
-              Configuration
-            </button>
-          )}
+            </div>
+            <div>
+              <h4 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>
+                School Setup
+              </h4>
+              <p
+                style={{
+                  margin: '4px 0 0 0',
+                  fontSize: 13,
+                  color: 'var(--color-sage-placeholder)',
+                }}
+              >
+                Add or edit academic years, grades/forms, and payment periods
+              </p>
+            </div>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowWizard(true)}
+            style={{ padding: '12px 24px' }}
+          >
+            Open Setup
+          </button>
         </div>
-      </div>
+      )}
 
       {/* Configuration Panel */}
       <div
@@ -797,13 +1019,13 @@ const FeeStructureManager: React.FC = () => {
                       showToast(
                         'success',
                         'Debit Complete',
-                        'Check console (F12) for details. Fees should now appear on student accounts.'
+                        'Check console (F12) for details. Fees should now appear on learner accounts.'
                       );
                     } else {
                       showToast(
                         'info',
                         'No Fees Debited',
-                        'No pending fees found. Make sure: 1) Students are enrolled, 2) Fee structure is set, 3) Payment periods have start dates.'
+                        'No pending fees found. Make sure: 1) Learners are enrolled, 2) School fees are set, 3) Payment periods have start dates.'
                       );
                     }
                   } catch (err) {
@@ -813,7 +1035,7 @@ const FeeStructureManager: React.FC = () => {
                 }}
                 style={{ width: '100%' }}
               >
-                Apply Fees to Students
+                Apply Fees to Learners
               </button>
             </div>
           </div>
@@ -821,24 +1043,129 @@ const FeeStructureManager: React.FC = () => {
       </div>
 
       {/* Matrix View */}
+      <div style={{ marginTop: 24 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 16,
+          }}
+        >
+          <div>
+            <h3 style={{ margin: 0, fontSize: 18 }}>Fee Amounts by Grade/Form</h3>
+            <p
+              style={{ margin: '4px 0 0 0', color: 'var(--color-sage-placeholder)', fontSize: 13 }}
+            >
+              Enter the tuition fee for each grade/form. Use "Copy to All" to apply one amount to
+              every period, or uncheck it to set different amounts per period.
+            </p>
+          </div>
+          {canManageFees &&
+            (() => {
+              const unsavedCount = Object.values(matrix).flatMap(
+                termCells => Object.values(termCells).filter(cell => cell.isUnsaved).length
+              );
+              const hasChanges = unsavedCount > 0;
+              return (
+                <button
+                  className={hasChanges ? 'btn btn-primary' : 'btn'}
+                  onClick={saveAllChanges}
+                  disabled={!hasChanges}
+                  style={{
+                    position: 'relative',
+                    opacity: hasChanges ? 1 : 0.5,
+                    cursor: hasChanges ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    style={{ marginRight: 8 }}
+                  >
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                    <polyline points="17 21 17 13 7 13 7 21" />
+                    <polyline points="7 3 7 8 15 8" />
+                  </svg>
+                  {hasChanges ? 'Save Changes' : 'Auto-Save On'}
+                  {hasChanges && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: -6,
+                        right: -6,
+                        background: 'var(--color-posthog-orange)',
+                        color: 'white',
+                        borderRadius: '50%',
+                        width: 20,
+                        height: 20,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {unsavedCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })()}
+        </div>
+      </div>
       <div className="fee-matrix-container">
         <div
           className="fee-matrix-grid"
-          style={{ gridTemplateColumns: `200px 80px repeat(${terms.length}, 1fr) 160px` }}
+          style={{
+            gridTemplateColumns: `200px 80px repeat(${terms.length}, minmax(120px, 1fr)) 160px`,
+            minWidth: 'max-content',
+          }}
         >
           {/* Header Row */}
           <div className="fee-matrix-header">
-            <div className="fee-matrix-cell fee-matrix-header-cell">Grade / Form</div>
             <div
               className="fee-matrix-cell fee-matrix-header-cell text-center"
-              style={{ fontSize: '0.7rem' }}
+              style={{
+                fontWeight: 700,
+                fontSize: 14,
+                position: 'sticky',
+                left: 0,
+                zIndex: 20,
+                backgroundColor: 'var(--secondary)',
+                boxShadow: '2px 0 4px rgba(0,0,0,0.1)',
+              }}
             >
-              Same All?
+              Grade / Form
+            </div>
+            <div
+              className="fee-matrix-cell fee-matrix-header-cell text-center"
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: 'var(--color-sage-placeholder)',
+                position: 'sticky',
+                left: 200,
+                zIndex: 20,
+                backgroundColor: 'var(--secondary)',
+                boxShadow: '2px 0 4px rgba(0,0,0,0.1)',
+              }}
+              title="When enabled, enter the fee in the first period and it copies to all other periods"
+            >
+              Copy to All
             </div>
             {terms.map(t => (
-              <div key={t.id} className="fee-matrix-cell fee-matrix-header-cell text-center">
+              <div
+                key={t.id}
+                className="fee-matrix-cell fee-matrix-header-cell text-center"
+                style={{ fontWeight: 600, fontSize: 13 }}
+              >
                 <div className="flex-col items-center" style={{ gap: 2 }}>
-                  <span>{t.label}</span>
+                  <span style={{ color: 'var(--primary)' }}>{t.label}</span>
                   {(t.start_date || t.end_date) && (
                     <span style={{ fontSize: 9, opacity: 0.6, whiteSpace: 'nowrap' }}>
                       {t.start_date
@@ -859,7 +1186,12 @@ const FeeStructureManager: React.FC = () => {
                 </div>
               </div>
             ))}
-            <div className="fee-matrix-cell fee-matrix-header-cell text-right">Total</div>
+            <div
+              className="fee-matrix-cell fee-matrix-header-cell text-right"
+              style={{ fontWeight: 700, fontSize: 13, color: 'var(--color-sage-placeholder)' }}
+            >
+              Year Total
+            </div>
           </div>
 
           {/* Data Rows */}
@@ -870,7 +1202,13 @@ const FeeStructureManager: React.FC = () => {
                 <div className="fee-matrix-cell fee-matrix-grade-cell">
                   <span className="fee-grade-badge">{g.label}</span>
                 </div>
-                <div className="fee-matrix-cell" style={{ justifyContent: 'center' }}>
+                <div
+                  className="fee-matrix-cell fee-matrix-cell-copy-all"
+                  style={{
+                    justifyContent: 'center',
+                    backgroundColor: sameAmountPerGrade[g.id] ? '#d1fae5' : 'var(--surface)',
+                  }}
+                >
                   <input
                     type="checkbox"
                     checked={sameAmountPerGrade[g.id] || false}
@@ -880,11 +1218,12 @@ const FeeStructureManager: React.FC = () => {
                       width: 18,
                       height: 18,
                       cursor: canManageFees ? 'pointer' : 'not-allowed',
+                      accentColor: 'var(--color-accent-teal)',
                     }}
                     title={
                       sameAmountPerGrade[g.id]
-                        ? 'Same amount for all payment periods'
-                        : 'Click to set same amount for all periods'
+                        ? 'Copy to All is ON. Enter the fee in the first period column and it applies to all periods. Click to disable.'
+                        : 'Click to enable Copy to All: enter the fee once in the first period and it applies to all periods.'
                     }
                   />
                 </div>
@@ -896,7 +1235,7 @@ const FeeStructureManager: React.FC = () => {
                   return (
                     <div key={t.id} className="fee-matrix-cell">
                       <div className="fee-input-wrapper">
-                        <span className="fee-input-currency">$</span>
+                        <span className="fee-input-currency">{getCurrencySymbol()}</span>
                         <input
                           type="number"
                           step="0.01"
@@ -947,7 +1286,7 @@ const FeeStructureManager: React.FC = () => {
                   );
                 })}
                 <div className="fee-matrix-cell fee-matrix-total-cell">
-                  $
+                  {getCurrencySymbol()}
                   {gradeTotal.toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
@@ -960,13 +1299,70 @@ const FeeStructureManager: React.FC = () => {
 
         {grades.length === 0 && (
           <div style={{ padding: 60, textAlign: 'center', color: 'var(--color-sage-placeholder)' }}>
-            No grades defined. Use the Configuration panel to add grades and payment periods.
+            No grades/forms defined. Use the Setup button to add grades/forms and payment periods.
           </div>
         )}
       </div>
 
+      {grades.length > 0 && terms.length > 0 && null}
+
       <div className="mt-4 flex-row justify-end no-print">
-        <button className="btn btn-sage" onClick={() => window.print()}>
+        <button
+          className="btn btn-sage"
+          onClick={async () => {
+            const selectedYearLabel = years.find(y => y.id === selectedYear)?.label || '';
+
+            // Build rows from matrix data
+            const rows: Array<{ gradeLabel: string; termLabel: string; amount: string }> = [];
+            const gradeTotals: Record<string, string> = {};
+
+            grades.forEach(g => {
+              let gradeTotal = 0;
+              terms.forEach(t => {
+                const cell = matrix[g.id]?.[t.id];
+                const amount = cell ? parseFloat(cell.amount) : 0;
+                if (amount > 0) {
+                  rows.push({
+                    gradeLabel: g.label,
+                    termLabel: t.label,
+                    amount: amount.toFixed(2),
+                  });
+                  gradeTotal += amount;
+                }
+              });
+              if (gradeTotal > 0) {
+                gradeTotals[g.label] = gradeTotal.toFixed(2);
+              }
+            });
+
+            if (rows.length === 0) {
+              showToast(
+                'info',
+                'No Fees',
+                'No fee amounts have been set. Please enter fees first.'
+              );
+              return;
+            }
+
+            const html = generateFeeStructureHtml({
+              schoolName,
+              schoolLogo: schoolLogo || undefined,
+              schoolContact: schoolContact || undefined,
+              academicYear: selectedYearLabel,
+              generatedAt: new Date().toLocaleDateString(),
+              currencySymbol: getCurrencySymbol(),
+              rows,
+              gradeTotals,
+              feesTerms: schoolFeesTerms || undefined,
+            });
+
+            await printDocument({
+              html,
+              filename: `school-fees-${selectedYearLabel}.pdf`,
+              title: 'School Fees Structure',
+            });
+          }}
+        >
           <svg
             width="16"
             height="16"
@@ -980,7 +1376,7 @@ const FeeStructureManager: React.FC = () => {
             <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
             <rect x="6" y="14" width="12" height="8" />
           </svg>
-          Print Fee Structure
+          Print School Fees
         </button>
       </div>
 
@@ -989,6 +1385,15 @@ const FeeStructureManager: React.FC = () => {
           to { transform: translateY(-50%) rotate(360deg); }
         }
       `}</style>
+
+      <ConfigWizard
+        isOpen={showWizard}
+        onClose={() => setShowWizard(false)}
+        onDataChange={() => {
+          loadInitialData();
+          if (selectedYear) loadYearData(selectedYear);
+        }}
+      />
     </div>
   );
 };

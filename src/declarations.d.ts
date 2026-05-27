@@ -5,6 +5,7 @@ declare module '*.jpg';
 declare module '*.jpeg';
 declare module '*.gif';
 declare module '*.webp';
+declare module 'jszip';
 
 interface Window {
   api: {
@@ -24,5 +25,8 @@ interface Window {
     openFileForPrint: (filePath: string) => Promise<{ success: boolean; error?: string }>;
     getPrintOutputDir: () => Promise<string>;
     autoDebitFees: () => Promise<{ success: boolean; error?: string }>;
+    printStatementsToZip: (
+      statements: { html: string; filename: string }[]
+    ) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }>;
   };
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
 import { printDocument, generateReceiptHtml } from '../lib/print-service';
+import { getCurrencySymbol } from '../lib/currency';
 
 interface ReceiptProps {
   payment: {
@@ -54,22 +55,22 @@ const Receipt: React.FC<ReceiptProps> = ({ payment, onClose, onVoid, canVoid }) 
           SELECT p.receipt_number, t.label as term_label, p.amount_paid_cents, p.payment_date, p.is_voided
           FROM payments p
           LEFT JOIN terms t ON p.term_id = t.id
-          WHERE p.student_id = ? AND p.year_id = ? AND p.id <= ?
+          WHERE p.student_id = ? AND p.year_id = ?
           ORDER BY p.payment_date ASC
         `,
-          [payment.student_id, payment.year_id, payment.id]
+          [payment.student_id, payment.year_id]
         );
 
         setPaymentHistory(history);
 
-        // Calculate running total (sum of all non-voided payments up to and including this one)
+        // Calculate running total (sum of all non-voided payments)
         const total = await db.get(
           `
           SELECT COALESCE(SUM(amount_paid_cents), 0) as total
           FROM payments
-          WHERE student_id = ? AND year_id = ? AND is_voided = 0 AND id <= ?
+          WHERE student_id = ? AND year_id = ? AND is_voided = 0
         `,
-          [payment.student_id, payment.year_id, payment.id]
+          [payment.student_id, payment.year_id]
         );
         setRunningTotal(total?.total || 0);
 
@@ -189,7 +190,7 @@ const Receipt: React.FC<ReceiptProps> = ({ payment, onClose, onVoid, canVoid }) 
               OFFICIAL SCHOOL RECEIPT
             </div>
             <div style={{ fontSize: '14px', fontWeight: 600 }}>{schoolName}</div>
-            <div style={{ fontSize: '10px', marginTop: '4px' }}>Powered by FeesFoundry</div>
+            <div style={{ fontSize: '10px', marginTop: '4px' }}>Powered by SchoolFoundry</div>
           </div>
 
           <div
@@ -215,7 +216,7 @@ const Receipt: React.FC<ReceiptProps> = ({ payment, onClose, onVoid, canVoid }) 
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontSize: '12px' }}>Student:</span>
+              <span style={{ fontSize: '12px' }}>Learner:</span>
               <span
                 style={{ fontSize: '12px', fontWeight: 600, textAlign: 'right', maxWidth: '60%' }}
               >
@@ -347,10 +348,10 @@ const Receipt: React.FC<ReceiptProps> = ({ payment, onClose, onVoid, canVoid }) 
                   }}
                 >
                   {currentAmountDue > 0
-                    ? `-$${(currentAmountDue / 100).toFixed(2)}`
+                    ? `-${getCurrencySymbol()}${(currentAmountDue / 100).toFixed(2)}`
                     : currentAmountDue < 0
-                      ? `+$${Math.abs(currentAmountDue / 100).toFixed(2)}`
-                      : '$0.00'}
+                      ? `+${getCurrencySymbol()}${Math.abs(currentAmountDue / 100).toFixed(2)}`
+                      : `${getCurrencySymbol()}0.00`}
                 </span>
               </div>
             </div>
@@ -408,7 +409,7 @@ const Receipt: React.FC<ReceiptProps> = ({ payment, onClose, onVoid, canVoid }) 
           >
             <p style={{ margin: '2px 0' }}>For assistance, contact: {schoolName} Finance Office</p>
             <p style={{ margin: '2px 0' }}>
-              Powered by <strong>FeesFoundry</strong> - A product of{' '}
+              Powered by <strong>SchoolFoundry</strong> - A product of{' '}
               <strong>Jiggabyte Technology Limited</strong>
             </p>
             <p style={{ margin: '2px 0', fontStyle: 'italic' }}>www.jiggabyte.co.zm</p>
@@ -456,6 +457,7 @@ const Receipt: React.FC<ReceiptProps> = ({ payment, onClose, onVoid, canVoid }) 
                 studentName: payment.student_name,
                 period: `${payment.term_label}, ${payment.year_label}`,
                 amount: (payment.amount_paid_cents / 100).toFixed(2),
+                currencySymbol: getCurrencySymbol(),
                 isVoided,
                 voidReason: payment.void_reason,
                 runningTotal: (runningTotal / 100).toFixed(2),
@@ -470,6 +472,7 @@ const Receipt: React.FC<ReceiptProps> = ({ payment, onClose, onVoid, canVoid }) 
                   amount: (p.amount_paid_cents / 100).toFixed(2),
                   isVoided: p.is_voided === 1,
                 })),
+                currentReceiptNumber: payment.receipt_number,
               });
               await printDocument({
                 html,

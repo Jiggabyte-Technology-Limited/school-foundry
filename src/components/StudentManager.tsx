@@ -91,7 +91,7 @@ const StudentManager: React.FC = () => {
     return (
       <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
         <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
-        <p>You do not have permission to manage students.</p>
+        <p>You do not have permission to manage learners.</p>
       </div>
     );
   }
@@ -317,7 +317,7 @@ const StudentManager: React.FC = () => {
   return (
     <div className="students-page">
       <div className="flex-between mb-4 no-print">
-        <h2 style={{ margin: 0 }}>Enrolled Students</h2>
+        <h2 style={{ margin: 0 }}>Enrolled Learners</h2>
         <div className="flex-row gap-2">
           <button className="btn btn-sage" onClick={handlePrint}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 6 }}>
@@ -332,7 +332,7 @@ const StudentManager: React.FC = () => {
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            Add Student
+            Add Learner
           </button>
         </div>
       </div>
@@ -390,8 +390,8 @@ const StudentManager: React.FC = () => {
           <div className="flex-between mb-2">
             <h3 style={{ margin: 0, fontSize: 14 }}>
               {selectedGradeFilter 
-                ? `${grades.find(g => g.id === selectedGradeFilter)?.label} - ${students.length} students`
-                : `All Students - ${students.length} total`}
+                ? `${grades.find(g => g.id === selectedGradeFilter)?.label} - ${students.length} learners`
+                : `All Learners - ${students.length} total`
             </h3>
           </div>
           
@@ -425,7 +425,7 @@ const StudentManager: React.FC = () => {
               ))}
               {students.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="table-empty">No students found</td>
+                  <td colSpan={5} className="table-empty">No learners found</td>
                 </tr>
               )}
             </tbody>
@@ -525,7 +525,7 @@ const StudentManager: React.FC = () => {
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
           <div className="modal-content modal-lg" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{editingStudent ? 'Edit Student' : 'Add New Student'}</h2>
+              <h2>{editingStudent ? 'Edit Learner' : 'Add New Learner'}</h2>
               <button className="modal-close" onClick={() => setShowModal(false)}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -663,7 +663,7 @@ const StudentManager: React.FC = () => {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? 'Saving...' : editingStudent ? 'Save Changes' : 'Add Student'}
+                  {saving ? 'Saving...' : editingStudent ? 'Save Changes' : 'Add Learner'}
                 </button>
               </div>
             </form>
@@ -671,7 +671,7 @@ const StudentManager: React.FC = () => {
         </div>
       )}
 
-      {/* Add Student Wizard */}
+      {/* Add Learner Wizard */}
       {showWizard && (
         <StudentWizard 
           onClose={() => setShowWizard(false)} 

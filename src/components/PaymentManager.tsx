@@ -2,8 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
 import { useToast } from './Toast';
-import Receipt from './Receipt';
-import { printDocument, generatePaymentStatementHtml } from '../lib/print-service';
+import {
+  printDocument,
+  generatePaymentStatementHtml,
+  generateReceiptHtml,
+} from '../lib/print-service';
+import { getCurrencySymbol } from '../lib/currency';
+import SchoolPaymentsOverview from './payments/SchoolPaymentsOverview';
+import PaymentReceiptPreview from './payments/PaymentReceiptPreview';
+import StudentStatementPreview from './StudentStatementPreview';
 
 interface Payment {
   id: number;
@@ -312,13 +319,17 @@ const FullActivityLog: React.FC = () => {
   );
 };
 
-const PaymentManager: React.FC = () => {
+interface PaymentManagerProps {
+  onViewStatement?: (studentId: number) => void;
+}
+
+const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
   const { user, canRecordPayments, canVoidPayments } = useAuth();
   const { showToast } = useToast();
+  const [loading, setLoading] = useState(false);
   const [students, setStudents] = useState<any[]>([]);
   const [grades, setGrades] = useState<any[]>([]);
   const [years, setYears] = useState<any[]>([]);
-  const [terms, setTerms] = useState<any[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [selectedReceipt, setSelectedReceipt] = useState<Payment | null>(null);
   const [stats, setStats] = useState<PaymentStats>({
@@ -352,6 +363,16 @@ const PaymentManager: React.FC = () => {
   const [printPeriodFilter, setPrintPeriodFilter] = useState('all');
   const [printPreviewData, setPrintPreviewData] = useState<any[]>([]);
   const [schoolName, setSchoolName] = useState('School');
+  const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
+  const [schoolContact, setSchoolContact] = useState<string>('');
+  const [currentTermLabel, setCurrentTermLabel] = useState<string>('');
+  const [voidKey, setVoidKey] = useState<string>('1234');
+  const [showVoidKeyModal, setShowVoidKeyModal] = useState(false);
+  const [voidKeyInput, setVoidKeyInput] = useState('');
+  const [voidKeyError, setVoidKeyError] = useState('');
+
+  // View state: 'overview' or 'receipt'
+  const [viewMode, setViewMode] = useState<'overview' | 'receipt'>('overview');
 
   // Student selection filters
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
@@ -361,30 +382,181 @@ const PaymentManager: React.FC = () => {
   const [form, setForm] = useState({
     student_id: '',
     year_id: '',
-    term_id: '',
     amount: '',
     receipt_number: '',
     payment_method: 'cash',
     notes: '',
   });
+
+  // Helper to find oldest term with outstanding balance
+  const findOldestOutstandingTerm = async (
+    studentId: number,
+    yearId: number
+  ): Promise<number | null> => {
+    const termBalances = await db.all(
+      `
+      WITH term_fees AS (
+        SELECT fs.term_id, SUM(sf.amount_cents) as debited
+        FROM student_fees sf
+        JOIN fee_structure fs ON sf.fee_structure_id = fs.id
+        WHERE sf.student_id = ? AND fs.year_id = ?
+        GROUP BY fs.term_id
+      ),
+      term_payments AS (
+        SELECT term_id, SUM(amount_paid_cents) as paid
+        FROM payments
+        WHERE student_id = ? AND year_id = ? AND is_voided = 0
+        GROUP BY term_id
+      )
+      SELECT tf.term_id, t.term_number, tf.debited - COALESCE(tp.paid, 0) as balance
+      FROM term_fees tf
+      JOIN terms t ON tf.term_id = t.id
+      LEFT JOIN term_payments tp ON tf.term_id = tp.term_id
+      WHERE tf.debited - COALESCE(tp.paid, 0) > 0
+      ORDER BY t.term_number ASC
+      LIMIT 1
+    `,
+      [studentId, yearId, studentId, yearId]
+    );
+
+    return termBalances.length > 0 ? termBalances[0].term_id : null;
+  };
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [showVoidModal, setShowVoidModal] = useState(false);
   const [voidingPayment, setVoidingPayment] = useState<Payment | null>(null);
   const [voidReason, setVoidReason] = useState('');
   const [voidComment, setVoidComment] = useState('');
+  const [showStatementPreview, setShowStatementPreview] = useState(false);
+  const [statementData, setStatementData] = useState<any>(null);
+  const [statementLoading, setStatementLoading] = useState(false);
+  const [termsList, setTermsList] = useState<any[]>([]);
 
   useEffect(() => {
-    loadData();
+    setLoading(true);
+
+    loadStudents();
     loadPayments();
     loadStats();
     loadActivityLogs();
+
+    // Safety timeout
+    const timeout = setTimeout(() => setLoading(false), 10000);
+
     // Load school name
     (async () => {
-      const setting = await db.get("SELECT value FROM app_settings WHERE key = 'school_name'");
-      if (setting?.value) setSchoolName(setting.value);
+      const [nameSetting, logoSetting, phoneSetting, emailSetting, voidKeySetting, termsData] =
+        await Promise.all([
+          db.get("SELECT value FROM app_settings WHERE key = 'school_name'"),
+          db.get("SELECT value FROM app_settings WHERE key = 'school_logo'"),
+          db.get("SELECT value FROM app_settings WHERE key = 'school_phone'"),
+          db.get("SELECT value FROM app_settings WHERE key = 'school_email'"),
+          db.get("SELECT value FROM app_settings WHERE key = 'void_key'"),
+          db.all('SELECT id, label FROM terms ORDER BY term_number'),
+        ]);
+      if (nameSetting?.value) setSchoolName(nameSetting.value);
+      setSchoolLogo(logoSetting?.value || null);
+      if (voidKeySetting?.value) setVoidKey(voidKeySetting.value);
+
+      const phone = phoneSetting?.value || '';
+      const email = emailSetting?.value || '';
+      const contactParts = [phone, email].filter(Boolean);
+      setSchoolContact(contactParts.join(' | '));
+      setTermsList(termsData);
+
+      // Get current term label based on today's date
+      const currentYearId = await db.get(
+        `SELECT id FROM academic_years ORDER BY label DESC LIMIT 1`
+      );
+      const currentTerm = await db.get(
+        `SELECT label FROM terms WHERE year_id = ? AND start_date IS NOT NULL AND end_date IS NOT NULL AND date('now') >= date(start_date) AND date('now') <= date(end_date) ORDER BY term_number LIMIT 1`,
+        [currentYearId?.id || 0]
+      );
+      // Fallback to first term if no current term found
+      const fallbackTerm = await db.get(
+        `SELECT label FROM terms WHERE year_id = ? ORDER BY term_number LIMIT 1`,
+        [currentYearId?.id || 0]
+      );
+      setCurrentTermLabel(currentTerm?.label || fallbackTerm?.label || '');
+      setLoading(false);
     })();
+
+    return () => clearTimeout(timeout);
   }, []);
+
+  const viewStatement = async (student: any) => {
+    if (!form.year_id) return;
+    setStatementLoading(true);
+    setShowStatementPreview(true);
+    try {
+      const [payments, fees] = await Promise.all([
+        db.all(
+          `SELECT p.id, p.receipt_number, p.amount_paid_cents as amount, p.payment_date, p.is_voided,
+                  t.label as term_label
+           FROM payments p
+           LEFT JOIN terms t ON p.term_id = t.id
+           WHERE p.student_id = ? AND p.year_id = ? AND p.is_voided = 0
+           ORDER BY p.payment_date`,
+          [student.id, form.year_id]
+        ),
+        db.all(
+          `SELECT sf.debit_date as date, fs.description, sf.amount_cents as amount, 'Fee' as type,
+                  t.label as term_label
+           FROM student_fees sf
+           JOIN fee_structure fs ON sf.fee_structure_id = fs.id
+           LEFT JOIN terms t ON fs.term_id = t.id
+           WHERE sf.student_id = ? AND fs.year_id = ?
+           ORDER BY sf.debit_date`,
+          [student.id, form.year_id]
+        ),
+      ]);
+      const totalFees = fees.reduce((sum: number, f: any) => sum + f.amount, 0);
+      const totalPaid = payments.reduce((sum: number, p: any) => sum + p.amount, 0);
+      const balance = totalFees - totalPaid;
+      setStatementData({
+        student,
+        payments,
+        fees,
+        totalFees,
+        totalPaid,
+        balance,
+        generatedAt: new Date().toLocaleDateString(),
+      });
+    } catch (err: any) {
+      console.error('Error loading statement:', err);
+    } finally {
+      setStatementLoading(false);
+    }
+  };
+
+  if (loading)
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '80px 40px',
+          gap: '16px',
+          minHeight: '100vh',
+          backgroundColor: '#f9fafb',
+        }}
+        className="text-display"
+      >
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            border: '3px solid #e5e7eb',
+            borderTopColor: '#f97316',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+          }}
+        />
+        <span style={{ color: '#6b7280', fontSize: '14px' }}>Loading payments...</span>
+      </div>
+    );
 
   if (!canRecordPayments) {
     return (
@@ -395,17 +567,11 @@ const PaymentManager: React.FC = () => {
     );
   }
 
-  useEffect(() => {
-    if (form.year_id) {
-      loadTerms(Number(form.year_id));
-    }
-  }, [form.year_id]);
-
-  const loadData = async () => {
+  const loadStudents = async () => {
     const currentYear = await db.get('SELECT id FROM academic_years ORDER BY label DESC LIMIT 1');
     const [studentList, gradeList, yearList] = await Promise.all([
       db.all(
-        `SELECT s.id, s.full_name, g.label as grade_label, sye.grade_id,
+        `SELECT s.id, s.full_name, g.label as grade_label, sye.grade_id, s.is_active,
         COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
         COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
         FROM students s
@@ -427,17 +593,6 @@ const PaymentManager: React.FC = () => {
     }
 
     await generateReceiptNumber();
-  };
-
-  const loadTerms = async (yearId: number) => {
-    const termList = await db.all(
-      'SELECT id, label FROM terms WHERE year_id = ? ORDER BY term_number',
-      [yearId]
-    );
-    setTerms(termList);
-    if (termList.length > 0) {
-      setForm(f => ({ ...f, term_id: String(termList[0].id) }));
-    }
   };
 
   const loadPayments = async () => {
@@ -514,64 +669,109 @@ const PaymentManager: React.FC = () => {
     const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const yearStart = `${new Date().getFullYear()}-01-01`;
 
-    // Get current term
-    const currentTerm = await db.get(
-      `SELECT id FROM terms WHERE year_id = (SELECT id FROM academic_years ORDER BY label DESC LIMIT 1) ORDER BY term_number LIMIT 1`
-    );
+    // Get current year and term based on today's date
     const currentYear = await db.get(`SELECT id FROM academic_years ORDER BY label DESC LIMIT 1`);
 
-    const [
-      todayStats,
-      weekStats,
-      monthStats,
-      yearStats,
-      termFees,
-      termPayments,
-      yearFees,
-      yearPayments,
-    ] = await Promise.all([
-      db.get(
-        `SELECT SUM(amount_paid_cents) as total, COUNT(*) as count FROM payments WHERE is_voided = 0 AND date(payment_date) = ?`,
-        [today]
-      ),
-      db.get(
-        `SELECT SUM(amount_paid_cents) as total, COUNT(*) as count FROM payments WHERE is_voided = 0 AND date(payment_date) >= ?`,
-        [weekAgo]
-      ),
-      db.get(
-        `SELECT SUM(amount_paid_cents) as total FROM payments WHERE is_voided = 0 AND date(payment_date) >= ?`,
-        [monthAgo]
-      ),
-      db.get(
-        `SELECT SUM(amount_paid_cents) as total FROM payments WHERE is_voided = 0 AND date(payment_date) >= ?`,
-        [yearStart]
-      ),
-      // Expected fees for current term
-      db.get(
-        `SELECT COALESCE(SUM(fs.amount_cents), 0) as total FROM fee_structure fs WHERE fs.year_id = ? AND fs.term_id = ?`,
-        [currentYear?.id || 0, currentTerm?.id || 0]
-      ),
-      // Paid for current term
-      db.get(
-        `SELECT COALESCE(SUM(p.amount_paid_cents), 0) as total FROM payments p WHERE p.is_voided = 0 AND p.year_id = ? AND p.term_id = ?`,
-        [currentYear?.id || 0, currentTerm?.id || 0]
-      ),
-      // Expected fees for current year
-      db.get(
-        `SELECT COALESCE(SUM(fs.amount_cents), 0) as total FROM fee_structure fs WHERE fs.year_id = ?`,
-        [currentYear?.id || 0]
-      ),
-      // Paid for current year
-      db.get(
-        `SELECT COALESCE(SUM(p.amount_paid_cents), 0) as total FROM payments p WHERE p.is_voided = 0 AND p.year_id = ?`,
-        [currentYear?.id || 0]
-      ),
-    ]);
+    // Get current term based on today's date
+    const termToUse = await db.get(
+      `SELECT id, label FROM terms WHERE year_id = ? AND start_date IS NOT NULL AND end_date IS NOT NULL AND date('now') >= date(start_date) AND date('now') <= date(end_date) ORDER BY term_number LIMIT 1`,
+      [currentYear?.id || 0]
+    );
 
+    // Fallback to first term if no current term found (e.g., between terms)
+    const fallbackTerm = await db.get(
+      `SELECT id, label FROM terms WHERE year_id = ? ORDER BY term_number LIMIT 1`,
+      [currentYear?.id || 0]
+    );
+    const term = termToUse?.id ? termToUse : fallbackTerm;
+
+    const [todayStats, weekStats, monthStats, yearStats, termFees, termPayments, firstTermResult] =
+      await Promise.all([
+        db.get(
+          `SELECT COALESCE(SUM(amount_paid_cents), 0) as total, COALESCE(COUNT(*), 0) as count FROM payments WHERE is_voided = 0 AND payment_date LIKE ?`,
+          [today + '%']
+        ),
+        db.get(
+          `SELECT COALESCE(SUM(amount_paid_cents), 0) as total, COALESCE(COUNT(*), 0) as count FROM payments WHERE is_voided = 0 AND payment_date >= ?`,
+          [weekAgo]
+        ),
+        db.get(
+          `SELECT COALESCE(SUM(amount_paid_cents), 0) as total FROM payments WHERE is_voided = 0 AND payment_date >= ?`,
+          [monthAgo]
+        ),
+        db.get(
+          `SELECT COALESCE(SUM(amount_paid_cents), 0) as total FROM payments WHERE is_voided = 0 AND payment_date >= ?`,
+          [yearStart]
+        ),
+        // Expected fees for current term - get all fees for current year (sum of all terms)
+        db.get(
+          `SELECT COALESCE(SUM(fs.amount_cents), 0) as total FROM fee_structure fs WHERE fs.year_id = ?`,
+          [currentYear?.id || 0]
+        ),
+        // Paid for current term - get all payments for current year
+        db.get(
+          `SELECT COALESCE(SUM(p.amount_paid_cents), 0) as total FROM payments p WHERE p.is_voided = 0 AND p.year_id = ?`,
+          [currentYear?.id || 0]
+        ),
+        // Get first term that has fees (for year calculation)
+        db.get(
+          `SELECT t.id, t.term_number FROM terms t 
+         JOIN fee_structure fs ON fs.term_id = t.id
+         WHERE t.year_id = ? 
+         GROUP BY t.id, t.term_number
+         ORDER BY t.term_number LIMIT 1`,
+          [currentYear?.id || 0]
+        ),
+      ]);
+
+    // Extract term/year totals from query results
     const expectedTermTotal = termFees?.total || 0;
     const paidTermTotal = termPayments?.total || 0;
-    const expectedYearTotal = yearFees?.total || 0;
-    const paidYearTotal = yearPayments?.total || 0;
+
+    // Get first term with fees info
+    const firstTermWithFees = firstTermResult;
+
+    // Calculate year totals from first term with fees onwards
+    let expectedYearTotal = 0;
+    let paidYearTotal = 0;
+
+    if (firstTermWithFees && currentYear?.id) {
+      // Get all terms from first term with fees onwards
+      const termsFromFirst = await db.all(
+        `SELECT id FROM terms WHERE year_id = ? AND term_number >= ? ORDER BY term_number`,
+        [currentYear.id, firstTermWithFees.term_number]
+      );
+      const termIds = termsFromFirst.map((t: any) => t.id);
+
+      if (termIds.length > 0) {
+        const placeholders = termIds.map(() => '?').join(',');
+        // Expected fees from first term onwards
+        const yearFeesFromFirst = await db.get(
+          `SELECT COALESCE(SUM(fs.amount_cents), 0) as total FROM fee_structure fs WHERE fs.year_id = ? AND fs.term_id IN (${placeholders})`,
+          [currentYear.id, ...termIds]
+        );
+        // Paid from first term onwards
+        const yearPaymentsFromFirst = await db.get(
+          `SELECT COALESCE(SUM(p.amount_paid_cents), 0) as total FROM payments p WHERE p.is_voided = 0 AND p.year_id = ? AND p.term_id IN (${placeholders})`,
+          [currentYear.id, ...termIds]
+        );
+        expectedYearTotal = yearFeesFromFirst?.total || 0;
+        paidYearTotal = yearPaymentsFromFirst?.total || 0;
+      }
+    } else {
+      // Fallback: get all year fees and payments if no first term found
+      const allYearFees = await db.get(
+        `SELECT COALESCE(SUM(fs.amount_cents), 0) as total FROM fee_structure fs WHERE fs.year_id = ?`,
+        [currentYear?.id || 0]
+      );
+      const allYearPayments = await db.get(
+        `SELECT COALESCE(SUM(p.amount_paid_cents), 0) as total FROM payments p WHERE p.is_voided = 0 AND p.year_id = ?`,
+        [currentYear?.id || 0]
+      );
+      expectedYearTotal = allYearFees?.total || 0;
+      paidYearTotal = allYearPayments?.total || 0;
+    }
+
     const outstandingTerm = Math.max(0, expectedTermTotal - paidTermTotal);
     const outstandingYear = Math.max(0, expectedYearTotal - paidYearTotal);
 
@@ -688,10 +888,16 @@ const PaymentManager: React.FC = () => {
       );
       if (payment) {
         setSelectedReceipt(payment);
+        setViewMode('receipt');
       }
     } catch (err) {
       console.error('Error loading receipt:', err);
     }
+  };
+
+  const handleCloseReceipt = () => {
+    setSelectedReceipt(null);
+    setViewMode('overview');
   };
 
   const getTotalLogCount = async () => {
@@ -726,8 +932,25 @@ const PaymentManager: React.FC = () => {
     e.preventDefault();
     setError('');
 
-    if (!form.student_id || !form.year_id || !form.term_id || !form.amount) {
+    if (!form.student_id || !form.year_id || !form.amount) {
       setError('Please fill in all required fields');
+      return;
+    }
+
+    // Check if learner is active
+    const student = students.find(s => s.id === Number(form.student_id));
+    if (student && student.is_active === 0) {
+      setError('Cannot record payment for inactive learner');
+      return;
+    }
+
+    // Auto-determine payment term
+    const termToUse = await findOldestOutstandingTerm(
+      Number(form.student_id),
+      Number(form.year_id)
+    );
+    if (!termToUse) {
+      setError('No outstanding balance found for this learner');
       return;
     }
 
@@ -742,7 +965,7 @@ const PaymentManager: React.FC = () => {
       );
 
       if (!enrollment?.grade_id) {
-        throw new Error('Student is not enrolled for the selected academic year');
+        throw new Error('Learner is not enrolled for the selected academic year');
       }
 
       const result = await db.run(
@@ -753,7 +976,7 @@ const PaymentManager: React.FC = () => {
         [
           form.student_id,
           form.year_id,
-          form.term_id,
+          termToUse,
           enrollment.grade_id,
           form.receipt_number,
           amountCents,
@@ -772,7 +995,7 @@ const PaymentManager: React.FC = () => {
           'payment_recorded',
           'payments',
           result.lastInsertRowid || result.lastID,
-          `Payment of $${form.amount} recorded for ${student?.full_name} (${form.receipt_number})`,
+          `Payment of ${getCurrencySymbol()}${form.amount} recorded for ${student?.full_name} (${form.receipt_number})`,
         ]
       );
 
@@ -792,12 +1015,12 @@ const PaymentManager: React.FC = () => {
 
       if (newPayment) {
         setSelectedReceipt(newPayment);
+        setViewMode('receipt');
       }
 
       setForm({
         student_id: '',
         year_id: form.year_id,
-        term_id: form.term_id,
         amount: '',
         receipt_number: '',
         payment_method: 'cash',
@@ -810,7 +1033,7 @@ const PaymentManager: React.FC = () => {
       loadPayments();
       loadStats();
       loadActivityLogs();
-      loadData(); // Reload students with updated balances
+      loadStudents(); // Reload students with updated balances
     } catch (err: any) {
       setError(err.message || 'Failed to record payment');
     } finally {
@@ -819,7 +1042,7 @@ const PaymentManager: React.FC = () => {
   };
 
   const formatCurrency = (cents: number) =>
-    `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    `${getCurrencySymbol()}${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString('en-US', {
@@ -909,6 +1132,7 @@ const PaymentManager: React.FC = () => {
     const html = generatePaymentStatementHtml({
       schoolName,
       period: getPeriodLabel(),
+      currencySymbol: getCurrencySymbol(),
       payments: filtered.map(p => ({
         date: new Date(p.payment_date).toLocaleDateString(),
         receiptNumber: p.receipt_number,
@@ -927,755 +1151,788 @@ const PaymentManager: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="flex-between mb-4 no-print">
-        <h2 style={{ margin: 0 }}>Payments</h2>
-      </div>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 380px',
+        gap: '24px',
+        alignItems: 'start',
+      }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div className="flex-between mb-4 no-print">
+          <h2 style={{ margin: 0 }}>Payments</h2>
+        </div>
 
-      {/* Record Payment - First Row */}
-      <div
-        className="card no-print"
-        style={{
-          marginBottom: 24,
-          background: 'linear-gradient(135deg, var(--primary) 0%, #f97316 100%)',
-          color: 'white',
-        }}
-      >
-        <h3 className="mb-4" style={{ color: 'white' }}>
-          Record Payment
-        </h3>
+        {/* Record Payment - First Row */}
+        <div
+          className="card no-print"
+          style={{
+            background: 'linear-gradient(135deg, var(--primary) 0%, #f97316 100%)',
+            color: 'white',
+          }}
+        >
+          <h3 className="mb-4" style={{ color: 'white' }}>
+            Record Payment
+          </h3>
 
-        {!form.student_id ? (
-          <div style={{ position: 'relative' }}>
-            <input
-              type="text"
-              placeholder="Start typing student name or ID..."
-              value={studentSearchQuery}
-              onChange={e => {
-                setStudentSearchQuery(e.target.value);
-                setShowStudentDropdown(true);
-              }}
-              onFocus={() => setShowStudentDropdown(true)}
-              className="input-default"
-              style={{
-                padding: '16px 20px',
-                fontSize: '16px',
-                borderRadius: '12px',
-                border: '3px solid rgba(255,255,255,0.3)',
-                background: 'rgba(255,255,255,0.95)',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                color: '#1f2937',
-              }}
-            />
-            {showStudentDropdown && studentSearchQuery.length > 0 && (
+          {!form.student_id ? (
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                placeholder="Start typing learner name or ID..."
+                value={studentSearchQuery}
+                onChange={e => {
+                  setStudentSearchQuery(e.target.value);
+                  setShowStudentDropdown(true);
+                }}
+                onFocus={() => setShowStudentDropdown(true)}
+                className="input-default"
+                style={{
+                  padding: '16px 20px',
+                  fontSize: '16px',
+                  borderRadius: '12px',
+                  border: '3px solid rgba(255,255,255,0.3)',
+                  background: 'rgba(255,255,255,0.95)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  color: '#1f2937',
+                }}
+              />
+              {showStudentDropdown && studentSearchQuery.length > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    backgroundColor: 'white',
+                    borderRadius: '12px',
+                    marginTop: 8,
+                    maxHeight: 280,
+                    overflowY: 'auto',
+                    zIndex: 20,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  {getFilteredStudents()
+                    .slice(0, 10)
+                    .map(s => (
+                      <div
+                        key={s.id}
+                        onClick={() => handleSelectStudent(s.id)}
+                        style={{
+                          padding: '12px 16px',
+                          borderBottom: '1px solid var(--border)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                        onMouseEnter={e =>
+                          (e.currentTarget.style.backgroundColor = 'var(--secondary)')
+                        }
+                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 700 }}>{s.full_name}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            ID: {s.id} - {s.grade_label}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  {getFilteredStudents().length === 0 && (
+                    <div
+                      style={{
+                        padding: '16px',
+                        textAlign: 'center',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      No students found
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit}>
               <div
                 style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: 0,
-                  right: 0,
-                  backgroundColor: 'white',
+                  background: 'rgba(255,255,255,0.15)',
                   borderRadius: '12px',
-                  marginTop: 8,
-                  maxHeight: 280,
-                  overflowY: 'auto',
-                  zIndex: 20,
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-                  color: 'var(--text-primary)',
+                  padding: '20px',
+                  backdropFilter: 'blur(10px)',
                 }}
               >
-                {getFilteredStudents()
-                  .slice(0, 10)
-                  .map(s => (
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '12px', opacity: 0.8 }}>Recording payment for</div>
+                    <div style={{ fontSize: '20px', fontWeight: 700 }}>
+                      {students.find(s => s.id === Number(form.student_id))?.full_name}
+                    </div>
+                    <div style={{ fontSize: '13px', opacity: 0.8 }}>
+                      {students.find(s => s.id === Number(form.student_id))?.grade_label}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm({ ...form, student_id: '' });
+                      setStudentSearchQuery('');
+                      setShowStudentDropdown(false);
+                    }}
+                    style={{
+                      background: 'rgba(255,255,255,0.2)',
+                      border: 'none',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                    }}
+                  >
+                    Change Learner
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onViewStatement?.(Number(form.student_id))}
+                    style={{
+                      background: 'rgba(255,255,255,0.2)',
+                      border: 'none',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                    }}
+                  >
+                    View Statement
+                  </button>
+                </div>
+
+                {(() => {
+                  const selectedStudent = students.find(s => s.id === Number(form.student_id));
+                  if (!selectedStudent) return null;
+                  return (
                     <div
-                      key={s.id}
-                      onClick={() => handleSelectStudent(s.id)}
                       style={{
+                        background: 'rgba(255,255,255,0.95)',
+                        borderRadius: '8px',
                         padding: '12px 16px',
-                        borderBottom: '1px solid var(--border)',
-                        cursor: 'pointer',
+                        marginBottom: '16px',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
+                        color: '#1f2937',
                       }}
-                      onMouseEnter={e =>
-                        (e.currentTarget.style.backgroundColor = 'var(--secondary)')
-                      }
-                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                     >
                       <div>
-                        <div style={{ fontWeight: 700 }}>{s.full_name}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                          ID: {s.id} - {s.grade_label}
+                        <div
+                          style={{
+                            fontSize: '11px',
+                            color: '#6b7280',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                          }}
+                        >
+                          Current Balance
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '22px',
+                            fontWeight: 700,
+                            color: selectedStudent.balance > 0 ? '#dc2626' : '#059669',
+                          }}
+                        >
+                          {selectedStudent.balance > 0
+                            ? `-${getCurrencySymbol()}${Math.abs(selectedStudent.balance / 100).toFixed(2)}`
+                            : selectedStudent.balance < 0
+                              ? `+${getCurrencySymbol()}${Math.abs(selectedStudent.balance / 100).toFixed(2)}`
+                              : `${getCurrencySymbol()}0.00`}
                         </div>
                       </div>
-                    </div>
-                  ))}
-                {getFilteredStudents().length === 0 && (
-                  <div
-                    style={{ padding: '16px', textAlign: 'center', color: 'var(--text-secondary)' }}
-                  >
-                    No students found
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit}>
-            <div
-              style={{
-                background: 'rgba(255,255,255,0.15)',
-                borderRadius: '12px',
-                padding: '20px',
-                backdropFilter: 'blur(10px)',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '16px',
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: '12px', opacity: 0.8 }}>Recording payment for</div>
-                  <div style={{ fontSize: '20px', fontWeight: 700 }}>
-                    {students.find(s => s.id === Number(form.student_id))?.full_name}
-                  </div>
-                  <div style={{ fontSize: '13px', opacity: 0.8 }}>
-                    {students.find(s => s.id === Number(form.student_id))?.grade_label}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForm({ ...form, student_id: '' });
-                    setStudentSearchQuery('');
-                    setShowStudentDropdown(false);
-                  }}
-                  style={{
-                    background: 'rgba(255,255,255,0.2)',
-                    border: 'none',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                  }}
-                >
-                  Change Student
-                </button>
-              </div>
-
-              {(() => {
-                const selectedStudent = students.find(s => s.id === Number(form.student_id));
-                if (!selectedStudent) return null;
-                return (
-                  <div
-                    style={{
-                      background: 'rgba(255,255,255,0.95)',
-                      borderRadius: '8px',
-                      padding: '12px 16px',
-                      marginBottom: '16px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      color: '#1f2937',
-                    }}
-                  >
-                    <div>
                       <div
                         style={{
-                          fontSize: '11px',
-                          color: '#6b7280',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                        }}
-                      >
-                        Current Balance
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '22px',
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
                           fontWeight: 700,
-                          color: selectedStudent.balance > 0 ? '#dc2626' : '#059669',
+                          textTransform: 'uppercase',
+                          backgroundColor: selectedStudent.balance > 0 ? '#FEE2E2' : '#D1FAE5',
+                          color: selectedStudent.balance > 0 ? '#991B1B' : '#065F46',
                         }}
                       >
-                        ${(selectedStudent.balance / 100).toFixed(2)}
+                        {selectedStudent.balance > 0 ? 'Owing' : 'Paid'}
                       </div>
                     </div>
-                    <div
+                  );
+                })()}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label
                       style={{
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        backgroundColor: selectedStudent.balance > 0 ? '#FEE2E2' : '#D1FAE5',
-                        color: selectedStudent.balance > 0 ? '#991B1B' : '#065F46',
+                        fontSize: '11px',
+                        opacity: 0.8,
+                        display: 'block',
+                        marginBottom: '4px',
                       }}
                     >
-                      {selectedStudent.balance > 0 ? 'Owing' : 'Paid'}
-                    </div>
+                      YEAR
+                    </label>
+                    <select
+                      className="input-default"
+                      value={form.year_id}
+                      onChange={e => setForm({ ...form, year_id: e.target.value })}
+                      style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
+                    >
+                      {years.map(y => (
+                        <option key={y.id} value={y.id}>
+                          {y.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                );
-              })()}
+                  <div>
+                    <label
+                      style={{
+                        fontSize: '11px',
+                        opacity: 0.8,
+                        display: 'block',
+                        marginBottom: '4px',
+                      }}
+                    >
+                      AMOUNT ($)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      className="input-default"
+                      value={form.amount}
+                      onChange={e => setForm({ ...form, amount: e.target.value })}
+                      placeholder="0.00"
+                      autoFocus
+                      style={{
+                        background: 'white',
+                        color: '#1f2937',
+                        fontWeight: 700,
+                        fontSize: '16px',
+                        border: '2px solid #1f2937',
+                      }}
+                    />
+                    {(() => {
+                      const selectedStudent = students.find(s => s.id === Number(form.student_id));
+                      return selectedStudent && selectedStudent.balance > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm({ ...form, amount: (selectedStudent.balance / 100).toFixed(2) })
+                          }
+                          style={{
+                            marginTop: '8px',
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            backgroundColor: '#FEF3C7',
+                            color: '#92400E',
+                            border: '1px solid #F59E0B',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            width: '100%',
+                          }}
+                        >
+                          Pay Balance (-${getCurrencySymbol()}$
+                          {Math.abs(selectedStudent.balance / 100).toFixed(2)})
+                        </button>
+                      ) : null;
+                    })()}
+                  </div>
+                </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label
-                    style={{
-                      fontSize: '11px',
-                      opacity: 0.8,
-                      display: 'block',
-                      marginBottom: '4px',
-                    }}
-                  >
-                    YEAR
-                  </label>
-                  <select
-                    className="input-default"
-                    value={form.year_id}
-                    onChange={e => setForm({ ...form, year_id: e.target.value })}
-                    style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
-                  >
-                    {years.map(y => (
-                      <option key={y.id} value={y.id}>
-                        {y.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label
-                    style={{
-                      fontSize: '11px',
-                      opacity: 0.8,
-                      display: 'block',
-                      marginBottom: '4px',
-                    }}
-                  >
-                    TERM
-                  </label>
-                  <select
-                    className="input-default"
-                    value={form.term_id}
-                    onChange={e => setForm({ ...form, term_id: e.target.value })}
-                    style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
-                  >
-                    {terms.map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label
-                    style={{
-                      fontSize: '11px',
-                      opacity: 0.8,
-                      display: 'block',
-                      marginBottom: '4px',
-                    }}
-                  >
-                    AMOUNT ($)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    className="input-default"
-                    value={form.amount}
-                    onChange={e => setForm({ ...form, amount: e.target.value })}
-                    placeholder="0.00"
-                    autoFocus
-                    style={{
-                      background: 'white',
-                      color: '#1f2937',
-                      fontWeight: 700,
-                      fontSize: '16px',
-                      border: '2px solid #1f2937',
-                    }}
-                  />
-                  {(() => {
-                    const selectedStudent = students.find(s => s.id === Number(form.student_id));
-                    return selectedStudent && selectedStudent.balance > 0 ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setForm({ ...form, amount: (selectedStudent.balance / 100).toFixed(2) })
-                        }
-                        style={{
-                          marginTop: '8px',
-                          padding: '6px 12px',
-                          fontSize: '12px',
-                          backgroundColor: '#FEF3C7',
-                          color: '#92400E',
-                          border: '1px solid #F59E0B',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontWeight: 600,
-                          width: '100%',
-                        }}
-                      >
-                        Pay Balance (${(selectedStudent.balance / 100).toFixed(2)})
-                      </button>
-                    ) : null;
-                  })()}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '12px',
-                  marginTop: '12px',
-                }}
-              >
-                <div>
-                  <label
-                    style={{
-                      fontSize: '11px',
-                      opacity: 0.8,
-                      display: 'block',
-                      marginBottom: '4px',
-                    }}
-                  >
-                    PAYMENT METHOD
-                  </label>
-                  <select
-                    className="input-default"
-                    value={form.payment_method}
-                    onChange={e => setForm({ ...form, payment_method: e.target.value })}
-                    style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
-                  >
-                    <option value="cash">Cash</option>
-                    <option value="ecocash">EcoCash / Mobile</option>
-                    <option value="bank_transfer">Bank Transfer</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label
-                    style={{
-                      fontSize: '11px',
-                      opacity: 0.8,
-                      display: 'block',
-                      marginBottom: '4px',
-                    }}
-                  >
-                    NOTES
-                  </label>
-                  <input
-                    type="text"
-                    className="input-default"
-                    value={form.notes}
-                    onChange={e => setForm({ ...form, notes: e.target.value })}
-                    placeholder="Optional notes..."
-                    style={{ background: 'white', color: '#1f2937' }}
-                  />
-                </div>
-              </div>
-
-              {error && (
                 <div
                   style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '12px',
                     marginTop: '12px',
-                    padding: '12px',
-                    backgroundColor: '#FEE2E2',
-                    border: '1px solid #FCA5A5',
-                    borderRadius: '8px',
-                    color: '#991B1B',
-                    fontSize: '14px',
                   }}
                 >
-                  {error}
+                  <div>
+                    <label
+                      style={{
+                        fontSize: '11px',
+                        opacity: 0.8,
+                        display: 'block',
+                        marginBottom: '4px',
+                      }}
+                    >
+                      PAYMENT METHOD
+                    </label>
+                    <select
+                      className="input-default"
+                      value={form.payment_method}
+                      onChange={e => setForm({ ...form, payment_method: e.target.value })}
+                      style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="ecocash">EcoCash / Mobile</option>
+                      <option value="bank_transfer">Bank Transfer</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      style={{
+                        fontSize: '11px',
+                        opacity: 0.8,
+                        display: 'block',
+                        marginBottom: '4px',
+                      }}
+                    >
+                      NOTES
+                    </label>
+                    <input
+                      type="text"
+                      className="input-default"
+                      value={form.notes}
+                      onChange={e => setForm({ ...form, notes: e.target.value })}
+                      placeholder="Optional notes..."
+                      style={{ background: 'white', color: '#1f2937' }}
+                    />
+                  </div>
                 </div>
-              )}
 
-              <button
-                type="submit"
-                className="btn"
-                style={{
-                  marginTop: '16px',
-                  width: '100%',
-                  background: 'white',
-                  color: 'var(--primary)',
-                  fontWeight: 700,
-                  fontSize: '16px',
-                  padding: '14px',
-                }}
-                disabled={saving || !form.amount}
-              >
-                {saving ? 'Recording...' : 'Record Payment'}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
+                {error && (
+                  <div
+                    style={{
+                      marginTop: '12px',
+                      padding: '12px',
+                      backgroundColor: '#FEE2E2',
+                      border: '1px solid #FCA5A5',
+                      borderRadius: '8px',
+                      color: '#991B1B',
+                      fontSize: '14px',
+                    }}
+                  >
+                    {error}
+                  </div>
+                )}
 
-      {/* Stats Row: Today, This Week, This Month */}
-      <div
-        className="payment-stats-row mb-4"
-        style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}
-      >
-        <div className="payment-stat-card">
-          <span className="stat-label">Today</span>
-          <span className="stat-value">{formatCurrency(stats.todayTotal)}</span>
-        </div>
-        <div className="payment-stat-card">
-          <span className="stat-label">This Week</span>
-          <span className="stat-value">{formatCurrency(stats.weekTotal)}</span>
-        </div>
-        <div className="payment-stat-card">
-          <span className="stat-label">This Month</span>
-          <span className="stat-value">{formatCurrency(stats.monthTotal)}</span>
-        </div>
-      </div>
-
-      {/* Second Row: Current Term + Outstanding + Year + Outstanding */}
-      <div className="payment-stats-row mb-4">
-        <div className="payment-stat-card stat-highlight">
-          <span className="stat-label">Current Term Received</span>
-          <span className="stat-value">{formatCurrency(stats.paidTermTotal)}</span>
-          <span
-            style={{
-              fontSize: '12px',
-              color: 'rgba(255,255,255,0.8)',
-              marginTop: '4px',
-              display: 'block',
-            }}
-          >
-            Expected: {formatCurrency(stats.expectedTermTotal)}
-          </span>
-        </div>
-
-        <div className="payment-stat-card">
-          <span className="stat-label">Outstanding This Term</span>
-          <span
-            className="stat-value"
-            style={{ color: stats.outstandingTerm > 0 ? '#ef4444' : '#16a34a' }}
-          >
-            {formatCurrency(stats.outstandingTerm)}
-          </span>
-        </div>
-
-        <div className="payment-stat-card stat-highlight">
-          <span className="stat-label">Year Received</span>
-          <span className="stat-value">{formatCurrency(stats.paidYearTotal)}</span>
-          <span
-            style={{
-              fontSize: '12px',
-              color: 'rgba(255,255,255,0.8)',
-              marginTop: '4px',
-              display: 'block',
-            }}
-          >
-            Expected: {formatCurrency(stats.expectedYearTotal)}
-          </span>
-        </div>
-
-        <div className="payment-stat-card">
-          <span className="stat-label">Outstanding This Year</span>
-          <span
-            className="stat-value"
-            style={{ color: stats.outstandingYear > 0 ? '#ef4444' : '#16a34a' }}
-          >
-            {formatCurrency(stats.outstandingYear)}
-          </span>
-        </div>
-      </div>
-
-      {/* RECENT ACTIVITY: Payment Activity Log */}
-      <div className="card">
-        <div className="flex-between mb-4">
-          <h3 style={{ margin: 0 }}>Recent Activity</h3>
-          <button
-            className="btn btn-outline"
-            onClick={handleOpenPrintModal}
-            style={{ padding: '8px 16px', fontSize: '12px' }}
-          >
-            Print Statement
-          </button>
-        </div>
-
-        {/* Filters for Activity - Buttons */}
-        <div className="flex-row gap-2 mb-4" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginRight: 4 }}>
-            Time:
-          </span>
-          {[
-            { value: 'all', label: 'All' },
-            { value: 'week', label: 'Last Week' },
-            { value: 'month', label: 'Last Month' },
-            { value: 'term', label: 'This Term' },
-          ].map(option => (
-            <button
-              key={option.value}
-              onClick={() => setTimePeriodFilter(option.value)}
-              style={{
-                padding: '6px 14px',
-                fontSize: 12,
-                borderRadius: '20px',
-                border: '1px solid',
-                borderColor: timePeriodFilter === option.value ? 'var(--primary)' : 'var(--border)',
-                backgroundColor:
-                  timePeriodFilter === option.value ? 'var(--primary)' : 'transparent',
-                color: timePeriodFilter === option.value ? 'white' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontWeight: 600,
-                transition: 'all 0.2s',
-              }}
-            >
-              {option.label}
-            </button>
-          ))}
-          <input
-            type="text"
-            placeholder="Search receipt, student, or user..."
-            value={activitySearchQuery}
-            onChange={e => {
-              setActivitySearchQuery(e.target.value);
-              loadActivityLogs(1);
-            }}
-            style={{
-              marginLeft: 'auto',
-              padding: '8px 12px',
-              borderRadius: '8px',
-              border: '1px solid var(--border)',
-              fontSize: '12px',
-              width: '220px',
-            }}
-          />
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th
-                style={{
-                  textAlign: 'left',
-                  padding: '10px',
-                  borderBottom: '2px solid var(--border)',
-                  fontSize: '12px',
-                }}
-              >
-                Date & Time
-              </th>
-              <th
-                style={{
-                  textAlign: 'left',
-                  padding: '10px',
-                  borderBottom: '2px solid var(--border)',
-                  fontSize: '12px',
-                }}
-              >
-                Receipt Number
-              </th>
-              <th
-                style={{
-                  textAlign: 'left',
-                  padding: '10px',
-                  borderBottom: '2px solid var(--border)',
-                  fontSize: '12px',
-                }}
-              >
-                User
-              </th>
-              <th
-                style={{
-                  textAlign: 'left',
-                  padding: '10px',
-                  borderBottom: '2px solid var(--border)',
-                  fontSize: '12px',
-                }}
-              >
-                Action
-              </th>
-              <th
-                style={{
-                  textAlign: 'right',
-                  padding: '10px',
-                  borderBottom: '2px solid var(--border)',
-                  fontSize: '12px',
-                }}
-              >
-                Amount
-              </th>
-              <th
-                style={{
-                  textAlign: 'left',
-                  padding: '10px',
-                  borderBottom: '2px solid var(--border)',
-                  fontSize: '12px',
-                }}
-              >
-                Student Full Name
-              </th>
-              <th
-                style={{
-                  textAlign: 'center',
-                  padding: '10px',
-                  borderBottom: '2px solid var(--border)',
-                  fontSize: '12px',
-                  width: '80px',
-                }}
-              >
-                View
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {activityLogs.map(log => {
-              const isVoided = log.action === 'payment_voided';
-              const amount = log.amount_paid_cents || 0;
-              const displayAmount = isVoided
-                ? `-$${(amount / 100).toFixed(2)}`
-                : `+$${(amount / 100).toFixed(2)}`;
-              return (
-                <tr
-                  key={log.id}
-                  onClick={() => handleViewReceiptFromActivity(log)}
-                  style={{ cursor: 'pointer' }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--secondary)')}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                <button
+                  type="submit"
+                  className="btn"
+                  style={{
+                    marginTop: '16px',
+                    width: '100%',
+                    background: 'white',
+                    color: 'var(--primary)',
+                    fontWeight: 700,
+                    fontSize: '16px',
+                    padding: '14px',
+                  }}
+                  disabled={saving || !form.amount}
                 >
-                  <td
+                  {saving ? 'Recording...' : 'Record Payment'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {/* RECENT ACTIVITY: Payment Activity Log */}
+        <div className="card">
+          <div className="flex-between mb-4">
+            <h3 style={{ margin: 0 }}>Recent Activity</h3>
+            <button
+              className="btn btn-outline"
+              onClick={handleOpenPrintModal}
+              style={{ padding: '8px 16px', fontSize: '12px' }}
+            >
+              Print Recent Activity
+            </button>
+          </div>
+
+          {/* Filters for Activity - Buttons */}
+          <div className="flex-row gap-2 mb-4" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginRight: 4 }}>
+              Time:
+            </span>
+            {[
+              { value: 'all', label: 'All' },
+              { value: 'week', label: 'Last Week' },
+              { value: 'month', label: 'Last Month' },
+              { value: 'term', label: 'This Term' },
+            ].map(option => (
+              <button
+                key={option.value}
+                onClick={() => setTimePeriodFilter(option.value)}
+                style={{
+                  padding: '6px 14px',
+                  fontSize: 12,
+                  borderRadius: '20px',
+                  border: '1px solid',
+                  borderColor:
+                    timePeriodFilter === option.value ? 'var(--primary)' : 'var(--border)',
+                  backgroundColor:
+                    timePeriodFilter === option.value ? 'var(--primary)' : 'transparent',
+                  color: timePeriodFilter === option.value ? 'white' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  transition: 'all 0.2s',
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+            <input
+              type="text"
+              placeholder="Search receipt, learner, or user..."
+              value={activitySearchQuery}
+              onChange={e => {
+                setActivitySearchQuery(e.target.value);
+                loadActivityLogs(1);
+              }}
+              style={{
+                marginLeft: 'auto',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                fontSize: '12px',
+                width: '220px',
+              }}
+            />
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th
+                  style={{
+                    textAlign: 'left',
+                    padding: '10px',
+                    borderBottom: '2px solid var(--border)',
+                    fontSize: '12px',
+                  }}
+                >
+                  Date & Time
+                </th>
+                <th
+                  style={{
+                    textAlign: 'left',
+                    padding: '10px',
+                    borderBottom: '2px solid var(--border)',
+                    fontSize: '12px',
+                  }}
+                >
+                  Receipt Number
+                </th>
+                <th
+                  style={{
+                    textAlign: 'left',
+                    padding: '10px',
+                    borderBottom: '2px solid var(--border)',
+                    fontSize: '12px',
+                  }}
+                >
+                  User
+                </th>
+                <th
+                  style={{
+                    textAlign: 'left',
+                    padding: '10px',
+                    borderBottom: '2px solid var(--border)',
+                    fontSize: '12px',
+                  }}
+                >
+                  Action
+                </th>
+                <th
+                  style={{
+                    textAlign: 'right',
+                    padding: '10px',
+                    borderBottom: '2px solid var(--border)',
+                    fontSize: '12px',
+                  }}
+                >
+                  Amount
+                </th>
+                <th
+                  style={{
+                    textAlign: 'left',
+                    padding: '10px',
+                    borderBottom: '2px solid var(--border)',
+                    fontSize: '12px',
+                  }}
+                >
+                  Learner Full Name
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {activityLogs.map(log => {
+                const isVoided = log.action === 'payment_voided';
+                const amount = log.amount_paid_cents || 0;
+                const displayAmount = isVoided
+                  ? `-${getCurrencySymbol()}${(amount / 100).toFixed(2)}`
+                  : `+${getCurrencySymbol()}${(amount / 100).toFixed(2)}`;
+                const isSelected = selectedReceipt?.id === log.entity_id;
+                return (
+                  <tr
+                    key={log.id}
+                    onClick={() => handleViewReceiptFromActivity(log)}
                     style={{
-                      padding: '10px',
-                      borderBottom: '1px solid var(--border)',
-                      fontSize: '12px',
-                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      backgroundColor: isSelected ? 'rgba(249, 115, 22, 0.08)' : 'transparent',
+                      borderLeft: isSelected ? '4px solid var(--primary)' : '4px solid transparent',
+                      transition: 'all 0.2s ease',
                     }}
+                    onMouseEnter={e =>
+                      !isSelected && (e.currentTarget.style.backgroundColor = 'var(--secondary)')
+                    }
+                    onMouseLeave={e =>
+                      !isSelected &&
+                      (e.currentTarget.style.backgroundColor = isSelected
+                        ? 'rgba(249, 115, 22, 0.08)'
+                        : 'transparent')
+                    }
                   >
-                    {new Date(log.logged_at).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </td>
-                  <td
-                    style={{
-                      padding: '10px',
-                      borderBottom: '1px solid var(--border)',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      color: 'var(--primary)',
-                    }}
-                  >
-                    {log.receipt_number || '-'}
-                  </td>
-                  <td
-                    style={{
-                      padding: '10px',
-                      borderBottom: '1px solid var(--border)',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {log.username || 'System'}
-                  </td>
-                  <td
-                    style={{
-                      padding: '10px',
-                      borderBottom: '1px solid var(--border)',
-                      fontSize: '12px',
-                    }}
-                  >
-                    <span
+                    <td
                       style={{
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        fontSize: '11px',
+                        padding: '10px',
+                        borderBottom: '1px solid var(--border)',
+                        fontSize: '12px',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      {new Date(log.logged_at).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </td>
+                    <td
+                      style={{
+                        padding: '10px',
+                        borderBottom: '1px solid var(--border)',
+                        fontSize: '12px',
                         fontWeight: 600,
-                        backgroundColor: log.action === 'payment_recorded' ? '#D1FAE5' : '#FEE2E2',
-                        color: log.action === 'payment_recorded' ? '#065F46' : '#991B1B',
+                        color: 'var(--primary)',
                       }}
                     >
-                      {log.action === 'payment_recorded' ? 'Recorded' : 'Voided'}
-                    </span>
-                  </td>
-                  <td
-                    style={{
-                      padding: '10px',
-                      borderBottom: '1px solid var(--border)',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      textAlign: 'right',
-                      color: isVoided ? '#dc2626' : '#16a34a',
-                    }}
-                  >
-                    {displayAmount}
-                  </td>
-                  <td
-                    style={{
-                      padding: '10px',
-                      borderBottom: '1px solid var(--border)',
-                      fontSize: '12px',
-                      color: 'var(--text-secondary)',
-                    }}
-                  >
-                    {log.student_name || '-'}
-                  </td>
-                  <td
-                    style={{
-                      padding: '10px',
-                      borderBottom: '1px solid var(--border)',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <button
-                      className="btn btn-outline"
-                      onClick={e => {
-                        e.stopPropagation();
-                        handleViewReceiptFromActivity(log);
-                      }}
+                      {log.receipt_number || '-'}
+                    </td>
+                    <td
                       style={{
-                        padding: '4px 12px',
-                        fontSize: '11px',
+                        padding: '10px',
+                        borderBottom: '1px solid var(--border)',
+                        fontSize: '13px',
+                        fontWeight: 600,
                       }}
                     >
-                      View
-                    </button>
+                      {log.username || 'System'}
+                    </td>
+                    <td
+                      style={{
+                        padding: '10px',
+                        borderBottom: '1px solid var(--border)',
+                        fontSize: '12px',
+                      }}
+                    >
+                      <span
+                        style={{
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          backgroundColor:
+                            log.action === 'payment_recorded' ? '#D1FAE5' : '#FEE2E2',
+                          color: log.action === 'payment_recorded' ? '#065F46' : '#991B1B',
+                        }}
+                      >
+                        {log.action === 'payment_recorded' ? 'Recorded' : 'Voided'}
+                      </span>
+                    </td>
+                    <td
+                      style={{
+                        padding: '10px',
+                        borderBottom: '1px solid var(--border)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        textAlign: 'right',
+                        color: isVoided ? '#dc2626' : '#16a34a',
+                      }}
+                    >
+                      {displayAmount}
+                    </td>
+                    <td
+                      style={{
+                        padding: '10px',
+                        borderBottom: '1px solid var(--border)',
+                        fontSize: '12px',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      {log.student_name || '-'}
+                    </td>
+                  </tr>
+                );
+              })}
+              {activityLogs.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={6}
+                    style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)' }}
+                  >
+                    No payment activity yet
                   </td>
                 </tr>
-              );
-            })}
-            {activityLogs.length === 0 && (
-              <tr>
-                <td
-                  colSpan={7}
-                  style={{ textAlign: 'center', padding: 24, color: 'var(--text-secondary)' }}
-                >
-                  No payment activity yet
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {selectedReceipt && (
-        <Receipt
-          payment={selectedReceipt}
-          onClose={() => setSelectedReceipt(null)}
-          onVoid={() => {
-            setVoidingPayment(selectedReceipt);
-            setShowVoidModal(true);
-          }}
-          canVoid={
-            user?.role === 'admin' &&
-            selectedReceipt.amount_paid_cents > 0 &&
-            selectedReceipt.is_voided !== 1
-          }
-        />
-      )}
+      {/* Right Side: Receipt Preview */}
+      <div>
+        {viewMode === 'overview' && (
+          <SchoolPaymentsOverview
+            stats={stats}
+            schoolName={schoolName}
+            schoolLogo={schoolLogo}
+            schoolContact={schoolContact}
+            currentTerm={currentTermLabel}
+          />
+        )}
+        {viewMode === 'receipt' && selectedReceipt && (
+          <>
+            <div
+              style={{
+                display: 'flex',
+                gap: '8px',
+                marginBottom: '12px',
+              }}
+            >
+              <button
+                className="btn btn-primary"
+                onClick={async () => {
+                  // Load ALL payment history for this student (including after this receipt)
+                  const history = await db.all(
+                    `SELECT p.receipt_number, t.label as term_label, p.amount_paid_cents, p.payment_date, p.is_voided
+                     FROM payments p
+                     LEFT JOIN terms t ON p.term_id = t.id
+                     WHERE p.student_id = ? AND p.year_id = ?
+                     ORDER BY p.payment_date ASC`,
+                    [selectedReceipt.student_id, selectedReceipt.year_id]
+                  );
+
+                  const runningTotal = await db.get(
+                    `SELECT COALESCE(SUM(amount_paid_cents), 0) as total
+                     FROM payments
+                     WHERE student_id = ? AND year_id = ? AND is_voided = 0`,
+                    [selectedReceipt.student_id, selectedReceipt.year_id]
+                  );
+
+                  const currentAmountDue = await db.get(
+                    `SELECT COALESCE(SUM(sf.amount_cents), 0) as total
+                     FROM student_fees sf
+                     JOIN fee_structure fs ON sf.fee_structure_id = fs.id
+                     WHERE sf.student_id = ? AND fs.year_id = ?`,
+                    [selectedReceipt.student_id, selectedReceipt.year_id]
+                  );
+
+                  const totalPaid = runningTotal?.total || 0;
+                  const totalInvoiced = currentAmountDue?.total || 0;
+                  const amountDue = Math.max(0, totalInvoiced - totalPaid);
+
+                  const html = generateReceiptHtml({
+                    schoolName,
+                    receiptNumber: selectedReceipt.receipt_number,
+                    date: new Date(selectedReceipt.payment_date).toLocaleDateString(),
+                    time: new Date(selectedReceipt.payment_date).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    }),
+                    studentName: selectedReceipt.student_name,
+                    period: `${selectedReceipt.term_label}, ${selectedReceipt.year_label}`,
+                    amount: (selectedReceipt.amount_paid_cents / 100).toFixed(2),
+                    currencySymbol: getCurrencySymbol(),
+                    isVoided: selectedReceipt.is_voided === 1,
+                    voidReason: selectedReceipt.void_reason,
+                    runningTotal: (totalPaid / 100).toFixed(2),
+                    currentAmountDue: (amountDue / 100).toFixed(2),
+                    recordedBy: selectedReceipt.recorded_by_name || 'System',
+                    paymentHistory: history.map((p: any) => ({
+                      date: new Date(p.payment_date).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                      }),
+                      receiptNumber: p.receipt_number,
+                      termLabel: p.term_label || '',
+                      amount: (p.amount_paid_cents / 100).toFixed(2),
+                      isVoided: p.is_voided === 1,
+                    })),
+                    currentReceiptNumber: selectedReceipt.receipt_number,
+                  });
+                  await printDocument({
+                    html,
+                    filename: `receipt_${selectedReceipt.receipt_number}`,
+                    title: `Receipt ${selectedReceipt.receipt_number}`,
+                  });
+                }}
+                style={{ flex: 1 }}
+              >
+                Print
+              </button>
+              {selectedReceipt.amount_paid_cents > 0 && selectedReceipt.is_voided !== 1 && (
+                <button
+                  className="btn"
+                  onClick={() => {
+                    if (user?.role === 'admin') {
+                      setVoidingPayment(selectedReceipt);
+                      setShowVoidModal(true);
+                    } else {
+                      setShowVoidKeyModal(true);
+                      setVoidKeyInput('');
+                      setVoidKeyError('');
+                    }
+                  }}
+                  style={{ flex: 1, background: '#dc2626', color: 'white' }}
+                >
+                  Void
+                </button>
+              )}
+              <button className="btn btn-outline" onClick={handleCloseReceipt} style={{ flex: 1 }}>
+                Close
+              </button>
+            </div>
+            <PaymentReceiptPreview
+              payment={selectedReceipt}
+              onClose={handleCloseReceipt}
+              onVoid={() => {
+                setVoidingPayment(selectedReceipt);
+                setShowVoidModal(true);
+              }}
+              canVoid={
+                user?.role === 'admin' &&
+                selectedReceipt.amount_paid_cents > 0 &&
+                selectedReceipt.is_voided !== 1
+              }
+            />
+          </>
+        )}
+      </div>
 
       {/* Void Payment Modal */}
       {showVoidModal && voidingPayment && (
@@ -1706,7 +1963,7 @@ const PaymentManager: React.FC = () => {
             <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '14px' }}>
               Receipt: <strong>{voidingPayment.receipt_number}</strong>
               <br />
-              Student: <strong>{voidingPayment.student_name}</strong>
+              Learner: <strong>{voidingPayment.student_name}</strong>
               <br />
               Amount: <strong>{formatCurrency(voidingPayment.amount_paid_cents)}</strong>
             </p>
@@ -1725,7 +1982,7 @@ const PaymentManager: React.FC = () => {
               >
                 <option value="">Select a reason...</option>
                 <option value="Mistake">Mistake</option>
-                <option value="Wrong student">Wrong student</option>
+                <option value="Wrong learner">Wrong learner</option>
                 <option value="Wrong amount">Wrong amount</option>
                 <option value="Duplicate payment">Duplicate payment</option>
                 <option value="Customer request">Customer request</option>
@@ -1769,12 +2026,106 @@ const PaymentManager: React.FC = () => {
         </div>
       )}
 
+      {/* Void Key Modal */}
+      {showVoidKeyModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+          }}
+          onClick={() => setShowVoidKeyModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '24px',
+              maxWidth: '350px',
+              width: '90%',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ marginTop: 0, marginBottom: '16px' }}>Enter Void Key</h3>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '14px' }}>
+              Enter the void key to authorize voiding this payment.
+            </p>
+            <div style={{ marginBottom: '16px' }}>
+              <input
+                type="password"
+                value={voidKeyInput}
+                onChange={e => {
+                  setVoidKeyInput(e.target.value);
+                  setVoidKeyError('');
+                }}
+                className="input-default"
+                style={{
+                  width: '100%',
+                  textAlign: 'center',
+                  fontSize: '18px',
+                  letterSpacing: '4px',
+                }}
+                placeholder="••••"
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    if (voidKeyInput === voidKey) {
+                      setShowVoidKeyModal(false);
+                      setVoidingPayment(selectedReceipt);
+                      setShowVoidModal(true);
+                    } else {
+                      setVoidKeyError('Invalid void key');
+                    }
+                  }
+                }}
+              />
+              {voidKeyError && (
+                <p
+                  style={{ color: '#ef4444', fontSize: '12px', marginTop: '8px', marginBottom: 0 }}
+                >
+                  {voidKeyError}
+                </p>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                className="btn btn-outline"
+                onClick={() => setShowVoidKeyModal(false)}
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  if (voidKeyInput === voidKey) {
+                    setShowVoidKeyModal(false);
+                    setVoidingPayment(selectedReceipt);
+                    setShowVoidModal(true);
+                  } else {
+                    setVoidKeyError('Invalid void key');
+                  }
+                }}
+                style={{ flex: 1 }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Print Statement Modal */}
       {showPrintModal && (
         <div className="modal-overlay">
           <div
             className="modal-content"
-            style={{ width: '800px', maxHeight: '90vh', padding: '24px' }}
+            style={{ width: '1100px', maxHeight: '90vh', padding: '24px' }}
           >
             <div className="flex-between mb-4">
               <h2 style={{ margin: 0 }}>Print Payment Statement</h2>
@@ -1852,7 +2203,7 @@ const PaymentManager: React.FC = () => {
                   <tr style={{ borderBottom: '1px solid #333' }}>
                     <th style={{ padding: '8px', textAlign: 'left' }}>Date</th>
                     <th style={{ padding: '8px', textAlign: 'left' }}>Receipt No.</th>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>Student</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>Learner</th>
                     <th style={{ padding: '8px', textAlign: 'left' }}>Period</th>
                     <th style={{ padding: '8px', textAlign: 'left' }}>Recorded By</th>
                     <th style={{ padding: '8px', textAlign: 'right' }}>Amount</th>
@@ -1871,7 +2222,8 @@ const PaymentManager: React.FC = () => {
                       </td>
                       <td style={{ padding: '6px 8px' }}>{p.recorded_by_name || 'System'}</td>
                       <td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                        ${(p.amount_paid_cents / 100).toFixed(2)}
+                        {getCurrencySymbol()}
+                        {(p.amount_paid_cents / 100).toFixed(2)}
                       </td>
                     </tr>
                   ))}
@@ -1918,7 +2270,7 @@ const PaymentManager: React.FC = () => {
                   paddingTop: '12px',
                 }}
               >
-                Generated by FeesFoundry - Jiggabyte Technology Limited
+                Generated by SchoolFoundry - Jiggabyte Technology Limited
               </div>
             </div>
 
@@ -1939,6 +2291,7 @@ const PaymentManager: React.FC = () => {
                           : printPeriodFilter === 'last_month'
                             ? 'Last Month'
                             : 'This Term',
+                    currencySymbol: getCurrencySymbol(),
                     payments: printPreviewData.map(p => ({
                       date: new Date(p.payment_date).toLocaleDateString(),
                       receiptNumber: p.receipt_number,
@@ -1963,6 +2316,26 @@ const PaymentManager: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {showStatementPreview && (
+        <StudentStatementPreview
+          statementData={statementData}
+          isLoadingDetail={statementLoading}
+          detailError={null}
+          schoolName={schoolName}
+          schoolLogo={schoolLogo}
+          schoolContact={schoolContact}
+          termsList={termsList}
+          showOwing={true}
+          showPaid={true}
+          onExit={() => setShowStatementPreview(false)}
+          onEditProfile={() => {}}
+          onRecordPayment={() => {}}
+          onRetry={() => {
+            const student = students.find(s => s.id === Number(form.student_id));
+            if (student) viewStatement(student);
+          }}
+        />
       )}
     </div>
   );

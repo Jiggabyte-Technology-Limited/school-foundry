@@ -1,11 +1,11 @@
 {
-  "name": "feesfoundry",
+  "name": "schoolfoundry",
   "version": "1.0.0",
-  "description": "FeesFoundry - Forging a Stronger Financial Future for Schools",
+  "description": "SchoolFoundry - School Management System",
   "main": "dist/main.js",
   "build": {
-    "appId": "com.feesfoundry.app",
-    "productName": "FeesFoundry",
+    "appId": "com.schoolfoundry.app",
+    "productName": "SchoolFoundry",
     "directories": {
       "output": "release"
     }
@@ -43,6 +43,7 @@
   "dependencies": {
     "@electron/remote": "^2.1.3",
     "bcryptjs": "^2.4.3",
+    "jszip": "^3.10.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.15.0",
