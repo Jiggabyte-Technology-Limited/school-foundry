@@ -12,6 +12,16 @@ import { db } from './lib/db-client';
 import { AuthProvider, useAuth } from './lib/auth-context';
 import { ToastProvider } from './components/Toast';
 import { loadCurrency } from './lib/currency';
+import { LicenseActivation } from './components/auth/LicenseActivation';
+
+// License status type
+type LicenseStatusResult = {
+  valid: boolean;
+  status: string;
+  error?: string;
+  expiresAt?: string;
+  daysRemaining?: number;
+};
 
 // Global error handler to catch unhandled errors
 window.onerror = async (message, source, lineno, colno, error) => {
@@ -67,6 +77,55 @@ const pageTitles: Record<string, string> = {
   logs: 'Activity Logs',
   backup: 'Backup & Restore',
 };
+
+// License gate component - checks license before rendering app
+function LicenseGate({ children }: { children: React.ReactNode }) {
+  const [licenseStatus, setLicenseStatus] = useState<'checking' | 'valid' | 'invalid'>('checking');
+  const [licenseData, setLicenseData] = useState<LicenseStatusResult | null>(null);
+
+  useEffect(() => {
+    const checkLicense = async () => {
+      try {
+        const result: LicenseStatusResult = await window.api.getLicenseStatus();
+        if (result.valid) {
+          setLicenseStatus('valid');
+          setLicenseData(result);
+        } else {
+          setLicenseStatus('invalid');
+          setLicenseData(result);
+        }
+      } catch (err) {
+        console.error('Failed to check license:', err);
+        setLicenseStatus('invalid');
+      }
+    };
+
+    checkLicense();
+  }, []);
+
+  if (licenseStatus === 'checking') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+        <div className="text-center">
+          <div className="animate-spin w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-slate-400">Checking license...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (licenseStatus === 'invalid') {
+    return (
+      <LicenseActivation
+        onActivated={() => {
+          setLicenseStatus('valid');
+        }}
+      />
+    );
+  }
+
+  return <>{children}</>;
+}
 
 function AppInner() {
   const { user, login, logout } = useAuth();
@@ -197,7 +256,9 @@ function AppInner() {
 const App = () => (
   <AuthProvider>
     <ToastProvider>
-      <AppInner />
+      <LicenseGate>
+        <AppInner />
+      </LicenseGate>
     </ToastProvider>
   </AuthProvider>
 );

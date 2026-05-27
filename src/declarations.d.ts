@@ -28,5 +28,23 @@ interface Window {
     printStatementsToZip: (
       statements: { html: string; filename: string }[]
     ) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }>;
+
+    // License APIs
+    getMachineId: () => Promise<string | null>;
+    activateLicense: (licenseKey: string) => Promise<{
+      valid: boolean;
+      status: string;
+      error?: string;
+      expiresAt?: string;
+      daysRemaining?: number;
+    }>;
+    getLicenseStatus: () => Promise<{
+      valid: boolean;
+      status: string;
+      error?: string;
+      expiresAt?: string;
+      daysRemaining?: number;
+    }>;
+    deactivateLicense: () => Promise<boolean>;
   };
 }

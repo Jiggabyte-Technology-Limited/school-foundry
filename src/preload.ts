@@ -13,4 +13,10 @@ contextBridge.exposeInMainWorld('api', {
   autoDebitFees: () => ipcRenderer.invoke('auto-debit-fees'),
   printStatementsToZip: (statements: { html: string; filename: string }[]) =>
     ipcRenderer.invoke('print-statements-to-zip', { statements }),
+
+  // License APIs
+  getMachineId: () => ipcRenderer.invoke('get-machine-id'),
+  activateLicense: (licenseKey: string) => ipcRenderer.invoke('activate-license', licenseKey),
+  getLicenseStatus: () => ipcRenderer.invoke('get-license-status'),
+  deactivateLicense: () => ipcRenderer.invoke('deactivate-license'),
 });

@@ -3,6 +3,7 @@ import * as path from 'path';
 import { initializeDatabase } from './db/init';
 import { setupIpcHandlers } from './db/ipc';
 import { checkAndDebitFees } from './lib/auto-debit';
+import { setupLicenseIpcHandlers } from './license/ipc';
 
 function createWindow() {
   const isDev = !app.isPackaged;
@@ -34,6 +35,7 @@ function createWindow() {
 async function startApp() {
   await initializeDatabase();
   setupIpcHandlers();
+  setupLicenseIpcHandlers();
   createWindow();
 
   // Check for and apply fees for periods that have started (run on startup)
