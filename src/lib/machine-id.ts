@@ -10,7 +10,7 @@ const execAsync = promisify(exec);
 const STATIC_SALT = '5ch00lF0undry_L1c3ns3_S4lt_2024!';
 
 /**
- * Extract motherboard UUID using wmic (Windows only)
+ * Extract motherboard UUID using wmic or PowerShell (Windows only)
  * Returns null if not on Windows or if extraction fails
  */
 async function getMotherboardUuid(): Promise<string | null> {
@@ -19,13 +19,13 @@ async function getMotherboardUuid(): Promise<string | null> {
     return null;
   }
 
+  // 1. Try wmic first
   try {
     const { stdout } = await execAsync('wmic csproduct get UUID', {
       timeout: 5000,
       windowsHide: true,
     });
 
-    // Parse output: "UUID\nXXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX\n"
     const lines = stdout.trim().split('\n');
     if (lines.length >= 2) {
       const uuid = lines[1].trim();
@@ -33,15 +33,49 @@ async function getMotherboardUuid(): Promise<string | null> {
         return uuid;
       }
     }
-    return null;
   } catch (error) {
-    console.error('[MachineID] Failed to get motherboard UUID:', error);
-    return null;
+    console.warn('[MachineID] wmic failed to get motherboard UUID, trying PowerShell...', error);
   }
+
+  // 2. Try PowerShell Get-CimInstance
+  try {
+    const { stdout } = await execAsync(
+      'powershell -ExecutionPolicy Bypass -Command "(Get-CimInstance Win32_ComputerSystemProduct).UUID"',
+      {
+        timeout: 5000,
+        windowsHide: true,
+      }
+    );
+    const uuid = stdout.trim();
+    if (uuid && uuid !== 'FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF' && uuid.length > 0) {
+      return uuid;
+    }
+  } catch (error) {
+    console.warn('[MachineID] PowerShell Get-CimInstance failed, trying Get-WmiObject...', error);
+  }
+
+  // 3. Try PowerShell Get-WmiObject
+  try {
+    const { stdout } = await execAsync(
+      'powershell -ExecutionPolicy Bypass -Command "(Get-WmiObject Win32_ComputerSystemProduct).UUID"',
+      {
+        timeout: 5000,
+        windowsHide: true,
+      }
+    );
+    const uuid = stdout.trim();
+    if (uuid && uuid !== 'FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF' && uuid.length > 0) {
+      return uuid;
+    }
+  } catch (error) {
+    console.error('[MachineID] All motherboard UUID extraction methods failed:', error);
+  }
+
+  return null;
 }
 
 /**
- * Extract CPU Processor ID using wmic (Windows only)
+ * Extract CPU Processor ID using wmic or PowerShell (Windows only)
  * Returns null if not on Windows or if extraction fails
  */
 async function getCpuProcessorId(): Promise<string | null> {
@@ -50,13 +84,13 @@ async function getCpuProcessorId(): Promise<string | null> {
     return null;
   }
 
+  // 1. Try wmic first
   try {
     const { stdout } = await execAsync('wmic cpu get ProcessorId', {
       timeout: 5000,
       windowsHide: true,
     });
 
-    // Parse output: "ProcessorId\nXXXXXXXX\n"
     const lines = stdout.trim().split('\n');
     if (lines.length >= 2) {
       const processorId = lines[1].trim();
@@ -64,11 +98,45 @@ async function getCpuProcessorId(): Promise<string | null> {
         return processorId;
       }
     }
-    return null;
   } catch (error) {
-    console.error('[MachineID] Failed to get CPU Processor ID:', error);
-    return null;
+    console.warn('[MachineID] wmic failed to get CPU ID, trying PowerShell...', error);
   }
+
+  // 2. Try PowerShell Get-CimInstance
+  try {
+    const { stdout } = await execAsync(
+      'powershell -ExecutionPolicy Bypass -Command "(Get-CimInstance Win32_Processor).ProcessorId"',
+      {
+        timeout: 5000,
+        windowsHide: true,
+      }
+    );
+    const processorId = stdout.trim();
+    if (processorId && processorId.length > 0) {
+      return processorId;
+    }
+  } catch (error) {
+    console.warn('[MachineID] PowerShell Get-CimInstance failed, trying Get-WmiObject...', error);
+  }
+
+  // 3. Try PowerShell Get-WmiObject
+  try {
+    const { stdout } = await execAsync(
+      'powershell -ExecutionPolicy Bypass -Command "(Get-WmiObject Win32_Processor).ProcessorId"',
+      {
+        timeout: 5000,
+        windowsHide: true,
+      }
+    );
+    const processorId = stdout.trim();
+    if (processorId && processorId.length > 0) {
+      return processorId;
+    }
+  } catch (error) {
+    console.error('[MachineID] All CPU ID extraction methods failed:', error);
+  }
+
+  return null;
 }
 
 /**

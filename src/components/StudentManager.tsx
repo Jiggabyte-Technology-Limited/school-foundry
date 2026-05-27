@@ -391,7 +391,7 @@ const StudentManager: React.FC = () => {
             <h3 style={{ margin: 0, fontSize: 14 }}>
               {selectedGradeFilter 
                 ? `${grades.find(g => g.id === selectedGradeFilter)?.label} - ${students.length} learners`
-                : `All Learners - ${students.length} total`
+                : `All Learners - ${students.length} total`}
             </h3>
           </div>
           

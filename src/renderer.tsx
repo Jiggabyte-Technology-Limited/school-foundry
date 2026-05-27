@@ -105,10 +105,23 @@ function LicenseGate({ children }: { children: React.ReactNode }) {
 
   if (licenseStatus === 'checking') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-        <div className="text-center">
-          <div className="animate-spin w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-slate-400">Checking license...</p>
+      <div
+        style={{
+          minHeight: '100vh',
+          backgroundColor: 'var(--background)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <div style={{ textAlign: 'center' }}>
+          <div
+            className="animate-spin w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"
+            style={{ borderColor: 'var(--primary) transparent var(--primary) var(--primary)' }}
+          ></div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '16px', fontWeight: 500 }}>
+            Checking license...
+          </p>
         </div>
       </div>
     );
