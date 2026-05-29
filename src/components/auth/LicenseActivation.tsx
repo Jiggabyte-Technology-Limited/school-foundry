@@ -186,7 +186,7 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                   System Activation
                 </h2>
                 <p style={{ color: 'var(--text-secondary)', marginTop: '16px', fontSize: '16px', lineHeight: 1.5 }}>
-                  Welcome to <span style={{ fontWeight: 700 }}>Fees</span>Foundry. To start using the platform, please activate your license.
+                  Welcome to <span style={{ fontWeight: 700 }}>School</span>Foundry. To start using the platform, please activate your license.
                   Send the Machine ID (or take a photo of the QR code) to our support team to receive your license key.
                 </p>
               </div>
@@ -427,6 +427,31 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
           </div>
         </div>
       </div>
+
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '24px',
+          left: 0,
+          right: 0,
+          textAlign: 'center',
+          zIndex: 11,
+        }}
+      >
+        <span
+          style={{
+            fontSize: '11px',
+            color: 'var(--text-secondary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            fontFamily: 'monospace',
+          }}
+        >
+          <span style={{ fontWeight: 700 }}>School</span>
+          <span style={{ fontWeight: 400 }}>Foundry</span> | &copy; Jiggabyte Technology Limited
+        </span>
+      </div>
     </div>
   );
 }
+

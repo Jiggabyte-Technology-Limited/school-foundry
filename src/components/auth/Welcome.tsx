@@ -220,9 +220,11 @@ export const Welcome: React.FC<WelcomeProps> = ({ isSetup = true }) => {
           }}
         >
           <span style={{ fontWeight: 700 }}>School</span>
-          <span style={{ fontWeight: 400 }}>Foundry</span> • v1.2.0 • Build 2026
+          <span style={{ fontWeight: 400 }}>Foundry</span> | v1.2.0 | Build 2026 | &copy; Jiggabyte Technology Limited
         </span>
       </div>
     </div>
   );
 };
+
+

@@ -267,7 +267,7 @@ export const Login: React.FC = () => {
                   {schoolName}
                 </h2>
                 <p style={{ color: 'var(--text-secondary)', marginTop: '12px', fontSize: '14px' }}>
-                  <span style={{ fontWeight: 700 }}>Fees</span>
+                  <span style={{ fontWeight: 700 }}>School</span>
                   <span style={{ fontWeight: 400 }}>Foundry</span> School Fees Manager
                 </p>
                 <p
@@ -422,8 +422,9 @@ export const Login: React.FC = () => {
                   <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                 </svg>
                 Secure Login by{' '}
-                <span style={{ fontWeight: 700, color: 'var(--primary)' }}>Fees</span>
-                <span style={{ fontWeight: 400 }}>Foundry</span>
+                <span style={{ fontWeight: 700, color: 'var(--primary)' }}>School</span>
+                <span style={{ fontWeight: 400 }}>Foundry</span>{' '}
+                <span style={{ color: 'var(--text-secondary)' }}> | &copy; Jiggabyte Technology Limited</span>
               </div>
             </div>
           </div>
@@ -465,10 +466,11 @@ export const Login: React.FC = () => {
             fontFamily: 'monospace',
           }}
         >
-          <span style={{ fontWeight: 700 }}>Fees</span>
-          <span style={{ fontWeight: 400 }}>Foundry</span> • v1.2.0 • Build 2026
+          <span style={{ fontWeight: 700 }}>School</span>
+          <span style={{ fontWeight: 400 }}>Foundry</span> | v1.2.0 | Build 2026 | &copy; Jiggabyte Technology Limited
         </span>
       </div>
     </div>
   );
 };
+
