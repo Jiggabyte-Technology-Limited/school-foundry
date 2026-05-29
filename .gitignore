@@ -14,7 +14,7 @@ node_modules/
 dist/
 dist-ssr/
 release/*
-!release/*.exe
+*.exe
 
 # Database
 school_fees.db
