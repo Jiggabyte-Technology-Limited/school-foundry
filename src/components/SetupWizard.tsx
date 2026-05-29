@@ -359,7 +359,15 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
     switch (currentStep) {
       case 'welcome':
         return (
-          <div style={{ textAlign: 'left', padding: '0 20px' }}>
+          <div
+            style={{
+              textAlign: 'right',
+              padding: '0 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+            }}
+          >
             {/* Badge */}
             <div
               style={{
@@ -443,6 +451,8 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                 padding: '24px',
                 textAlign: 'left',
                 border: '1px solid var(--border)',
+                width: '100%',
+                maxWidth: '500px',
               }}
             >
               <h4
@@ -1449,8 +1459,24 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '80px' }}
         >
           {/* Left Column - Wizard Form */}
-          <div style={{ flex: 1, maxWidth: '650px' }}>
-            <div style={{ background: 'transparent', boxShadow: 'none', padding: '0' }}>
+          <div
+            style={{
+              flex: 1,
+              maxWidth: '650px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: currentStep === 'welcome' ? 'flex-end' : 'stretch',
+              textAlign: currentStep === 'welcome' ? 'right' : 'left',
+            }}
+          >
+            <div
+              style={{
+                background: 'transparent',
+                boxShadow: 'none',
+                padding: '0',
+                width: '100%',
+              }}
+            >
               {/* Content */}
               <div style={{ padding: '0' }}>
                 {error && (
@@ -1466,7 +1492,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                   <div
                     style={{
                       display: 'flex',
-                      justifyContent: 'flex-start',
+                      justifyContent: currentStep === 'welcome' ? 'flex-end' : 'flex-start',
                       marginTop: '32px',
                       gap: '16px',
                     }}
