@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
 import { useToast } from './Toast';
+import ChipSelector from './ui/ChipSelector';
 
 interface StudentWizardProps {
   onClose: () => void;
   onSuccess: () => void;
   currentYearId?: number;
   preSelectedGrade?: number;
+  preSelectedClassSection?: number;
 }
 
 type Step = 'details' | 'guardian' | 'enrollment' | 'confirm';
@@ -89,6 +91,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
   onSuccess,
   currentYearId,
   preSelectedGrade,
+  preSelectedClassSection,
 }) => {
   const { user, canManageStudents } = useAuth();
   const { showToast } = useToast();
@@ -96,6 +99,9 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [grades, setGrades] = useState<{ id: number; label: string }[]>([]);
+  const [classSections, setClassSections] = useState<{ id: number; grade_id: number; label: string }[]>([]);
+  const [newSectionLabel, setNewSectionLabel] = useState('');
+  const [enableSubgrades, setEnableSubgrades] = useState(false);
   const [currentYear, setCurrentYear] = useState<{ id: number; label: string } | null>(null);
 
   // Form data
@@ -109,6 +115,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
     guardian_contact_2: '',
     guardian_email: '',
     grade_id: preSelectedGrade ? String(preSelectedGrade) : '',
+    class_section_id: preSelectedClassSection ? String(preSelectedClassSection) : '',
   });
 
   useEffect(() => {
@@ -125,17 +132,47 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
   }
 
   const loadData = async () => {
-    const [gradeList, yearData] = await Promise.all([
+    const setting = await db.get("SELECT value FROM app_settings WHERE key = 'enable_subgrades'");
+    const isSubgradesEnabled = setting?.value === 'true';
+    setEnableSubgrades(isSubgradesEnabled);
+
+    const [gradeList, sectionsData, yearData] = await Promise.all([
       db.all('SELECT id, label FROM grades ORDER BY id'),
+      isSubgradesEnabled ? db.all('SELECT id, grade_id, label FROM class_sections ORDER BY label') : Promise.resolve([]),
       currentYearId
         ? db.get('SELECT id, label FROM academic_years WHERE id = ?', [currentYearId])
         : db.get('SELECT id, label FROM academic_years ORDER BY label DESC LIMIT 1'),
     ]);
     setGrades(gradeList);
+    setClassSections(sectionsData);
     setCurrentYear(yearData);
 
     if (preSelectedGrade) {
-      setForm(f => ({ ...f, grade_id: String(preSelectedGrade) }));
+      setForm(f => ({ 
+        ...f, 
+        grade_id: String(preSelectedGrade),
+        class_section_id: preSelectedClassSection ? String(preSelectedClassSection) : ''
+      }));
+    }
+  };
+
+  const handleAddSection = async () => {
+    if (!newSectionLabel.trim() || !form.grade_id) return;
+    try {
+      const result = await db.run(
+        'INSERT INTO class_sections (grade_id, label) VALUES (?, ?)',
+        [form.grade_id, newSectionLabel.trim()]
+      );
+      const newSection = {
+        id: result.lastInsertRowid || result.lastID,
+        grade_id: Number(form.grade_id),
+        label: newSectionLabel.trim()
+      };
+      setClassSections([...classSections, newSection]);
+      setForm({ ...form, class_section_id: String(newSection.id) });
+      setNewSectionLabel('');
+    } catch (err) {
+      console.error('Error adding section:', err);
     }
   };
 
@@ -164,6 +201,10 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
       case 'enrollment':
         if (!form.grade_id) {
           setError('Please select a grade');
+          return false;
+        }
+        if (enableSubgrades && !form.class_section_id) {
+          setError('Please select a class section');
           return false;
         }
         break;
@@ -217,8 +258,8 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
       if (form.grade_id && currentYear && result.lastInsertRowid) {
         const studentId = result.lastInsertRowid;
         await db.run(
-          'INSERT INTO student_year_enrollment (student_id, year_id, grade_id) VALUES (?, ?, ?)',
-          [studentId, currentYear.id, form.grade_id]
+          'INSERT INTO student_year_enrollment (student_id, year_id, grade_id, class_section_id) VALUES (?, ?, ?, ?)',
+          [studentId, currentYear.id, form.grade_id, form.class_section_id || null]
         );
 
         const today = new Date().toISOString().split('T')[0];
@@ -274,7 +315,9 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
   };
 
   const getSelectedGradeLabel = () => {
-    return grades.find(g => g.id === Number(form.grade_id))?.label || '';
+    const grade = grades.find(g => g.id === Number(form.grade_id))?.label || '';
+    const section = classSections.find(c => c.id === Number(form.class_section_id))?.label || '';
+    return section ? `${grade} - ${section}` : grade;
   };
 
   const renderStepContent = () => {
@@ -317,16 +360,16 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                   />
                 </div>
                 <div className="wizard-field">
-                  <label>Gender</label>
-                  <select
-                    value={form.gender}
-                    onChange={e => setForm({ ...form, gender: e.target.value })}
-                  >
-                    <option value="">Select gender</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                  </select>
+                  <ChipSelector
+                    label="Gender"
+                    value={form.gender || null}
+                    onChange={value => setForm({ ...form, gender: (value as string) || '' })}
+                    options={[
+                      { value: 'male', label: 'Male' },
+                      { value: 'female', label: 'Female' },
+                      { value: 'other', label: 'Other' },
+                    ]}
+                  />
                 </div>
               </div>
             </div>
@@ -480,7 +523,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                     <button
                       key={grade.id}
                       type="button"
-                      onClick={() => setForm({ ...form, grade_id: String(grade.id) })}
+                      onClick={() => setForm({ ...form, grade_id: String(grade.id), class_section_id: '' })}
                       style={{
                         padding: '12px 16px',
                         border:
@@ -507,6 +550,74 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                   ))}
                 </div>
               </div>
+
+              {enableSubgrades && form.grade_id && (
+                <div className="wizard-field" style={{ marginTop: '16px' }}>
+                  <label>
+                    Class Section <span className="required">*</span>
+                  </label>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                      gap: 8,
+                    }}
+                  >
+                    {classSections.filter(c => c.grade_id === Number(form.grade_id)).map(section => (
+                      <button
+                        key={section.id}
+                        type="button"
+                        onClick={() => setForm({ ...form, class_section_id: String(section.id) })}
+                        style={{
+                          padding: '12px 16px',
+                          border:
+                            form.class_section_id === String(section.id)
+                              ? '2px solid var(--color-accent-teal)'
+                              : '1px solid var(--color-sage-border)',
+                          borderRadius: 'var(--border-radius-md)',
+                          backgroundColor:
+                            form.class_section_id === String(section.id)
+                              ? 'var(--color-accent-teal-light)'
+                              : 'white',
+                          color:
+                            form.class_section_id === String(section.id)
+                              ? 'var(--color-accent-teal)'
+                              : 'var(--color-olive-ink)',
+                          fontWeight: form.class_section_id === String(section.id) ? 600 : 400,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          textAlign: 'center',
+                        }}
+                      >
+                        {section.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <input 
+                      type="text" 
+                      placeholder="New Section (e.g. 1A)"
+                      value={newSectionLabel}
+                      onChange={e => setNewSectionLabel(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddSection();
+                        }
+                      }}
+                      style={{ flex: 1 }}
+                    />
+                    <button 
+                      type="button"
+                      className="btn btn-outline"
+                      onClick={handleAddSection}
+                      disabled={!newSectionLabel.trim()}
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );

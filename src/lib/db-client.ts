@@ -33,6 +33,25 @@ declare global {
       openFileForPrint: (filePath: string) => Promise<OpenFileResult>;
       getPrintOutputDir: () => Promise<string>;
       autoDebitFees: () => Promise<{ success: boolean; error?: string }>;
+      clearDatabase: () => Promise<{ success: boolean; error?: string }>;
+      resetApp: () => Promise<{ success: boolean; error?: string }>;
+      exportXlsxReport: (options: {
+        suggestedFileName: string;
+        workbook: {
+          sheetName: string;
+          topRows?: Array<{ value: string; styleId?: number; mergeAcross?: number }>;
+          columns: Array<{ key: string; header: string; width?: number; type?: string }>;
+          rows: Array<Record<string, any>>;
+          summaryRows?: Array<{
+            label: string;
+            value: string | number;
+            valueType?: string;
+            valueStyleId?: number;
+          }>;
+          freezeRows?: number;
+          autoFilter?: boolean;
+        };
+      }) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }>;
     };
   }
 }
@@ -53,4 +72,41 @@ export const db = {
   get: (sql: string, params: any[] = []) => getApi().dbGet(sql, params),
   backup: () => getApi().fsBackup(),
   restore: () => getApi().fsRestore(),
+  exportXlsxReport: (options: {
+    suggestedFileName: string;
+    workbook: {
+      sheetName: string;
+      topRows?: Array<{ value: string; styleId?: number; mergeAcross?: number }>;
+      columns: Array<{ key: string; header: string; width?: number; type?: string }>;
+      rows: Array<Record<string, any>>;
+      summaryRows?: Array<{
+        label: string;
+        value: string | number;
+        valueType?: string;
+        valueStyleId?: number;
+      }>;
+      freezeRows?: number;
+      autoFilter?: boolean;
+    };
+  }) => getApi().exportXlsxReport(options),
+  exportXlsxStatementsToZip: (options: {
+    suggestedFileName: string;
+    statements: Array<{
+      filename: string;
+      workbook: {
+        sheetName: string;
+        topRows?: Array<{ value: string; styleId?: number; mergeAcross?: number }>;
+        columns: Array<{ key: string; header: string; width?: number; type?: string }>;
+        rows: Array<Record<string, any>>;
+        summaryRows?: Array<{
+          label: string;
+          value: string | number;
+          valueType?: string;
+          valueStyleId?: number;
+        }>;
+        freezeRows?: number;
+        autoFilter?: boolean;
+      };
+    }>;
+  }) => getApi().exportXlsxStatementsToZip(options),
 };

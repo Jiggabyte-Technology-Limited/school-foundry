@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import {
-  BrowserRouter as Router,
+  HashRouter as Router,
   Routes,
   Route,
   Navigate,
-  useSearchParams,
 } from 'react-router-dom';
 import './index.css';
 import { db } from './lib/db-client';
@@ -13,6 +12,7 @@ import { AuthProvider, useAuth } from './lib/auth-context';
 import { ToastProvider } from './components/Toast';
 import { loadCurrency } from './lib/currency';
 import { LicenseActivation } from './components/auth/LicenseActivation';
+import { useLocation } from 'react-router-dom';
 
 // License status type
 type LicenseStatusResult = {
@@ -68,18 +68,22 @@ import StudentAccounts from './components/StudentAccounts';
 import ActivityLog from './components/ActivityLog';
 import BackupManager from './components/BackupManager';
 import SettingsModal from './components/SettingsModal';
+import ClassLists from './components/ClassLists';
+import UserGuide from './components/UserGuide';
+import PageErrorBoundary from './components/PageErrorBoundary';
 
 const pageTitles: Record<string, string> = {
   dashboard: 'Dashboard',
   accounts: 'Learner Accounts',
+  'class-lists': 'Class Lists',
   fees: 'Fee Structure',
   payments: 'Payments',
   logs: 'Activity Logs',
   backup: 'Backup & Restore',
 };
 
-// License gate component - checks license before rendering app
 function LicenseGate({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
   const [licenseStatus, setLicenseStatus] = useState<'checking' | 'valid' | 'invalid'>('checking');
   const [licenseData, setLicenseData] = useState<LicenseStatusResult | null>(null);
 
@@ -128,6 +132,9 @@ function LicenseGate({ children }: { children: React.ReactNode }) {
   }
 
   if (licenseStatus === 'invalid') {
+    if (location.pathname === '/') {
+      return <>{children}</>;
+    }
     return (
       <LicenseActivation
         onActivated={() => {
@@ -142,12 +149,14 @@ function LicenseGate({ children }: { children: React.ReactNode }) {
 
 function AppInner() {
   const { user, login, logout } = useAuth();
+  const location = useLocation();
   const [isSetup, setIsSetup] = useState(false);
   const [view, setView] = useState('dashboard');
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [schoolName, setSchoolName] = useState('');
   const [activeTerm, setActiveTerm] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const isUserGuideWindow = new URLSearchParams(window.location.search).get('window') === 'user-guide';
 
   useEffect(() => {
     const checkSetup = async () => {
@@ -193,13 +202,44 @@ function AppInner() {
     setSchoolName(name);
   };
 
-  if (!isSetup) return <SetupWizard onComplete={() => setIsSetup(true)} />;
+  const suppressPageTransition = view === 'accounts' && selectedStudentId !== null;
+
+  if (isUserGuideWindow)
+    return (
+      <PageTransition key="user-guide" pageKey="user-guide">
+        <UserGuide />
+      </PageTransition>
+    );
+
+  if (!isSetup)
+    return (
+      <PageTransition key="setup" pageKey="setup">
+        <SetupWizard onComplete={() => setIsSetup(true)} />
+      </PageTransition>
+    );
 
   return (
-    <Router>
       <Routes>
-        <Route path="/" element={<Welcome isSetup={isSetup} />} />
-        <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
+        <Route
+          path="/"
+          element={
+            <PageTransition key="welcome" pageKey="welcome">
+              <Welcome isSetup={isSetup} />
+            </PageTransition>
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            !user ? (
+              <PageTransition key="login" pageKey="login">
+                <Login />
+              </PageTransition>
+            ) : (
+              <Navigate to="/dashboard" />
+            )
+          }
+        />
         <Route
           path="/dashboard"
           element={
@@ -208,6 +248,7 @@ function AppInner() {
                 <Sidebar
                   activeView={view}
                   onViewChange={setView}
+                  onGuideClick={() => window.api.openUserGuideWindow()}
                   onSettingsClick={() => setShowSettings(true)}
                   onLogout={handleLogout}
                 />
@@ -219,33 +260,45 @@ function AppInner() {
                     userName={user.full_name || user.username}
                     userRole={user.role}
                   />
-                  <div className="page-content">
-                    {view === 'dashboard' && (
-                      <Dashboard
-                        onViewStatement={(studentId: number) => {
-                          setView('accounts');
-                          setSelectedStudentId(studentId);
-                        }}
-                      />
-                    )}
-                    {view === 'accounts' && (
-                      <StudentAccounts
-                        preselectedStudentId={selectedStudentId}
-                        onStatementViewed={() => setSelectedStudentId(null)}
-                      />
-                    )}
-                    {view === 'fees' && <FeeStructureManager />}
-                    {view === 'payments' && (
-                      <PaymentManager
-                        onViewStatement={(studentId: number) => {
-                          setView('accounts');
-                          setSelectedStudentId(studentId);
-                        }}
-                      />
-                    )}
-                    {view === 'logs' && <ActivityLog />}
-                    {view === 'backup' && <BackupManager />}
-                  </div>
+                  <PageErrorBoundary resetKey={view}>
+                    <PageTransition key={view} pageKey={view} disabled={suppressPageTransition}>
+                      <div className="page-content">
+                        {view === 'dashboard' && (
+                          <Dashboard
+                            onViewStatement={(studentId: number) => {
+                              setView('accounts');
+                              setSelectedStudentId(studentId);
+                            }}
+                          />
+                        )}
+                        {view === 'accounts' && (
+                          <StudentAccounts
+                            preselectedStudentId={selectedStudentId}
+                            onStatementViewed={() => setSelectedStudentId(null)}
+                          />
+                        )}
+                        {view === 'class-lists' && (
+                          <ClassLists
+                            onViewStudentAccount={(studentId: number) => {
+                              setView('accounts');
+                              setSelectedStudentId(studentId);
+                            }}
+                          />
+                        )}
+                        {view === 'fees' && <FeeStructureManager />}
+                        {view === 'payments' && (
+                          <PaymentManager
+                            onViewStatement={(studentId: number) => {
+                              setView('accounts');
+                              setSelectedStudentId(studentId);
+                            }}
+                          />
+                        )}
+                        {view === 'logs' && <ActivityLog />}
+                        {view === 'backup' && <BackupManager />}
+                      </div>
+                    </PageTransition>
+                  </PageErrorBoundary>
                 </main>
                 {showSettings && (
                   <SettingsModal
@@ -262,19 +315,46 @@ function AppInner() {
           }
         />
       </Routes>
-    </Router>
   );
 }
 
 const App = () => (
   <AuthProvider>
     <ToastProvider>
-      <LicenseGate>
-        <AppInner />
-      </LicenseGate>
+      <Router>
+        <LicenseGate>
+          <AppInner />
+        </LicenseGate>
+      </Router>
     </ToastProvider>
   </AuthProvider>
 );
+
+function PageTransition({
+  children,
+  pageKey,
+  disabled = false,
+}: {
+  children: React.ReactNode;
+  pageKey?: string;
+  disabled?: boolean;
+}) {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (disabled) {
+      setIsVisible(true);
+      return;
+    }
+    setIsVisible(false);
+    const frame = window.requestAnimationFrame(() => setIsVisible(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, [pageKey, disabled]);
+
+  return (
+    <div className={`page-transition ${disabled || isVisible ? 'is-visible' : ''}`}>{children}</div>
+  );
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

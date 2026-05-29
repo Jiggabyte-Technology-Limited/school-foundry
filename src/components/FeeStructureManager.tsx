@@ -3,6 +3,7 @@ import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
 import { useToast } from './Toast';
 import ConfigWizard from './ui/ConfigWizard';
+import ChipSelector from './ui/ChipSelector';
 import { generateFeeStructureHtml, printDocument } from '../lib/print-service';
 import { getCurrencySymbol, getCurrencies, loadCurrency, setCurrency } from '../lib/currency';
 
@@ -586,6 +587,96 @@ const FeeStructureManager: React.FC = () => {
     }
   };
 
+  const buildFeeExportData = () => {
+    const selectedYearLabel = years.find(y => y.id === selectedYear)?.label || '';
+    const rows: Array<{ gradeLabel: string; termLabel: string; amount: number }> = [];
+    const gradeTotals: Array<{ label: string; total: number }> = [];
+    let overallTotal = 0;
+
+    grades.forEach(g => {
+      let gradeTotal = 0;
+      terms.forEach(t => {
+        const cell = matrix[g.id]?.[t.id];
+        const amount = cell ? parseFloat(cell.amount) : 0;
+        if (amount > 0) {
+          rows.push({
+            gradeLabel: g.label,
+            termLabel: t.label,
+            amount,
+          });
+          gradeTotal += amount;
+          overallTotal += amount;
+        }
+      });
+      if (gradeTotal > 0) {
+        gradeTotals.push({ label: g.label, total: gradeTotal });
+      }
+    });
+
+    return { selectedYearLabel, rows, gradeTotals, overallTotal };
+  };
+
+  const handleExportFees = async () => {
+    const { selectedYearLabel, rows, gradeTotals, overallTotal } = buildFeeExportData();
+
+    if (rows.length === 0) {
+      showToast('info', 'No Fees', 'No fee amounts have been set. Please enter fees first.');
+      return;
+    }
+
+    try {
+      const result = await window.api.exportXlsxReport({
+        suggestedFileName: `school-fees-${selectedYearLabel || 'export'}`,
+        workbook: {
+          sheetName: 'School Fees',
+          topRows: [
+            { value: schoolName, mergeAcross: 2 },
+            { value: 'School Fees Structure', mergeAcross: 2 },
+            { value: `Academic Year: ${selectedYearLabel || '-'}`, mergeAcross: 2 },
+            {
+              value:
+                [new Date().toLocaleDateString(), schoolContact].filter(Boolean).join(' | ') ||
+                'School fees export',
+              mergeAcross: 2,
+            },
+          ],
+          columns: [
+            { key: 'gradeLabel', header: 'Grade/Form', width: 24 },
+            { key: 'termLabel', header: 'Payment Period', width: 24 },
+            { key: 'amount', header: 'Amount', width: 16, type: 'currency' },
+          ],
+          rows,
+          summaryRows: [
+            ...gradeTotals.map(entry => ({
+              label: `${entry.label} Total`,
+              value: entry.total,
+              valueType: 'currency',
+            })),
+            {
+              label: 'Overall Total',
+              value: overallTotal,
+              valueType: 'currency',
+            },
+          ],
+          freezeRows: 5,
+          autoFilter: true,
+        },
+      });
+
+      if (result.success) {
+        showToast('success', 'Excel Exported', `Saved to ${result.filePath}`);
+      } else if (!result.canceled) {
+        showToast('error', 'Export Failed', result.error || 'Could not export school fees.');
+      }
+    } catch (err) {
+      showToast(
+        'error',
+        'Export Failed',
+        err instanceof Error ? err.message : 'Could not export school fees.'
+      );
+    }
+  };
+
   if (loading)
     return (
       <div
@@ -870,23 +961,18 @@ const FeeStructureManager: React.FC = () => {
               className="flex-col gap-2 mb-3"
               style={{ padding: '12px', backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 8 }}
             >
-              <span
-                style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-sage-placeholder)' }}
-              >
-                Auto-generate Periods:
-              </span>
+              <ChipSelector
+                label="Auto-generate Periods"
+                value={autoGenType}
+                onChange={value => setAutoGenType((value as any) || 'monthly')}
+                options={[
+                  { value: 'monthly', label: 'Monthly (12)' },
+                  { value: 'quarterly', label: 'Quarterly (4)' },
+                  { value: 'half_year', label: 'Half Year (2)' },
+                  { value: 'custom', label: 'Custom' },
+                ]}
+              />
               <div className="flex-row gap-2">
-                <select
-                  className="input-default"
-                  value={autoGenType}
-                  onChange={e => setAutoGenType(e.target.value as any)}
-                  style={{ flex: 1 }}
-                >
-                  <option value="monthly">Monthly (12)</option>
-                  <option value="quarterly">Quarterly (4)</option>
-                  <option value="half_year">Half Year (2)</option>
-                  <option value="custom">Custom</option>
-                </select>
                 {autoGenType === 'custom' && (
                   <input
                     className="input-default"
@@ -1310,30 +1396,7 @@ const FeeStructureManager: React.FC = () => {
         <button
           className="btn btn-sage"
           onClick={async () => {
-            const selectedYearLabel = years.find(y => y.id === selectedYear)?.label || '';
-
-            // Build rows from matrix data
-            const rows: Array<{ gradeLabel: string; termLabel: string; amount: string }> = [];
-            const gradeTotals: Record<string, string> = {};
-
-            grades.forEach(g => {
-              let gradeTotal = 0;
-              terms.forEach(t => {
-                const cell = matrix[g.id]?.[t.id];
-                const amount = cell ? parseFloat(cell.amount) : 0;
-                if (amount > 0) {
-                  rows.push({
-                    gradeLabel: g.label,
-                    termLabel: t.label,
-                    amount: amount.toFixed(2),
-                  });
-                  gradeTotal += amount;
-                }
-              });
-              if (gradeTotal > 0) {
-                gradeTotals[g.label] = gradeTotal.toFixed(2);
-              }
-            });
+            const { selectedYearLabel, rows, gradeTotals } = buildFeeExportData();
 
             if (rows.length === 0) {
               showToast(
@@ -1351,8 +1414,14 @@ const FeeStructureManager: React.FC = () => {
               academicYear: selectedYearLabel,
               generatedAt: new Date().toLocaleDateString(),
               currencySymbol: getCurrencySymbol(),
-              rows,
-              gradeTotals,
+              rows: rows.map(row => ({
+                ...row,
+                amount: row.amount.toFixed(2),
+              })),
+              gradeTotals: gradeTotals.reduce<Record<string, string>>((acc, entry) => {
+                acc[entry.label] = entry.total.toFixed(2);
+                return acc;
+              }, {}),
               feesTerms: schoolFeesTerms || undefined,
             });
 
@@ -1377,6 +1446,22 @@ const FeeStructureManager: React.FC = () => {
             <rect x="6" y="14" width="12" height="8" />
           </svg>
           Print School Fees
+        </button>
+        <button className="btn btn-outline" onClick={handleExportFees} style={{ marginLeft: 12 }}>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            style={{ marginRight: 8 }}
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Export Excel
         </button>
       </div>
 

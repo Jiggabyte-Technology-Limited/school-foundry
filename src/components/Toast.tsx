@@ -63,10 +63,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       if (type !== 'loading') {
         setTimeout(() => {
-          // Log auto-dismiss
-          logActivity('toast_auto_dismissed', 'toast', id, `Auto-dismissed: ${title}`, username);
           setToasts(prev => prev.filter(t => t.id !== id));
-        }, 5000);
+        }, 10000);
       }
       return id;
     },
@@ -110,18 +108,9 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const dismissToast = useCallback(
     (id: string) => {
-      // Find the toast to get details before removing
-      setToasts(prev => {
-        const toast = prev.find(t => t.id === id);
-        if (toast) {
-          const username = user?.username || 'System';
-          const details = `Dismissed: ${toast.title}${toast.message ? ` - ${toast.message}` : ''}`;
-          logActivity('toast_dismissed', 'toast', id, details, username);
-        }
-        return prev.filter(t => t.id !== id);
-      });
+      setToasts(prev => prev.filter(t => t.id !== id));
     },
-    [user]
+    []
   );
 
   return (

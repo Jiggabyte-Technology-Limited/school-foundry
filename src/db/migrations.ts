@@ -516,6 +516,46 @@ const migrations: MigrationStep[] = [
       );
     },
   },
+  {
+    version: '1.8',
+    description: 'Add class_sections and class_section_id to student_year_enrollment',
+    run: async db => {
+      try {
+        await runSql(
+          db,
+          `CREATE TABLE IF NOT EXISTS class_sections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            grade_id INTEGER NOT NULL REFERENCES grades(id) ON DELETE CASCADE,
+            label TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(grade_id, label)
+          );`
+        );
+        await runSql(
+          db,
+          `CREATE INDEX IF NOT EXISTS idx_class_sections_grade_id ON class_sections(grade_id);`
+        );
+      } catch (e) {
+        console.warn('[Migrations] class_sections creation warning:', e);
+      }
+
+      try {
+        await runSql(db, `ALTER TABLE student_year_enrollment ADD COLUMN class_section_id INTEGER REFERENCES class_sections(id) ON DELETE SET NULL;`);
+      } catch (e) {
+        /* already exists */
+      }
+
+      await runSql(
+        db,
+        `INSERT OR IGNORE INTO app_settings (key, value, updated_at) VALUES ('enable_subgrades', 'false', datetime('now'));`
+      );
+
+      await runSql(
+        db,
+        `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '1.8', datetime('now'));`
+      );
+    },
+  },
 ];
 
 export async function runMigrations(db: sqlite3.Database): Promise<void> {

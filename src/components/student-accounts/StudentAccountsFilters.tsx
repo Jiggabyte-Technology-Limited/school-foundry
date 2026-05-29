@@ -79,7 +79,7 @@ const StudentAccountsFilters: React.FC<StudentAccountsFiltersProps> = ({
               type="checkbox"
               checked={showPaid}
               onChange={onTogglePaid}
-              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
             />
             Paid in Full
           </label>
@@ -97,7 +97,7 @@ const StudentAccountsFilters: React.FC<StudentAccountsFiltersProps> = ({
               type="checkbox"
               checked={showOwing}
               onChange={onToggleOwing}
-              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
             />
             Owing
           </label>
@@ -115,7 +115,7 @@ const StudentAccountsFilters: React.FC<StudentAccountsFiltersProps> = ({
               type="checkbox"
               checked={showInactive}
               onChange={onToggleInactive}
-              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--primary)' }}
             />
             Inactive
           </label>

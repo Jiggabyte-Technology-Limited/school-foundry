@@ -7,7 +7,8 @@ Welcome to the official documentation for **FeesFoundry**, the definitive financ
 2. [System Architecture (ARCHITECTURE.md)](./ARCHITECTURE.md)
 3. [Database Schema (DATABASE_SCHEMA.md)](./DATABASE_SCHEMA.md)
 4. [User Guide (USER_GUIDE.md)](./USER_GUIDE.md)
-5. [Marketing & Distribution (MARKETING_AND_DISTRIBUTION.md)](./MARKETING_AND_DISTRIBUTION.md)
+5. [Screenshots and Video Capture Guide (SCREENSHOTS_AND_VIDEOS_CAPTURE_GUIDE.md)](./SCREENSHOTS_AND_VIDEOS_CAPTURE_GUIDE.md)
+6. [Marketing & Distribution (MARKETING_AND_DISTRIBUTION.md)](./MARKETING_AND_DISTRIBUTION.md)
 
 ## Project Overview
 FeesFoundry is an offline-first desktop application built with Electron, React, and SQLite. It is designed to run locally without requiring internet access or recurring subscriptions, ensuring full data ownership and zero downtime for schools.

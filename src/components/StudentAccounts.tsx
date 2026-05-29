@@ -6,8 +6,6 @@ import PaymentWizard from './PaymentWizard';
 import StudentStatementPreview from './StudentStatementPreview';
 import { useAuth } from '../lib/auth-context';
 import { useToast } from './Toast';
-import { generateStudentStatementHtml } from '../lib/print-service';
-import { getCurrencySymbol } from '../lib/currency';
 import FinancialOverviewPanel from './student-accounts/FinancialOverviewPanel';
 import StudentAccountsFilters from './student-accounts/StudentAccountsFilters';
 import StudentAccountsTable from './student-accounts/StudentAccountsTable';
@@ -41,38 +39,13 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
   const [showPrintView, setShowPrintView] = useState(false);
   const [isPrintingAll, setIsPrintingAll] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [schoolName, setSchoolName] = useState('School Management');
+  const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
+  const [schoolContact, setSchoolContact] = useState<string>('');
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   // Early return for loading state - before any computations
-  if (loading) {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '80px 40px',
-          gap: '16px',
-          minHeight: '100vh',
-          backgroundColor: '#f9fafb',
-        }}
-        className="text-display"
-      >
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            border: '3px solid #e5e7eb',
-            borderTopColor: '#f97316',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-          }}
-        />
-        <span style={{ color: '#6b7280', fontSize: '14px' }}>Loading accounts...</span>
-      </div>
-    );
-  }
-
   const filteredStudents = students.filter(s => {
     const matchesSearch =
       s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -97,7 +70,23 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
       `Loading data for ${filteredStudents.length} learner(s)...`
     );
 
-    const statements = [];
+    const statements: Array<{
+      filename: string;
+      workbook: {
+        sheetName: string;
+        topRows?: Array<{ value: string; styleId?: number; mergeAcross?: number }>;
+        columns: Array<{ key: string; header: string; width?: number; type?: string }>;
+        rows: Array<Record<string, any>>;
+        summaryRows?: Array<{
+          label: string;
+          value: string | number;
+          valueType?: string;
+          valueStyleId?: number;
+        }>;
+        freezeRows?: number;
+        autoFilter?: boolean;
+      };
+    }> = [];
     const totalStudents = filteredStudents.length;
 
     for (let i = 0; i < filteredStudents.length; i++) {
@@ -132,13 +121,78 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
         const balance = totalFees - totalPaid;
 
         statements.push({
-          student,
-          payments,
-          fees,
-          totalFees,
-          totalPaid,
-          balance,
-          generatedAt: new Date().toLocaleDateString(),
+          filename: `statement_${student.full_name.replace(/\s+/g, '_')}_${student.id}`,
+          workbook: {
+            sheetName: 'Statement',
+            topRows: [
+              { value: schoolName, mergeAcross: 3 },
+              { value: `Learner Statement: ${student.full_name}`, mergeAcross: 3 },
+              {
+                value: `Grade: ${student.grade_label || '-'} | Student ID: ${student.id}`,
+                mergeAcross: 3,
+              },
+              {
+                value:
+                  [
+                    `Guardian: ${student.guardian_name || '-'}`,
+                    `Contact: ${student.guardian_contact || '-'}`,
+                  ].join(' | '),
+                mergeAcross: 3,
+              },
+              {
+                value:
+                  [new Date().toLocaleDateString(), schoolContact].filter(Boolean).join(' | ') ||
+                  'Learner statement export',
+                mergeAcross: 3,
+              },
+            ],
+            columns: [
+              { key: 'date', header: 'Date', width: 14 },
+              { key: 'type', header: 'Type', width: 12 },
+              { key: 'details', header: 'Details', width: 42 },
+              { key: 'amount', header: 'Amount', width: 16, type: 'currency' },
+            ],
+            rows: [
+              ...fees.map((f: any) => ({
+                date: f.date,
+                type: 'Fee',
+                details: `${f.term_label || ''}${f.description ? `: ${f.description}` : ''}`.replace(
+                  /^:\s*/,
+                  ''
+                ),
+                amount: f.amount / 100,
+              })),
+              ...payments.map((p: any) => ({
+                date: p.date,
+                type: 'Payment',
+                details: `Receipt Number: ${p.ref}`,
+                amount: p.amount / 100,
+              })),
+            ].sort((a, b) => {
+              if (!a.date) return 1;
+              if (!b.date) return -1;
+              return new Date(a.date).getTime() - new Date(b.date).getTime();
+            }),
+            summaryRows: [
+              {
+                label: 'Total Invoiced',
+                value: totalFees / 100,
+                valueType: 'currency',
+              },
+              {
+                label: 'Total Paid',
+                value: totalPaid / 100,
+                valueType: 'currency',
+              },
+              {
+                label: 'Balance',
+                value: balance / 100,
+                valueType: 'currency',
+              },
+            ],
+            freezeRows: 6,
+            autoFilter: true,
+          },
         });
 
         const progress = Math.round(((i + 1) / totalStudents) * 50);
@@ -148,45 +202,14 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
       }
     }
 
-    updateLoading(loadingId, 60, 'Generating PDF documents...');
-
-    const currentTerm = currentPeriod?.label || (termsList.length > 0 ? termsList[0].label : '');
-
-    const statementsForZip = statements.map(data => ({
-      html: generateStudentStatementHtml({
-        schoolName,
-        schoolLogo: schoolLogo || undefined,
-        schoolContact: schoolContact || undefined,
-        currentTerm: currentTerm || undefined,
-        generatedAt: data.generatedAt,
-        currencySymbol: getCurrencySymbol(),
-        studentName: data.student.full_name,
-        grade: data.student.grade_label,
-        studentId: String(data.student.id),
-        guardianName: data.student.guardian_name,
-        guardianContact: data.student.guardian_contact,
-        isOwing: data.balance > 0,
-        totalInvoiced: (data.totalFees / 100).toFixed(2),
-        totalPaid: (data.totalPaid / 100).toFixed(2),
-        balance: (data.balance / 100).toFixed(2),
-        fees: data.fees.map((f: any) => ({
-          date: f.date,
-          termLabel: f.term_label,
-          description: f.description,
-          amount: (f.amount / 100).toFixed(2),
-        })),
-        payments: data.payments.map((p: any) => ({
-          date: p.date,
-          ref: p.ref,
-          amount: (p.amount / 100).toFixed(2),
-        })),
-      }),
-      filename: `statement_${data.student.full_name.replace(/\s+/g, '_')}_${data.student.id}`,
-    }));
+    updateLoading(loadingId, 60, 'Generating Excel workbooks...');
 
     updateLoading(loadingId, 80, 'Creating ZIP file...');
 
-    const result = await window.api.printStatementsToZip(statementsForZip);
+    const result = await window.api.exportXlsxStatementsToZip({
+      suggestedFileName: `Student_Statements_${new Date().toISOString().slice(0, 10)}`,
+      statements,
+    });
 
     dismissToast(loadingId);
 
@@ -240,11 +263,6 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
     }
   };
 
-  const [schoolName, setSchoolName] = useState('School Management');
-  const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
-  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
-
   // Load initial data on mount
   useEffect(() => {
     loadInitialData();
@@ -256,17 +274,6 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
 
     return () => clearTimeout(timeout);
   }, []);
-
-  if (!canManageStudents) {
-    return (
-      <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
-        <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
-        <p>You do not have permission to manage learners.</p>
-      </div>
-    );
-  }
-
-  const [schoolContact, setSchoolContact] = useState<string>('');
 
   const loadInitialData = async () => {
     try {
@@ -334,9 +341,13 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
         selectedYear,
       ]);
 
-      // Get grades
-      const grades = await db.all('SELECT * FROM grades');
+      // Get grades and class sections
+      const [grades, classSections] = await Promise.all([
+        db.all('SELECT * FROM grades'),
+        db.all('SELECT id, grade_id, label FROM class_sections'),
+      ]);
       const gradeMap = Object.fromEntries(grades.map((g: any) => [g.id, g]));
+      const sectionMap = Object.fromEntries(classSections.map((c: any) => [c.id, c]));
 
       // Build enrollment map - keep the active one if exists, otherwise keep the latest
       const enrollmentMap: Record<number, any> = {};
@@ -354,6 +365,7 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
         allStudents.map(async (s: any) => {
           const enrollment = enrollmentMap[s.id];
           const grade = enrollment ? gradeMap[enrollment.grade_id] : null;
+          const classSection = enrollment?.class_section_id ? sectionMap[enrollment.class_section_id] : null;
 
           // Get invoiced - include all enrollments (active and inactive) to show historical fees
           const invoiced = await db.get(
@@ -380,7 +392,8 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
           return {
             ...s,
             grade_id: enrollment?.grade_id,
-            grade_label: grade?.label,
+            class_section_id: enrollment?.class_section_id,
+            grade_label: classSection ? `${grade?.label} - ${classSection.label}` : grade?.label,
             invoiced: invoiced?.total || 0,
             paid: paid?.total || 0,
             balance: (invoiced?.total || 0) - (paid?.total || 0),
@@ -412,9 +425,7 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
     if (preselectedStudentId && students.length > 0) {
       const student = students.find(s => s.id === preselectedStudentId);
       if (student) {
-        setSelectedStudent(student);
-        setShowPrintView(true);
-        viewStatement(student);
+        void viewStatement(student);
         onStatementViewed?.();
       }
     }
@@ -432,7 +443,7 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
     setSelectedStudent(student);
     setIsLoadingDetail(true);
     setDetailError(null);
-    setShowPrintView(true);
+    setShowPrintView(false);
     if (selectedYear) await loadTermsForYear(selectedYear);
     try {
       const [payments, fees] = await Promise.all([
@@ -472,9 +483,11 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
         balance,
         generatedAt: new Date().toLocaleDateString(),
       });
+      setShowPrintView(true);
     } catch (err: any) {
       console.error('Error loading statement:', err);
       setDetailError(err.message || 'Failed to load financial records');
+      setShowPrintView(true);
     } finally {
       setIsLoadingDetail(false);
     }
@@ -487,6 +500,45 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
     }
     loadStudents(selectedGrade);
   };
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '80px 40px',
+          gap: '16px',
+          minHeight: '100vh',
+          backgroundColor: '#f9fafb',
+        }}
+        className="text-display"
+      >
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            border: '3px solid #e5e7eb',
+            borderTopColor: '#f97316',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+          }}
+        />
+        <span style={{ color: '#6b7280', fontSize: '14px' }}>Loading accounts...</span>
+      </div>
+    );
+  }
+
+  if (!canManageStudents) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
+        <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
+        <p>You do not have permission to manage learners.</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -532,7 +584,7 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
           />
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {showPrintView && selectedStudent && (
             <StudentStatementPreview
               statementData={statementData}
@@ -559,7 +611,34 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
               onRetry={() => viewStatement(selectedStudent)}
             />
           )}
-          {!showPrintView && currentOverview && (
+          {!showPrintView && selectedStudent && isLoadingDetail && (
+            <div
+              className="card-surface"
+              style={{
+                minHeight: 420,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'column',
+                gap: 16,
+              }}
+            >
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  border: '4px solid var(--secondary)',
+                  borderTopColor: 'var(--primary)',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                }}
+              />
+              <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+                Loading learner statement...
+              </div>
+            </div>
+          )}
+          {!showPrintView && !selectedStudent && currentOverview && (
             <FinancialOverviewPanel
               overview={currentOverview}
               grades={grades}

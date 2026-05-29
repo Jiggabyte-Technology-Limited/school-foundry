@@ -178,8 +178,9 @@ export async function generateMachineId(): Promise<string | null> {
   // Concatenate components with static salt
   const fingerprint = `${motherboardUuid}|${cpuProcessorId}|${STATIC_SALT}`;
 
-  // Generate SHA-256 hash (64-character hex)
-  const machineId = sha256Hex(fingerprint);
+  // Generate SHA-256 hash and truncate to 12 uppercase characters
+  const fullHash = sha256Hex(fingerprint);
+  const machineId = fullHash.substring(0, 12).toUpperCase();
 
   console.log('[MachineID] Generated Machine ID:', machineId);
   return machineId;

@@ -14,9 +14,11 @@ export const Welcome: React.FC<WelcomeProps> = ({ isSetup = true }) => {
     <div
       style={{
         minHeight: '100vh',
+        width: '100%',
         backgroundColor: 'var(--background)',
         color: 'var(--text-primary)',
         display: 'flex',
+        justifyContent: 'center',
         alignItems: 'center',
         position: 'relative',
         overflow: 'hidden',

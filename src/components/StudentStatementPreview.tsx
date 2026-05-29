@@ -1,6 +1,7 @@
 import React from 'react';
 import { printDocument, generateStudentStatementHtml } from '../lib/print-service';
 import { getCurrencySymbol } from '../lib/currency';
+import { useToast } from './Toast';
 
 /*
  * IMPORTANT DEVELOPMENT NOTE FOR AI MODELS AND DEVELOPERS:
@@ -46,10 +47,12 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
   onRecordPayment,
   onRetry,
 }) => {
+  const { showToast } = useToast();
   const [printStatus, setPrintStatus] = React.useState<
     'idle' | 'generating' | 'opening' | 'ready' | 'error'
   >('idle');
   const [printMessage, setPrintMessage] = React.useState('');
+  const [exportingExcel, setExportingExcel] = React.useState(false);
 
   // Combine and sort transactions
   const transactions = React.useMemo(() => {
@@ -133,6 +136,89 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
     }
   };
 
+  const handleExportExcel = async () => {
+    if (!statementData) return;
+    setExportingExcel(true);
+
+    try {
+      const result = await window.api.exportXlsxReport({
+        suggestedFileName: `statement-${statementData.student.full_name
+          .replace(/[^a-z0-9]+/gi, '_')
+          .replace(/^_+|_+$/g, '')}-${statementData.student.id}`,
+        workbook: {
+          sheetName: 'Statement',
+          topRows: [
+            { value: schoolName, mergeAcross: 3 },
+            { value: `Learner Statement: ${statementData.student.full_name}`, mergeAcross: 3 },
+            {
+              value: `Grade: ${statementData.student.grade_label || '-'} | Student ID: ${statementData.student.id}`,
+              mergeAcross: 3,
+            },
+            {
+              value:
+                [
+                  `Guardian: ${statementData.student.guardian_name || '-'}`,
+                  `Contact: ${statementData.student.guardian_contact || '-'}`,
+                ].join(' | '),
+              mergeAcross: 3,
+            },
+            {
+              value:
+                [statementData.generatedAt, schoolContact].filter(Boolean).join(' | ') ||
+                'Learner statement export',
+              mergeAcross: 3,
+            },
+          ],
+          columns: [
+            { key: 'date', header: 'Date', width: 14 },
+            { key: 'type', header: 'Type', width: 12 },
+            { key: 'details', header: 'Details', width: 42 },
+            { key: 'amount', header: 'Amount', width: 16, type: 'currency' },
+          ],
+          rows: transactions.map(entry => ({
+            date: entry.date,
+            type: entry.type,
+            details: entry.details,
+            amount: entry.amount / 100,
+          })),
+          summaryRows: [
+            {
+              label: 'Total Invoiced',
+              value: statementData.totalFees / 100,
+              valueType: 'currency',
+            },
+            {
+              label: 'Total Paid',
+              value: statementData.totalPaid / 100,
+              valueType: 'currency',
+            },
+            {
+              label: 'Balance',
+              value: statementData.balance / 100,
+              valueType: 'currency',
+            },
+          ],
+          freezeRows: 6,
+          autoFilter: true,
+        },
+      });
+
+      if (result.success) {
+        showToast('success', 'Excel Exported', `Saved to ${result.filePath}`);
+      } else if (!result.canceled) {
+        showToast('error', 'Export Failed', result.error || 'Could not export statement.');
+      }
+    } catch (err) {
+      showToast(
+        'error',
+        'Export Failed',
+        err instanceof Error ? err.message : 'Could not export statement.'
+      );
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   return (
     <>
       {statementData && (
@@ -175,6 +261,23 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
             {printStatus === 'generating' || printStatus === 'opening'
               ? 'Opening Document...'
               : 'Print Statement'}
+          </button>
+          <button className="btn btn-outline" onClick={handleExportExcel} disabled={exportingExcel}>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {exportingExcel ? 'Exporting Excel...' : 'Export Excel'}
           </button>
           <button className="btn btn-primary" onClick={onRecordPayment}>
             <svg

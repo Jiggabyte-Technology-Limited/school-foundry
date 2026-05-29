@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
 import StudentWizard from './StudentWizard';
+import ChipSelector from './ui/ChipSelector';
 
 interface Student {
   id: number;
@@ -114,10 +115,16 @@ const StudentManager: React.FC = () => {
     if (!currentYear) return;
 
     let query = `
-      SELECT s.*, g.label as grade_label, sye.grade_id
+      SELECT s.*,
+        CASE
+          WHEN cs.label IS NULL OR cs.label = '' THEN g.label
+          ELSE g.label || ' - ' || cs.label
+        END as grade_label,
+        sye.grade_id
       FROM students s
       LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
       LEFT JOIN grades g ON sye.grade_id = g.id
+      LEFT JOIN class_sections cs ON sye.class_section_id = cs.id
       WHERE 1=1
     `;
     const params: any[] = [currentYear.id];
@@ -153,9 +160,14 @@ const StudentManager: React.FC = () => {
       for (const year of academicYears) {
         // Get enrollment for this year
         const enrollment = await db.get(`
-          SELECT sye.grade_id, g.label as grade_label
+          SELECT sye.grade_id,
+                 CASE
+                   WHEN cs.label IS NULL OR cs.label = '' THEN g.label
+                   ELSE g.label || ' - ' || cs.label
+                 END as grade_label
           FROM student_year_enrollment sye
           JOIN grades g ON sye.grade_id = g.id
+          LEFT JOIN class_sections cs ON sye.class_section_id = cs.id
           WHERE sye.student_id = ? AND sye.year_id = ?
         `, [studentId, year.id]);
         
@@ -351,32 +363,26 @@ const StudentManager: React.FC = () => {
             />
           </div>
           
-          <div className="flex-col" style={{ minWidth: 150 }}>
-            <label className="settings-label">Grade</label>
-            <select
-              className="input-default"
-              value={selectedGradeFilter || ''}
-              onChange={(e) => setSelectedGradeFilter(Number(e.target.value) || null)}
-            >
-              <option value="">All Grades</option>
-              {grades.map((g) => (
-                <option key={g.id} value={g.id}>{g.label}</option>
-              ))}
-            </select>
-          </div>
+          <ChipSelector
+            label="Grade"
+            value={selectedGradeFilter}
+            onChange={value => setSelectedGradeFilter(typeof value === 'number' ? value : null)}
+            options={grades.map(g => ({ value: g.id, label: g.label }))}
+            allowAll
+            allLabel="All Grades"
+          />
           
-          <div className="flex-col" style={{ minWidth: 130 }}>
-            <label className="settings-label">Status</label>
-            <select
-              className="input-default"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-            >
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
+          <ChipSelector
+            label="Status"
+            value={statusFilter === 'all' ? null : statusFilter}
+            onChange={value => setStatusFilter((value as any) || 'all')}
+            options={[
+              { value: 'active', label: 'Active' },
+              { value: 'inactive', label: 'Inactive' },
+            ]}
+            allowAll
+            allLabel="All"
+          />
           
           <div className="flex-col" style={{ justifyContent: 'flex-end' }}>
             <button className="btn btn-sage" onClick={clearFilters}>Clear Filters</button>

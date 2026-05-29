@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import SphereCanvas from '../SphereCanvas';
-import { FeatureCards } from '../FeatureCards';
+import QRCode from 'qrcode';
 
 interface LicenseActivationProps {
   onActivated: () => void;
@@ -21,6 +20,7 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
   const [loadingMachineId, setLoadingMachineId] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
 
   // Load machine ID on mount
   useEffect(() => {
@@ -29,6 +29,19 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
         const id = await window.api.getMachineId();
         if (id) {
           setMachineId(id);
+          try {
+            const url = await QRCode.toDataURL(id, {
+              errorCorrectionLevel: 'H',
+              margin: 2,
+              color: {
+                dark: '#111827',
+                light: '#FFFFFF'
+              }
+            });
+            setQrCodeDataUrl(url);
+          } catch (err) {
+            console.error('Failed to generate QR code:', err);
+          }
         } else {
           setError('Failed to generate Machine ID. Please ensure you are running on Windows.');
         }
@@ -92,12 +105,14 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
     <div
       style={{
         minHeight: '100vh',
+        width: '100%',
         backgroundColor: 'var(--background)',
         color: 'var(--text-primary)',
-        display: 'flex',
-        alignItems: 'center',
+        display: 'grid',
+        placeItems: 'center',
         position: 'relative',
         overflow: 'hidden',
+        padding: 'clamp(24px, 4vw, 40px)',
       }}
     >
       {/* Background Decorative Elements */}
@@ -128,22 +143,23 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
 
       <div
         style={{
-          maxWidth: '1400px',
-          margin: '0 auto',
-          padding: '0 60px',
-          width: '100%',
+          width: 'min(100%, 1200px)',
           position: 'relative',
           zIndex: 10,
         }}
       >
         <div
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '80px' }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 'clamp(32px, 5vw, 60px)',
+            flexWrap: 'wrap',
+          }}
         >
           {/* Left Column - Activation Form */}
-          <div
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}
-          >
-            <div style={{ width: '100%', maxWidth: '420px', textAlign: 'left' }}>
+          <div style={{ flex: '0 1 460px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ width: '100%', maxWidth: '460px' }}>
               {/* Header */}
               <div style={{ marginBottom: '32px' }}>
                 <img
@@ -160,151 +176,62 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                 />
                 <h2
                   style={{
-                    fontSize: '28px',
+                    fontSize: '36px',
                     fontWeight: 800,
                     margin: 0,
                     color: 'var(--text-primary)',
                     lineHeight: 1.2,
                   }}
                 >
-                  Activate Application
+                  System Activation
                 </h2>
-                <p style={{ color: 'var(--text-secondary)', marginTop: '12px', fontSize: '14px' }}>
-                  <span style={{ fontWeight: 700 }}>Fees</span>
-                  <span style={{ fontWeight: 400 }}>Foundry</span> School Fees Manager
-                </p>
-                <p
-                  style={{
-                    color: 'var(--text-secondary)',
-                    marginTop: '16px',
-                    fontSize: '13px',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Enter your license key below to activate the system. If you do not have a license, send the Machine ID below to FeesFoundry support.
-                </p>
-              </div>
-
-              {/* Machine ID Section */}
-              <div style={{ marginBottom: '20px' }}>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    marginBottom: '8px',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  YOUR MACHINE ID
-                </label>
-                {loadingMachineId ? (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '14px 16px',
-                      backgroundColor: 'var(--surface)',
-                      border: '2px dashed var(--border)',
-                      borderRadius: '12px',
-                      fontSize: '14px',
-                      color: 'var(--text-secondary)',
-                    }}
-                  >
-                    <div className="animate-spin w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full" />
-                    <span>Generating Machine ID...</span>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <div
-                      style={{
-                        flex: 1,
-                        padding: '14px 16px',
-                        backgroundColor: 'var(--secondary)',
-                        border: '2px solid var(--border)',
-                        borderRadius: '12px',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '13px',
-                        color: 'var(--color-accent-teal)',
-                        wordBreak: 'break-all',
-                      }}
-                    >
-                      {machineId || 'Unable to generate Machine ID'}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={copyMachineId}
-                      disabled={!machineId}
-                      style={{
-                        flexShrink: 0,
-                        padding: '12px 16px',
-                        backgroundColor: 'var(--surface)',
-                        border: '2px solid var(--border)',
-                        borderRadius: '12px',
-                        color: 'var(--text-secondary)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'background-color 0.2s',
-                      }}
-                      onMouseOver={e => (e.currentTarget.style.backgroundColor = 'var(--secondary)')}
-                      onMouseOut={e => (e.currentTarget.style.backgroundColor = 'var(--surface)')}
-                      title="Copy Machine ID"
-                    >
-                      <svg
-                        width="18"
-                        height="18"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        viewBox="0 0 24 24"
-                      >
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-                <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '6px' }}>
-                  Send this Machine ID to support to get your license key via WhatsApp or SMS.
+                <p style={{ color: 'var(--text-secondary)', marginTop: '16px', fontSize: '16px', lineHeight: 1.5 }}>
+                  Welcome to <span style={{ fontWeight: 700 }}>Fees</span>Foundry. To start using the platform, please activate your license.
+                  Send the Machine ID (or take a photo of the QR code) to our support team to receive your license key.
                 </p>
               </div>
 
               {/* License Key Form */}
-              <form onSubmit={handleActivate}>
+              <form onSubmit={handleActivate} style={{ marginTop: '24px' }}>
                 <div style={{ marginBottom: '24px' }}>
                   <label
                     style={{
                       display: 'block',
-                      fontSize: '12px',
+                      fontSize: '14px',
                       fontWeight: 600,
-                      marginBottom: '8px',
-                      color: 'var(--text-secondary)',
+                      marginBottom: '12px',
+                      color: 'var(--text-primary)',
                     }}
                   >
-                    LICENSE KEY
+                    ENTER LICENSE KEY
                   </label>
-                  <textarea
+                  <input
+                    type="text"
                     value={licenseKey}
-                    onChange={e => setLicenseKey(e.target.value)}
-                    placeholder="Paste your license key here..."
+                    onChange={e => {
+                      const val = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                      const parts = [];
+                      for (let i = 0; i < val.length; i += 4) {
+                        parts.push(val.substring(i, i + 4));
+                      }
+                      setLicenseKey(parts.join('-').substring(0, 19));
+                    }}
+                    placeholder="XXXX-XXXX-XXXX-XXXX"
                     disabled={loading}
                     required
                     style={{
                       width: '100%',
-                      height: '110px',
-                      padding: '14px 16px',
+                      padding: '16px',
                       borderRadius: '12px',
                       border: '2px solid var(--border)',
-                      fontSize: '14px',
+                      fontSize: '18px',
+                      letterSpacing: '1px',
+                      textAlign: 'center',
                       fontFamily: 'var(--font-mono)',
                       outline: 'none',
                       transition: 'border-color 0.2s',
                       boxSizing: 'border-box',
                       backgroundColor: 'var(--surface)',
-                      resize: 'none',
                     }}
                     onFocus={e => (e.target.style.borderColor = 'var(--primary)')}
                     onBlur={e => (e.target.style.borderColor = 'var(--border)')}
@@ -312,7 +239,7 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                 </div>
 
                 {error && (
-                  <div className="error-message mb-4" style={{ marginBottom: '16px' }}>
+                  <div style={{ color: '#dc2626', marginBottom: '16px', fontWeight: 500 }}>
                     {error}
                   </div>
                 )}
@@ -322,10 +249,10 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                     style={{
                       color: '#059669',
                       backgroundColor: '#d1fae5',
-                      padding: '0.75rem',
+                      padding: '16px',
                       borderRadius: '8px',
-                      fontSize: '0.9rem',
-                      fontWeight: 500,
+                      fontSize: '15px',
+                      fontWeight: 600,
                       border: '1px solid #10b981',
                       marginBottom: '16px',
                     }}
@@ -339,12 +266,12 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                   disabled={loading || !licenseKey.trim() || loadingMachineId}
                   style={{
                     width: '100%',
-                    padding: '16px',
+                    padding: '18px',
                     borderRadius: '12px',
                     border: 'none',
                     background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
                     color: 'white',
-                    fontSize: '16px',
+                    fontSize: '18px',
                     fontWeight: 700,
                     cursor: loading ? 'not-allowed' : 'pointer',
                     opacity: loading ? 0.7 : 1,
@@ -353,7 +280,7 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '8px',
+                    gap: '12px',
                   }}
                   onMouseOver={e =>
                     !loading && (e.currentTarget.style.transform = 'translateY(-2px)')
@@ -368,8 +295,8 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                   ) : (
                     <>
                       <svg
-                        width="18"
-                        height="18"
+                        width="20"
+                        height="20"
                         fill="none"
                         stroke="currentColor"
                         strokeWidth="2"
@@ -382,82 +309,123 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                   )}
                 </button>
               </form>
-
-              {/* Footer */}
-              <div
-                style={{
-                  marginTop: '32px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                  fontSize: '12px',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                <div>
-                  Need a license? Contact{' '}
-                  <span style={{ color: 'var(--primary)', fontWeight: 600 }}>support@schoolfoundry.app</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px' }}>
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                  </svg>
-                  Secure Activation by{' '}
-                  <span style={{ fontWeight: 700, color: 'var(--primary)' }}>Fees</span>
-                  <span style={{ fontWeight: 400 }}>Foundry</span>
-                </div>
-              </div>
             </div>
           </div>
 
-          {/* Right Column - Spinning Globe with Feature Cards */}
+          {/* Right Column - BIG Machine ID & QR Code */}
           <div
             style={{
-              flex: 1,
+              flex: '0 1 480px',
               display: 'flex',
-              justifyContent: 'flex-start',
+              flexDirection: 'column',
+              justifyContent: 'center',
               alignItems: 'center',
-              overflow: 'visible',
-              position: 'relative',
             }}
           >
-            <div
+            <div 
               style={{
-                width: '500px',
-                height: '500px',
-                position: 'relative',
-                borderRadius: '50%',
-                background: 'radial-gradient(circle, rgba(249,115,22,0.08) 0%, transparent 70%)',
+                backgroundColor: '#FFFFFF',
+                borderRadius: '24px',
+                padding: '40px',
+                boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)',
+                border: '1px solid var(--border)',
+                width: '100%',
+                maxWidth: '480px',
+                textAlign: 'center'
               }}
             >
-              <SphereCanvas />
-              <FeatureCards position="right" />
+              <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                Your Machine ID
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '32px' }}>
+                Please take a clear photo of this QR code or copy the text ID and send it to our support team.
+              </p>
+
+              {loadingMachineId ? (
+                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px' }}>
+                    <div className="animate-spin w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full mb-4" />
+                    <span style={{ color: 'var(--text-secondary)' }}>Generating hardware fingerprint...</span>
+                 </div>
+              ) : (
+                <>
+                  {qrCodeDataUrl && (
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '32px' }}>
+                      <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '16px', border: '2px solid var(--border)', display: 'inline-block' }}>
+                        <img 
+                          src={qrCodeDataUrl} 
+                          alt="Machine ID QR Code" 
+                          style={{ width: '280px', height: '280px', display: 'block' }} 
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div 
+                    style={{ 
+                      backgroundColor: 'var(--background)', 
+                      padding: '20px', 
+                      borderRadius: '12px',
+                      border: '2px solid var(--border)',
+                      position: 'relative'
+                    }}
+                  >
+                    <code 
+                      style={{ 
+                        display: 'block',
+                        fontSize: '18px', 
+                        fontWeight: 600,
+                        fontFamily: 'var(--font-mono)', 
+                        color: 'var(--text-primary)',
+                        wordBreak: 'break-all',
+                        lineHeight: 1.4
+                      }}
+                    >
+                      {machineId || 'Unable to generate Machine ID'}
+                    </code>
+                    
+                    <button
+                      type="button"
+                      onClick={copyMachineId}
+                      disabled={!machineId}
+                      style={{
+                        marginTop: '16px',
+                        width: '100%',
+                        padding: '14px 16px',
+                        backgroundColor: '#FFFFFF',
+                        border: '2px solid var(--border)',
+                        borderRadius: '8px',
+                        color: 'var(--text-primary)',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        transition: 'all 0.2s',
+                        fontSize: '15px'
+                      }}
+                      onMouseOver={e => (e.currentTarget.style.borderColor = 'var(--primary)', e.currentTarget.style.color = 'var(--primary)')}
+                      onMouseOut={e => (e.currentTarget.style.borderColor = 'var(--border)', e.currentTarget.style.color = 'var(--text-primary)')}
+                    >
+                      <svg
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      Copy Machine ID
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
-      </div>
-
-      <div style={{ position: 'absolute', bottom: '40px', left: 0, right: 0, textAlign: 'center' }}>
-        <span
-          style={{
-            fontSize: '12px',
-            color: 'var(--text-secondary)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em',
-            fontFamily: 'monospace',
-          }}
-        >
-          <span style={{ fontWeight: 700 }}>Fees</span>
-          <span style={{ fontWeight: 400 }}>Foundry</span> • v1.2.0 • Build 2026
-        </span>
       </div>
     </div>
   );

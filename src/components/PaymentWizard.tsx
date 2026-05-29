@@ -4,6 +4,10 @@ import { useAuth } from '../lib/auth-context';
 import { useToast } from './Toast';
 import { getCurrencySymbol } from '../lib/currency';
 import Receipt from './Receipt';
+import PaymentMethodToggle, {
+  PaymentMethod,
+  getPaymentMethodLabel,
+} from './ui/PaymentMethodToggle';
 
 interface PaymentWizardProps {
   onClose: () => void;
@@ -54,7 +58,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
   const [form, setForm] = useState({
     amount: '',
     receipt_number: '',
-    payment_method: 'cash',
+    payment_method: 'cash' as PaymentMethod,
     notes: '',
   });
 
@@ -87,12 +91,18 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
       const [studentList, termList] = await Promise.all([
         db.all(
           `
-          SELECT s.id, s.full_name, g.label as grade_label, s.is_active,
+          SELECT s.id, s.full_name,
+            CASE
+              WHEN cs.label IS NULL OR cs.label = '' THEN g.label
+              ELSE g.label || ' - ' || cs.label
+            END as grade_label,
+            s.is_active,
             COALESCE((SELECT SUM(sf.amount_cents) FROM student_fees sf JOIN fee_structure fs ON sf.fee_structure_id = fs.id WHERE sf.student_id = s.id AND fs.year_id = ?), 0) -
             COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
           FROM students s
           JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
           JOIN grades g ON sye.grade_id = g.id
+          LEFT JOIN class_sections cs ON sye.class_section_id = cs.id
           WHERE s.is_active = 1
           ORDER BY s.full_name
         `,
@@ -119,12 +129,18 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
         } else {
           const studentData = await db.get(
             `
-            SELECT s.id, s.full_name, g.label as grade_label, s.is_active,
+            SELECT s.id, s.full_name,
+              CASE
+                WHEN cs.label IS NULL OR cs.label = '' THEN g.label
+                ELSE g.label || ' - ' || cs.label
+              END as grade_label,
+              s.is_active,
               COALESCE((SELECT SUM(sf.amount_cents) FROM student_fees sf JOIN fee_structure fs ON sf.fee_structure_id = fs.id WHERE sf.student_id = s.id AND fs.year_id = ?), 0) -
               COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
             FROM students s
             JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
             JOIN grades g ON sye.grade_id = g.id
+            LEFT JOIN class_sections cs ON sye.class_section_id = cs.id
             WHERE s.id = ?
           `,
             [yearData.id, yearData.id, yearData.id, preSelectedStudent]
@@ -154,12 +170,18 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
     if (yearId) {
       const studentData = await db.get(
         `
-        SELECT s.id, s.full_name, g.label as grade_label, s.is_active,
+        SELECT s.id, s.full_name,
+          CASE
+            WHEN cs.label IS NULL OR cs.label = '' THEN g.label
+            ELSE g.label || ' - ' || cs.label
+          END as grade_label,
+          s.is_active,
           COALESCE((SELECT SUM(sf.amount_cents) FROM student_fees sf JOIN fee_structure fs ON sf.fee_structure_id = fs.id WHERE sf.student_id = s.id AND fs.year_id = ?), 0) -
           COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
         FROM students s
         JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
         JOIN grades g ON sye.grade_id = g.id
+        LEFT JOIN class_sections cs ON sye.class_section_id = cs.id
         WHERE s.id = ?
       `,
         [yearId, yearId, yearId, studentId]
@@ -609,16 +631,10 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                   />
                 </div>
                 <div className="wizard-field">
-                  <label>Payment Method</label>
-                  <select
+                  <PaymentMethodToggle
                     value={form.payment_method}
-                    onChange={e => setForm({ ...form, payment_method: e.target.value })}
-                  >
-                    <option value="cash">Cash</option>
-                    <option value="ecocash">EcoCash / Mobile</option>
-                    <option value="bank_transfer">Bank Transfer</option>
-                    <option value="other">Other Method</option>
-                  </select>
+                    onChange={payment_method => setForm({ ...form, payment_method })}
+                  />
                 </div>
               </div>
             </div>
@@ -701,7 +717,7 @@ const PaymentWizard: React.FC<PaymentWizardProps> = ({
                 }}
               >
                 <span style={{ color: 'var(--color-sage-placeholder)' }}>Payment Method</span>
-                <span style={{ textTransform: 'capitalize' }}>{form.payment_method}</span>
+                <span>{getPaymentMethodLabel(form.payment_method)}</span>
               </div>
               {selectedStudent && (
                 <div

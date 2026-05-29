@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
 import { useToast } from './Toast';
+import ChipSelector from './ui/ChipSelector';
 
 interface EditStudentModalProps {
   studentId: number;
@@ -33,8 +34,12 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
     guardian_contact_2: '',
     guardian_email: '',
     grade_id: '',
+    class_section_id: '',
     notes: '',
   });
+  const [classSections, setClassSections] = useState<{ id: number; grade_id: number; label: string }[]>([]);
+  const [newSectionLabel, setNewSectionLabel] = useState('');
+  const [enableSubgrades, setEnableSubgrades] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -52,11 +57,16 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [student, gradeList, enrollment] = await Promise.all([
+      const setting = await db.get("SELECT value FROM app_settings WHERE key = 'enable_subgrades'");
+      const isSubgradesEnabled = setting?.value === 'true';
+      setEnableSubgrades(isSubgradesEnabled);
+
+      const [student, gradeList, sectionsData, enrollment] = await Promise.all([
         db.get('SELECT * FROM students WHERE id = ?', [studentId]),
         db.all('SELECT id, label FROM grades ORDER BY id'),
+        isSubgradesEnabled ? db.all('SELECT id, grade_id, label FROM class_sections ORDER BY label') : Promise.resolve([]),
         db.get(
-          'SELECT grade_id FROM student_year_enrollment WHERE student_id = ? AND year_id = ?',
+          'SELECT grade_id, class_section_id FROM student_year_enrollment WHERE student_id = ? AND year_id = ?',
           [studentId, yearId]
         ),
       ]);
@@ -72,10 +82,12 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
           guardian_contact_2: student.guardian_contact_2 || '',
           guardian_email: student.guardian_email || '',
           grade_id: enrollment ? String(enrollment.grade_id) : '',
+          class_section_id: enrollment && enrollment.class_section_id ? String(enrollment.class_section_id) : '',
           notes: student.notes || '',
         });
       }
       setGrades(gradeList);
+      setClassSections(sectionsData);
     } catch (err: any) {
       console.error(err);
       setError('Failed to load learner data');
@@ -84,10 +96,34 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
     }
   };
 
+  const handleAddSection = async () => {
+    if (!newSectionLabel.trim() || !form.grade_id) return;
+    try {
+      const result = await db.run(
+        'INSERT INTO class_sections (grade_id, label) VALUES (?, ?)',
+        [form.grade_id, newSectionLabel.trim()]
+      );
+      const newSection = {
+        id: result.lastInsertRowid || result.lastID,
+        grade_id: Number(form.grade_id),
+        label: newSectionLabel.trim()
+      };
+      setClassSections([...classSections, newSection]);
+      setForm({ ...form, class_section_id: String(newSection.id) });
+      setNewSectionLabel('');
+    } catch (err) {
+      console.error('Error adding section:', err);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.full_name || !form.guardian_name || !form.guardian_contact) {
       setError('Please fill in all required fields');
+      return;
+    }
+    if (enableSubgrades && form.grade_id && !form.class_section_id) {
+      setError('Please select a class section');
       return;
     }
 
@@ -126,15 +162,18 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
           [studentId, yearId]
         );
 
+        const classSectionValue = enableSubgrades && form.class_section_id ? Number(form.class_section_id) : null;
+
         if (existingEnrollment) {
-          await db.run('UPDATE student_year_enrollment SET grade_id = ? WHERE id = ?', [
+          await db.run('UPDATE student_year_enrollment SET grade_id = ?, class_section_id = ? WHERE id = ?', [
             form.grade_id,
+            classSectionValue,
             existingEnrollment.id,
           ]);
         } else {
           await db.run(
-            'INSERT INTO student_year_enrollment (student_id, year_id, grade_id) VALUES (?, ?, ?)',
-            [studentId, yearId, form.grade_id]
+            'INSERT INTO student_year_enrollment (student_id, year_id, grade_id, class_section_id) VALUES (?, ?, ?, ?)',
+            [studentId, yearId, form.grade_id, classSectionValue]
           );
         }
       }
@@ -244,37 +283,68 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
                   />
                 </div>
                 <div className="wizard-field">
-                  <label>Gender</label>
-                  <select
-                    className="input-default"
-                    value={form.gender}
-                    onChange={e => setForm({ ...form, gender: e.target.value })}
-                  >
-                    <option value="">Select gender</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                  </select>
+                  <ChipSelector
+                    label="Gender"
+                    value={form.gender || null}
+                    onChange={value => setForm({ ...form, gender: (value as string) || '' })}
+                    options={[
+                      { value: 'male', label: 'Male' },
+                      { value: 'female', label: 'Female' },
+                      { value: 'other', label: 'Other' },
+                    ]}
+                  />
                 </div>
               </div>
 
               <div className="wizard-field">
-                <label>
-                  Grade Level <span className="required">*</span>
-                </label>
-                <select
-                  className="input-default"
-                  value={form.grade_id}
-                  onChange={e => setForm({ ...form, grade_id: e.target.value })}
-                >
-                  <option value="">Select grade</option>
-                  {grades.map(g => (
-                    <option key={g.id} value={g.id}>
-                      {g.label}
-                    </option>
-                  ))}
-                </select>
+                <ChipSelector
+                  label="Grade Level *"
+                  value={form.grade_id ? Number(form.grade_id) : null}
+                  onChange={value => setForm({ ...form, grade_id: value ? String(value) : '', class_section_id: '' })}
+                  options={grades.map(g => ({ value: g.id, label: g.label }))}
+                />
               </div>
+
+              {enableSubgrades && form.grade_id && (
+                <div className="wizard-field">
+                  <label>Class Section / Subgrade <span className="required">*</span></label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <select
+                      className="input-default"
+                      value={form.class_section_id}
+                      onChange={e => setForm({ ...form, class_section_id: e.target.value })}
+                      style={{ flex: 1 }}
+                    >
+                      <option value="">Select Class Section</option>
+                      {classSections
+                        .filter(s => s.grade_id === Number(form.grade_id))
+                        .map(section => (
+                          <option key={section.id} value={section.id}>
+                            {section.label}
+                          </option>
+                        ))}
+                    </select>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <input
+                        type="text"
+                        className="input-default"
+                        style={{ width: '120px' }}
+                        placeholder="New (e.g. A)"
+                        value={newSectionLabel}
+                        onChange={e => setNewSectionLabel(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddSection}
+                        className="btn btn-outline"
+                        style={{ padding: '0 12px' }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <h3
                 className="text-display"

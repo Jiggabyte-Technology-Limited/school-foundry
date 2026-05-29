@@ -73,6 +73,20 @@ export interface StudentStatementData {
   }>;
 }
 
+export interface ClassListData {
+  schoolName: string;
+  schoolLogo?: string;
+  schoolContact?: string;
+  title: string;
+  academicYear: string;
+  generatedAt: string;
+  students: Array<{
+    studentNumber?: string;
+    fullName: string;
+    gender?: string;
+  }>;
+}
+
 export interface OverviewData {
   schoolName: string;
   schoolLogo?: string;

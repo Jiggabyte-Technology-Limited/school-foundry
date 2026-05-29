@@ -1,9 +1,11 @@
 import React, { JSX } from 'react';
 import { useAuth } from '../lib/auth-context';
+import schoolfoundryLogo from '../../public/img/schoolfoundry-icon.svg';
 
 interface SidebarProps {
   activeView: string;
   onViewChange: (view: string) => void;
+  onGuideClick: () => void;
   onSettingsClick: () => void;
   onLogout: () => void;
 }
@@ -19,6 +21,7 @@ interface NavItem {
 
 const allNavItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'grid', roles: ['admin', 'user'] },
+  { id: 'class-lists', label: 'Class Lists', icon: 'users', roles: ['admin', 'user'] },
   { id: 'accounts', label: 'Learner Accounts', icon: 'file-text', roles: ['admin', 'user'] },
   { id: 'payments', label: 'Payments', icon: 'credit-card', roles: ['admin', 'user'] },
   { id: 'fees', label: 'School Fees', icon: 'dollar', roles: ['admin'] },
@@ -74,11 +77,20 @@ const iconPaths: Record<string, JSX.Element> = {
       <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
     </>
   ),
+  book: (
+    <>
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15Z" />
+      <path d="M8 6h8" />
+      <path d="M8 10h8" />
+    </>
+  ),
 };
 
 const Sidebar: React.FC<SidebarProps> = ({
   activeView,
   onViewChange,
+  onGuideClick,
   onSettingsClick,
   onLogout,
 }) => {
@@ -91,7 +103,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div className="sidebar-header">
         <div className="sidebar-logo">
           <img
-            src="./img/schoolfoundry-icon.svg"
+            src={schoolfoundryLogo}
             alt="SchoolFoundry Logo"
             style={{ width: '35.2px', height: '35.2px' }}
           />
@@ -135,6 +147,27 @@ const Sidebar: React.FC<SidebarProps> = ({
         ))}
 
         <div style={{ margin: '12px 16px', borderTop: '1px solid var(--border)', opacity: 0.3 }} />
+
+        <button
+          className="sidebar-nav-item"
+          onClick={onGuideClick}
+          style={{ color: 'var(--text-secondary)' }}
+        >
+          <svg
+            className="sidebar-icon"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {iconPaths.book}
+          </svg>
+          <span className="text-display">User Guide</span>
+        </button>
 
         <button
           className="sidebar-nav-item"

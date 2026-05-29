@@ -13,6 +13,6 @@ export function getBalanceColor(cents: number): string {
 }
 
 export function formatCurrencyCents(cents: number): string {
-  const prefix = cents === 0 ? '' : '+';
+  const prefix = cents === 0 ? '' : cents > 0 ? '-' : '+';
   return `${prefix}${getCurrencySymbol()}${Math.abs(cents / 100).toFixed(2)}`;
 }

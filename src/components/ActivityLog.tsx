@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
+import ChipSelector from './ui/ChipSelector';
 
 interface LogEntry {
   id: number;
@@ -210,24 +211,14 @@ const ActivityLog: React.FC = () => {
             />
           </div>
 
-          <div className="flex-col" style={{ minWidth: 150 }}>
-            <label className="settings-label" style={{ fontWeight: 600, color: '#3d4a45' }}>
-              Action
-            </label>
-            <select
-              className="input-default"
-              value={actionFilter}
-              onChange={e => setActionFilter(e.target.value)}
-              style={{ borderRadius: 8, border: '1px solid #cbd5d1' }}
-            >
-              <option value="">All Actions</option>
-              {actions.map(a => (
-                <option key={a} value={a}>
-                  {formatAction(a)}
-                </option>
-              ))}
-            </select>
-          </div>
+          <ChipSelector
+            label="Action"
+            value={actionFilter || null}
+            onChange={value => setActionFilter((value as string) || '')}
+            options={actions.map(a => ({ value: a, label: formatAction(a) }))}
+            allowAll
+            allLabel="All Actions"
+          />
 
           <div className="flex-col" style={{ minWidth: 140 }}>
             <label className="settings-label" style={{ fontWeight: 600, color: '#3d4a45' }}>

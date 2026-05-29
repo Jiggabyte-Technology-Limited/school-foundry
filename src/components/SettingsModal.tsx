@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import bcryptjs from 'bcryptjs';
 import { db } from '../lib/db-client';
 import { useToast } from './Toast';
+import {
+  DEFAULT_NEW_USER,
+  hasUnsavedSettingsChanges,
+} from './settingsModalState.mjs';
+import { getDangerZoneConfirmationPhrase } from '../lib/app-maintenance.mjs';
 
 interface SettingsModalProps {
   user: { id: number; username: string; role: string };
@@ -10,6 +15,17 @@ interface SettingsModalProps {
   onClose: () => void;
   onLogoUpdate?: (logo: string | null) => void;
 }
+
+type SchoolSettingsSnapshot = {
+  schoolName: string;
+  schoolAddress: string;
+  schoolPhone: string;
+  schoolEmail: string;
+  voidKey: string;
+  schoolFeesTerms: string;
+  enableSubgrades: boolean;
+  schoolLogo: string | null;
+};
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
   user,
@@ -38,9 +54,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [showAddUser, setShowAddUser] = useState(false);
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
   const [schoolFeesTerms, setSchoolFeesTerms] = useState('');
-  const [activeTab, setActiveTab] = useState<'school' | 'users' | 'profile'>(
+  const [enableSubgrades, setEnableSubgrades] = useState(false);
+  const [activeTab, setActiveTab] = useState<'school' | 'users' | 'profile' | 'license' | 'danger'>(
     user.role === 'admin' ? 'school' : 'profile'
   );
+  const [schoolTab, setSchoolTab] = useState<'profile' | 'branding' | 'policies'>('profile');
+  const [licenseInfo, setLicenseInfo] = useState<{machineId: string, activationKey: string} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [profilePassword, setProfilePassword] = useState('');
   const [profileNewPassword, setProfileNewPassword] = useState('');
@@ -53,14 +72,177 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [userFullName, setUserFullName] = useState('');
   const [editableFullName, setEditableFullName] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [dangerActionLoading, setDangerActionLoading] = useState<'clear-database' | 'reset-app' | null>(null);
+  const [dangerMessage, setDangerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [clearDatabaseConfirm, setClearDatabaseConfirm] = useState('');
+  const [resetAppConfirm, setResetAppConfirm] = useState('');
+  const [suppressLeavePrompt, setSuppressLeavePrompt] = useState(false);
+  const savedSchoolSettingsRef = useRef<SchoolSettingsSnapshot | null>(null);
+  const userFormBaselineRef = useRef(DEFAULT_NEW_USER);
 
   const isAdmin = user.role === 'admin';
 
   useEffect(() => {
     loadSettings();
     loadUserProfile();
-    if (isAdmin) loadUsers();
+    if (isAdmin) {
+      loadUsers();
+      loadLicenseInfo();
+    }
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (activeTab === 'school') setSchoolTab('profile');
+  }, [activeTab]);
+
+  const currentSchoolSettings: SchoolSettingsSnapshot = {
+    schoolName: localSchoolName,
+    schoolAddress: localSchoolAddress,
+    schoolPhone: localSchoolPhone,
+    schoolEmail: localSchoolEmail,
+    voidKey,
+    schoolFeesTerms,
+    enableSubgrades,
+    schoolLogo,
+  };
+
+  const hasUnsavedChanges = hasUnsavedSettingsChanges({
+    school: {
+      current: currentSchoolSettings,
+      saved: savedSchoolSettingsRef.current,
+    },
+    profile: {
+      editableFullName,
+      savedFullName: userFullName,
+      password: profilePassword,
+      newPassword: profileNewPassword,
+      confirmPassword: profileConfirmPassword,
+    },
+    userForm: {
+      current: newUser,
+      baseline: userFormBaselineRef.current,
+      isOpen: showAddUser,
+    },
+    isSavingAny: saving || savingUser || profileSaving || savingName,
+    hasLoadedSettings: settingsLoaded,
+    hasLoadedProfile: profileLoaded,
+  });
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (suppressLeavePrompt || !hasUnsavedChanges) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const resetUserForm = () => {
+    userFormBaselineRef.current = DEFAULT_NEW_USER;
+    setNewUser(DEFAULT_NEW_USER);
+    setShowAddUser(false);
+  };
+
+  const openNewUserForm = () => {
+    userFormBaselineRef.current = DEFAULT_NEW_USER;
+    setNewUser(DEFAULT_NEW_USER);
+    setShowAddUser(true);
+  };
+
+  const openEditUserForm = (u: any) => {
+    const baseline = {
+      id: u.id,
+      full_name: u.full_name,
+      username: u.username,
+      password: '',
+      confirmPassword: '',
+      role: u.role === 'admin' ? 'admin' : 'user',
+    };
+
+    userFormBaselineRef.current = baseline;
+    setNewUser(baseline);
+    setShowAddUser(true);
+  };
+
+  const handleRequestClose = () => {
+    if (
+      hasUnsavedChanges &&
+      !window.confirm(
+        'You have unsaved changes. Click Cancel to stay in Settings and save them before leaving.'
+      )
+    ) {
+      return;
+    }
+
+    onClose();
+  };
+
+  const handleDangerAction = async (action: 'clear-database' | 'reset-app') => {
+    const requiredPhrase = getDangerZoneConfirmationPhrase(action);
+    const enteredPhrase = action === 'clear-database' ? clearDatabaseConfirm : resetAppConfirm;
+
+    if (enteredPhrase.trim() !== requiredPhrase) {
+      setDangerMessage({
+        type: 'error',
+        text: `Type ${requiredPhrase} exactly to enable this action.`,
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      action === 'clear-database'
+        ? 'Clear the database and restart the app? This removes all school data, users, payments, and settings.'
+        : 'Reset the app and restart it from scratch? This removes all data and clears the license too.'
+    );
+
+    if (!confirmed) return;
+
+    setDangerActionLoading(action);
+    setDangerMessage(null);
+    setSuppressLeavePrompt(true);
+
+    try {
+      const result =
+        action === 'clear-database' ? await window.api.clearDatabase() : await window.api.resetApp();
+
+      if (!result.success) {
+        setDangerMessage({
+          type: 'error',
+          text: result.error || 'The requested action could not be completed.',
+        });
+        setSuppressLeavePrompt(false);
+        return;
+      }
+
+      setDangerMessage({
+        type: 'success',
+        text:
+          action === 'clear-database'
+            ? 'Database cleared. The app will restart into a fresh setup flow.'
+            : 'App reset complete. The app will restart with license and data cleared.',
+      });
+    } finally {
+      setDangerActionLoading(null);
+    }
+  };
+
+  const loadLicenseInfo = async () => {
+    try {
+      const result = await window.api.getLicenseStatus();
+      const machineId = await window.api.getMachineId();
+      if (result.valid) {
+        setLicenseInfo({ machineId: machineId || 'Unknown', activationKey: result.activationKey || 'Unknown' });
+      } else {
+        setLicenseInfo({ machineId: machineId || 'Unknown', activationKey: 'Not Activated' });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const loadUserProfile = async () => {
     const userData = await db.get('SELECT full_name FROM users WHERE id = ?', [user.id]);
@@ -68,6 +250,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setUserFullName(userData.full_name || '');
       setEditableFullName(userData.full_name || '');
     }
+    setProfileLoaded(true);
   };
 
   const handleSaveFullName = async () => {
@@ -92,7 +275,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const loadSettings = async () => {
     const settings = await db.all(
-      "SELECT key, value FROM app_settings WHERE key IN ('school_logo', 'school_address', 'school_phone', 'school_email', 'void_key', 'school_fees_terms')"
+      "SELECT key, value FROM app_settings WHERE key IN ('school_logo', 'school_address', 'school_phone', 'school_email', 'void_key', 'school_fees_terms', 'enable_subgrades')"
     );
     settings.forEach(s => {
       if (s.key === 'school_logo') setSchoolLogo(s.value);
@@ -101,7 +284,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       if (s.key === 'school_email') setLocalSchoolEmail(s.value || '');
       if (s.key === 'void_key') setVoidKey(s.value || '1234');
       if (s.key === 'school_fees_terms') setSchoolFeesTerms(s.value || '');
+      if (s.key === 'enable_subgrades') setEnableSubgrades(s.value === 'true');
     });
+    savedSchoolSettingsRef.current = {
+      schoolName,
+      schoolAddress: settings.find(s => s.key === 'school_address')?.value || '',
+      schoolPhone: settings.find(s => s.key === 'school_phone')?.value || '',
+      schoolEmail: settings.find(s => s.key === 'school_email')?.value || '',
+      voidKey: settings.find(s => s.key === 'void_key')?.value || '1234',
+      schoolFeesTerms: settings.find(s => s.key === 'school_fees_terms')?.value || '',
+      enableSubgrades: settings.find(s => s.key === 'enable_subgrades')?.value === 'true',
+      schoolLogo: settings.find(s => s.key === 'school_logo')?.value || null,
+    };
+    setSettingsLoaded(true);
   };
 
   const loadUsers = async () => {
@@ -134,6 +329,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('school_fees_terms', ?)",
         [schoolFeesTerms]
       );
+      await db.run(
+        "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('enable_subgrades', ?)",
+        [enableSubgrades ? 'true' : 'false']
+      );
 
       onSchoolNameUpdate(localSchoolName);
       showToast('success', 'Settings Saved', 'School information has been updated.');
@@ -141,6 +340,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         'INSERT INTO activity_log (user_id, username, action, details) VALUES (?, ?, ?, ?)',
         [user.id, user.username, 'settings_update', 'Updated school profile information']
       );
+      savedSchoolSettingsRef.current = {
+        schoolName: localSchoolName,
+        schoolAddress: localSchoolAddress,
+        schoolPhone: localSchoolPhone,
+        schoolEmail: localSchoolEmail,
+        voidKey,
+        schoolFeesTerms,
+        enableSubgrades,
+        schoolLogo,
+      };
     } finally {
       setSaving(false);
     }
@@ -176,6 +385,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
       showToast('success', 'Logo Updated', 'School logo has been updated.');
       onLogoUpdate?.(base64);
+      savedSchoolSettingsRef.current = {
+        schoolName: localSchoolName,
+        schoolAddress: localSchoolAddress,
+        schoolPhone: localSchoolPhone,
+        schoolEmail: localSchoolEmail,
+        voidKey,
+        schoolFeesTerms,
+        enableSubgrades,
+        schoolLogo: base64,
+      };
     };
     reader.readAsDataURL(file);
   };
@@ -189,6 +408,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     );
     showToast('success', 'Logo Removed', 'School logo has been removed.');
     onLogoUpdate?.(null);
+    savedSchoolSettingsRef.current = {
+      schoolName: localSchoolName,
+      schoolAddress: localSchoolAddress,
+      schoolPhone: localSchoolPhone,
+      schoolEmail: localSchoolEmail,
+      voidKey,
+      schoolFeesTerms,
+      enableSubgrades,
+      schoolLogo: null,
+    };
   };
 
   const handleProfilePasswordChange = async () => {
@@ -321,15 +550,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         newUser.id ? 'User Updated' : 'User Created',
         `${newUser.full_name} has been ${newUser.id ? 'updated' : 'created'}.`
       );
-      setNewUser({
-        id: null,
-        full_name: '',
-        username: '',
-        password: '',
-        confirmPassword: '',
-        role: 'user',
-      });
-      setShowAddUser(false);
+      resetUserForm();
       loadUsers();
     } catch (err: any) {
       console.error('Error saving user:', err);
@@ -339,17 +560,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  const handleEditClick = (u: any) => {
-    setNewUser({
-      id: u.id,
-      full_name: u.full_name,
-      username: u.username,
-      password: '', // Don't show password, only update if provided
-      confirmPassword: '',
-      role: u.role === 'admin' ? 'admin' : 'user', // Normalize role
-    });
-    setShowAddUser(true);
-  };
+  const handleEditClick = openEditUserForm;
 
   const handleToggleUserStatus = async (
     userId: number,
@@ -481,13 +692,47 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               </svg>
             ),
           },
+          {
+            id: 'license' as const,
+            label: 'License',
+            icon: (
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+              </svg>
+            ),
+          },
+          {
+            id: 'danger' as const,
+            label: 'Danger Zone',
+            icon: (
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M12 9v4" />
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                <path d="M12 17h.01" />
+              </svg>
+            ),
+          },
         ]
       : []),
   ];
 
   return (
     <div
-      onClick={onClose}
+      onClick={handleRequestClose}
       style={{
         position: 'fixed',
         inset: 0,
@@ -533,42 +778,80 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               Configure your school profile and manage system access.
             </p>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '50%',
-              width: '36px',
-              height: '36px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: 'var(--text-secondary)',
-              transition: 'all 0.2s',
-            }}
-            onMouseOver={e => {
-              e.currentTarget.style.backgroundColor = 'var(--background)';
-              e.currentTarget.style.color = 'var(--text-primary)';
-            }}
-            onMouseOut={e => {
-              e.currentTarget.style.backgroundColor = 'var(--surface)';
-              e.currentTarget.style.color = 'var(--text-secondary)';
-            }}
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {activeTab === 'school' && isAdmin && (
+              <button
+                onClick={handleSaveSchoolInfo}
+                disabled={saving}
+                style={{
+                  padding: '10px 16px',
+                  backgroundColor: 'var(--primary)',
+                  color: 'white',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M19 21H5a2 2 0 0 1-2-2V7l4-4h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2Z" />
+                  <path d="M17 21v-8H7v8" />
+                  <path d="M7 3v5h8" />
+                </svg>
+                {saving ? 'Saving...' : 'Save School Info'}
+              </button>
+            )}
+            <button
+              onClick={handleRequestClose}
+              style={{
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: '50%',
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: 'var(--text-secondary)',
+                transition: 'all 0.2s',
+              }}
+              onMouseOver={e => {
+                e.currentTarget.style.backgroundColor = 'var(--background)';
+                e.currentTarget.style.color = 'var(--text-primary)';
+              }}
+              onMouseOut={e => {
+                e.currentTarget.style.backgroundColor = 'var(--surface)';
+                e.currentTarget.style.color = 'var(--text-secondary)';
+              }}
             >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', flex: 1, overflow: 'auto' }}>
@@ -593,7 +876,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   alignItems: 'center',
                   gap: '12px',
                   padding: '12px 16px',
-                  background: activeTab === tab.id ? 'var(--primary)' : 'transparent',
+                  background:
+                    activeTab === tab.id
+                      ? tab.id === 'danger'
+                        ? '#dc2626'
+                        : 'var(--primary)'
+                      : 'transparent',
                   border: 'none',
                   borderRadius: '12px',
                   cursor: 'pointer',
@@ -630,344 +918,298 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               backgroundColor: 'var(--surface)',
             }}
           >
-            {/* School Information Tab (Combined) */}
-            {activeTab === 'school' && !isAdmin && (
+            {activeTab === 'school' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                <div>
-                  <h3
-                    style={{
-                      fontSize: '18px',
-                      fontWeight: 700,
-                      color: 'var(--text-primary)',
-                      margin: '0 0 8px 0',
-                    }}
-                  >
-                    School Profile
-                  </h3>
-                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
-                    Contact an administrator to update school information.
-                  </p>
-                </div>
-                <div
-                  style={{
-                    backgroundColor: 'var(--background)',
-                    borderRadius: '12px',
-                    padding: '24px',
-                    border: '1px solid var(--border)',
-                  }}
-                >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div>
-                      <div
-                        style={{
-                          fontSize: '13px',
-                          color: 'var(--text-secondary)',
-                          marginBottom: '4px',
-                        }}
-                      >
-                        School Name
-                      </div>
-                      <div
-                        style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}
-                      >
-                        {localSchoolName || 'Not set'}
-                      </div>
-                    </div>
-                    <div>
-                      <div
-                        style={{
-                          fontSize: '13px',
-                          color: 'var(--text-secondary)',
-                          marginBottom: '4px',
-                        }}
-                      >
-                        Physical Address
-                      </div>
-                      <div
-                        style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}
-                      >
-                        {localSchoolAddress || 'Not set'}
-                      </div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                      <div>
-                        <div
-                          style={{
-                            fontSize: '13px',
-                            color: 'var(--text-secondary)',
-                            marginBottom: '4px',
-                          }}
-                        >
-                          Phone Number
-                        </div>
-                        <div
-                          style={{
-                            fontSize: '15px',
-                            fontWeight: 600,
-                            color: 'var(--text-primary)',
-                          }}
-                        >
-                          {localSchoolPhone || 'Not set'}
-                        </div>
-                      </div>
-                      <div>
-                        <div
-                          style={{
-                            fontSize: '13px',
-                            color: 'var(--text-secondary)',
-                            marginBottom: '4px',
-                          }}
-                        >
-                          Email Address
-                        </div>
-                        <div
-                          style={{
-                            fontSize: '15px',
-                            fontWeight: 600,
-                            color: 'var(--text-primary)',
-                          }}
-                        >
-                          {localSchoolEmail || 'Not set'}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            {activeTab === 'school' && isAdmin && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    gap: '48px',
-                  }}
-                >
-                  <div style={{ flex: 1, maxWidth: '450px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <div>
                     <h3
                       style={{
                         fontSize: '18px',
                         fontWeight: 700,
                         color: 'var(--text-primary)',
-                        margin: '0 0 24px 0',
+                        margin: '0 0 8px 0',
                       }}
                     >
-                      School Profile
+                      School Settings
                     </h3>
+                    <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
+                      Keep the school profile, branding, and policies in separate panels.
+                    </p>
+                  </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <label
+                  {isAdmin && (
+                    <div className="chip-list">
+                      <button
+                        type="button"
+                        onClick={() => setSchoolTab('profile')}
+                        className={`chip text-display ${schoolTab === 'profile' ? 'chip-active' : ''}`}
+                        style={{ border: 'none', cursor: 'pointer' }}
+                      >
+                        Profile
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSchoolTab('branding')}
+                        className={`chip text-display ${schoolTab === 'branding' ? 'chip-active' : ''}`}
+                        style={{ border: 'none', cursor: 'pointer' }}
+                      >
+                        Branding
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSchoolTab('policies')}
+                        className={`chip text-display ${schoolTab === 'policies' ? 'chip-active' : ''}`}
+                        style={{ border: 'none', cursor: 'pointer' }}
+                      >
+                        Policies
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {!isAdmin && (
+                  <div
+                    style={{
+                      backgroundColor: 'var(--background)',
+                      borderRadius: '12px',
+                      padding: '24px',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div>
+                        <div
                           style={{
-                            fontSize: '14px',
-                            fontWeight: 600,
-                            color: 'var(--text-primary)',
+                            fontSize: '13px',
+                            color: 'var(--text-secondary)',
+                            marginBottom: '4px',
                           }}
                         >
                           School Name
-                        </label>
-                        <input
-                          type="text"
-                          style={{
-                            padding: '12px 16px',
-                            fontSize: '15px',
-                            borderRadius: '8px',
-                            border: '1px solid var(--border)',
-                            backgroundColor: 'var(--background)',
-                            color: 'var(--text-primary)',
-                            outline: 'none',
-                          }}
-                          value={localSchoolName}
-                          onChange={e => setLocalSchoolName(e.target.value)}
-                          placeholder="e.g. Green Valley International"
-                        />
+                        </div>
+                        <div
+                          style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}
+                        >
+                          {localSchoolName || 'Not set'}
+                        </div>
                       </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <label
+                      <div>
+                        <div
                           style={{
-                            fontSize: '14px',
-                            fontWeight: 600,
-                            color: 'var(--text-primary)',
+                            fontSize: '13px',
+                            color: 'var(--text-secondary)',
+                            marginBottom: '4px',
                           }}
                         >
                           Physical Address
-                        </label>
-                        <textarea
-                          style={{
-                            padding: '12px 16px',
-                            fontSize: '15px',
-                            borderRadius: '8px',
-                            border: '1px solid var(--border)',
-                            backgroundColor: 'var(--background)',
-                            color: 'var(--text-primary)',
-                            outline: 'none',
-                            minHeight: '80px',
-                            resize: 'vertical',
-                          }}
-                          value={localSchoolAddress}
-                          onChange={e => setLocalSchoolAddress(e.target.value)}
-                          placeholder="Full school address..."
-                        />
+                        </div>
+                        <div
+                          style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}
+                        >
+                          {localSchoolAddress || 'Not set'}
+                        </div>
                       </div>
-
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          <label
+                        <div>
+                          <div
                             style={{
-                              fontSize: '14px',
-                              fontWeight: 600,
-                              color: 'var(--text-primary)',
+                              fontSize: '13px',
+                              color: 'var(--text-secondary)',
+                              marginBottom: '4px',
                             }}
                           >
                             Phone Number
-                          </label>
-                          <input
-                            type="text"
+                          </div>
+                          <div
                             style={{
-                              padding: '12px 16px',
                               fontSize: '15px',
-                              borderRadius: '8px',
-                              border: '1px solid var(--border)',
-                              backgroundColor: 'var(--background)',
-                              color: 'var(--text-primary)',
-                              outline: 'none',
-                            }}
-                            value={localSchoolPhone}
-                            onChange={e => setLocalSchoolPhone(e.target.value)}
-                            placeholder="+260..."
-                          />
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          <label
-                            style={{
-                              fontSize: '14px',
                               fontWeight: 600,
                               color: 'var(--text-primary)',
                             }}
                           >
-                            Email Address
-                          </label>
-                          <input
-                            type="email"
-                            style={{
-                              padding: '12px 16px',
-                              fontSize: '15px',
-                              borderRadius: '8px',
-                              border: '1px solid var(--border)',
-                              backgroundColor: 'var(--background)',
-                              color: 'var(--text-primary)',
-                              outline: 'none',
-                            }}
-                            value={localSchoolEmail}
-                            onChange={e => setLocalSchoolEmail(e.target.value)}
-                            placeholder="admin@school.com"
-                          />
+                            {localSchoolPhone || 'Not set'}
+                          </div>
                         </div>
-                      </div>
-
-                      {/* Void Key */}
-                      <div style={{ marginTop: '16px' }}>
-                        <label
-                          style={{
-                            display: 'block',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            marginBottom: '6px',
-                            color: 'var(--text-secondary)',
-                          }}
-                        >
-                          Void Key (for non-admin void authorization)
-                        </label>
-                        <input
-                          type="text"
-                          value={voidKey}
-                          onChange={e => setVoidKey(e.target.value)}
-                          className="input-default"
-                          style={{
-                            width: '100%',
-                            color: 'var(--text-primary)',
-                            outline: 'none',
-                          }}
-                          placeholder="Enter void key"
-                        />
-                      </div>
-
-                      {/* School Fees Terms and Conditions */}
-                      <div style={{ marginTop: '16px' }}>
-                        <label
-                          style={{
-                            display: 'block',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            marginBottom: '6px',
-                            color: 'var(--text-secondary)',
-                          }}
-                        >
-                          School Fees Terms and Conditions (appears on printed documents)
-                        </label>
-                        <textarea
-                          value={schoolFeesTerms}
-                          onChange={e => setSchoolFeesTerms(e.target.value)}
-                          rows={4}
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            fontSize: '14px',
-                            borderRadius: '8px',
-                            border: '1px solid var(--border)',
-                            backgroundColor: 'var(--background)',
-                            color: 'var(--text-primary)',
-                            outline: 'none',
-                            resize: 'vertical',
-                            fontFamily: 'inherit',
-                          }}
-                          placeholder="E.g., Fees are due by the first week of each term. Late payments will incur a 5% penalty..."
-                        />
-                      </div>
-
-                      <div style={{ marginTop: '12px' }}>
-                        <button
-                          onClick={handleSaveSchoolInfo}
-                          disabled={saving}
-                          style={{
-                            width: '100%',
-                            padding: '14px',
-                            backgroundColor: 'var(--primary)',
-                            color: 'white',
-                            borderRadius: '8px',
-                            fontSize: '15px',
-                            fontWeight: 700,
-                            border: 'none',
-                            cursor: 'pointer',
-                            transition: 'opacity 0.2s',
-                          }}
-                        >
-                          {saving ? 'Updating Profile...' : 'Save School Profile'}
-                        </button>
+                        <div>
+                          <div
+                            style={{
+                              fontSize: '13px',
+                              color: 'var(--text-secondary)',
+                              marginBottom: '4px',
+                            }}
+                          >
+                            Email Address
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '15px',
+                              fontWeight: 600,
+                              color: 'var(--text-primary)',
+                            }}
+                          >
+                            {localSchoolEmail || 'Not set'}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
+                )}
 
+                {isAdmin && schoolTab === 'profile' && (
                   <div
                     style={{
-                      width: '280px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '24px',
+                      backgroundColor: 'var(--background)',
+                      borderRadius: '12px',
+                      padding: '24px',
+                      border: '1px solid var(--border)',
                     }}
                   >
-                    <div>
-                      <h4
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            School Name
+                          </label>
+                          <input
+                            type="text"
+                            className="input-default"
+                            value={localSchoolName}
+                            onChange={e => setLocalSchoolName(e.target.value)}
+                            placeholder="e.g. Green Valley International"
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            Physical Address
+                          </label>
+                          <textarea
+                            className="input-default"
+                            value={localSchoolAddress}
+                            onChange={e => setLocalSchoolAddress(e.target.value)}
+                            placeholder="Full school address..."
+                            rows={4}
+                            style={{ resize: 'vertical' }}
+                          />
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                              Phone Number
+                            </label>
+                            <input
+                              type="text"
+                              className="input-default"
+                              value={localSchoolPhone}
+                              onChange={e => setLocalSchoolPhone(e.target.value)}
+                              placeholder="+260..."
+                            />
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                              Email Address
+                            </label>
+                            <input
+                              type="email"
+                              className="input-default"
+                              value={localSchoolEmail}
+                              onChange={e => setLocalSchoolEmail(e.target.value)}
+                              placeholder="admin@school.com"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div
                         style={{
-                          fontSize: '15px',
-                          fontWeight: 700,
-                          color: 'var(--text-primary)',
-                          margin: '0 0 12px 0',
+                          border: '1px solid var(--border)',
+                          borderRadius: '12px',
+                          padding: '20px',
+                          backgroundColor: 'white',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '12px',
                         }}
                       >
+                        <div
+                          style={{
+                            fontSize: '12px',
+                            color: 'var(--text-secondary)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Save on header, preview below
+                        </div>
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '12px',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            textAlign: 'center',
+                            minHeight: '160px',
+                          }}
+                        >
+                          {schoolLogo ? (
+                            <img
+                              src={schoolLogo}
+                              alt="Logo"
+                              style={{ width: '64px', height: '64px', objectFit: 'contain' }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: '64px',
+                                height: '64px',
+                                backgroundColor: '#f3f4f6',
+                                borderRadius: '8px',
+                              }}
+                            />
+                          )}
+                          <div>
+                            <div
+                              style={{
+                                fontSize: '14px',
+                                fontWeight: 800,
+                                color: '#111827',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: '180px',
+                              }}
+                            >
+                              {localSchoolName || 'School Name'}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#6b7280' }}>
+                              Financial Statement
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {isAdmin && schoolTab === 'branding' && (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 320px',
+                      gap: '24px',
+                      alignItems: 'start',
+                    }}
+                  >
+                    <div
+                      style={{
+                        backgroundColor: 'var(--background)',
+                        borderRadius: '12px',
+                        padding: '24px',
+                        border: '1px solid var(--border)',
+                      }}
+                    >
+                      <h4 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: 700 }}>
                         School Logo
                       </h4>
                       <input
@@ -987,9 +1229,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           flexDirection: 'column',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          backgroundColor: 'var(--background)',
+                          backgroundColor: 'var(--surface)',
                           cursor: 'pointer',
-                          minHeight: '160px',
+                          minHeight: '240px',
                         }}
                       >
                         {schoolLogo ? (
@@ -998,7 +1240,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             alt="Logo"
                             style={{
                               maxWidth: '100%',
-                              maxHeight: '120px',
+                              maxHeight: '180px',
                               objectFit: 'contain',
                               borderRadius: '8px',
                             }}
@@ -1111,7 +1353,109 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
                   </div>
-                </div>
+                )}
+
+                {isAdmin && schoolTab === 'policies' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                    <div
+                      style={{
+                        backgroundColor: 'var(--background)',
+                        borderRadius: '12px',
+                        padding: '24px',
+                        border: '1px solid var(--border)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            Void Key
+                          </label>
+                          <input
+                            type="text"
+                            value={voidKey}
+                            onChange={e => setVoidKey(e.target.value)}
+                            className="input-default"
+                            placeholder="Enter void key"
+                          />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                            Enable Class Subgrades
+                          </label>
+                          <label
+                            className="text-display"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              cursor: 'pointer',
+                              padding: '12px 14px',
+                              border: '1px solid var(--border)',
+                              borderRadius: '10px',
+                              backgroundColor: 'var(--surface)',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={enableSubgrades}
+                              onChange={e => setEnableSubgrades(e.target.checked)}
+                              style={{
+                                width: '18px',
+                                height: '18px',
+                                accentColor: 'var(--primary)',
+                                cursor: 'pointer',
+                              }}
+                            />
+                            <div>
+                              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                Enable Class Subgrades (Class Sections)
+                              </div>
+                              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 400, marginTop: '2px' }}>
+                                Use this if your school has multiple classes per grade, such as Grade 1A and Grade 1B.
+                              </div>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        backgroundColor: 'var(--background)',
+                        borderRadius: '12px',
+                        padding: '24px',
+                        border: '1px solid var(--border)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                        <label style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          School Fees Terms and Conditions
+                        </label>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                          These terms appear on printed documents.
+                        </div>
+                      </div>
+                      <textarea
+                        value={schoolFeesTerms}
+                        onChange={e => setSchoolFeesTerms(e.target.value)}
+                        rows={10}
+                        style={{
+                          width: '100%',
+                          padding: '12px 16px',
+                          fontSize: '14px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border)',
+                          backgroundColor: 'var(--surface)',
+                          color: 'var(--text-primary)',
+                          outline: 'none',
+                          resize: 'vertical',
+                          fontFamily: 'inherit',
+                        }}
+                        placeholder="E.g., Fees are due by the first week of each term. Late payments will incur a 5% penalty..."
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1392,26 +1736,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={() => {
                       if (showAddUser && newUser.id) {
                         // If we were editing, just reset and keep open for new user
-                        setNewUser({
-                          id: null,
-                          full_name: '',
-                          username: '',
-                          password: '',
-                          confirmPassword: '',
-                          role: 'user',
-                        });
+                        openNewUserForm();
+                      } else if (showAddUser) {
+                        resetUserForm();
                       } else {
-                        // Standard toggle
-                        if (showAddUser)
-                          setNewUser({
-                            id: null,
-                            full_name: '',
-                            username: '',
-                            password: '',
-                            confirmPassword: '',
-                            role: 'user',
-                          });
-                        setShowAddUser(!showAddUser);
+                        openNewUserForm();
                       }
                     }}
                     disabled={savingUser}
@@ -1622,15 +1951,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       {newUser.id && (
                         <button
                           onClick={() => {
-                            setNewUser({
-                              id: null,
-                              full_name: '',
-                              username: '',
-                              password: '',
-                              confirmPassword: '',
-                              role: 'user',
-                            });
-                            setShowAddUser(false);
+                            resetUserForm();
                           }}
                           disabled={savingUser}
                           style={{
@@ -1924,6 +2245,273 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            )}
+            {activeTab === 'license' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div>
+                  <h3
+                    style={{
+                      fontSize: '18px',
+                      fontWeight: 700,
+                      color: 'var(--text-primary)',
+                      margin: '0 0 8px 0',
+                    }}
+                  >
+                    License Details
+                  </h3>
+                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
+                    View your machine hardware ID and activation status.
+                  </p>
+                </div>
+                <div
+                  style={{
+                    backgroundColor: 'var(--background)',
+                    borderRadius: '12px',
+                    padding: '24px',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <div
+                        style={{
+                          fontSize: '13px',
+                          color: 'var(--text-secondary)',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        Status
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '15px',
+                          fontWeight: 700,
+                          color: '#10b981',
+                        }}
+                      >
+                        Lifetime License (Activated)
+                      </div>
+                    </div>
+                    <div>
+                      <div
+                        style={{
+                          fontSize: '13px',
+                          color: 'var(--text-secondary)',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        Machine ID
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '15px',
+                          fontWeight: 600,
+                          color: 'var(--text-primary)',
+                          fontFamily: 'var(--font-mono)'
+                        }}
+                      >
+                        {licenseInfo?.machineId || 'Loading...'}
+                      </div>
+                    </div>
+                    <div>
+                      <div
+                        style={{
+                          fontSize: '13px',
+                          color: 'var(--text-secondary)',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        Activation Key
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '15px',
+                          fontWeight: 600,
+                          color: 'var(--text-primary)',
+                          fontFamily: 'var(--font-mono)'
+                        }}
+                      >
+                        {licenseInfo?.activationKey || 'Loading...'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {activeTab === 'danger' && isAdmin && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div>
+                  <h3
+                    style={{
+                      fontSize: '18px',
+                      fontWeight: 800,
+                      color: '#b91c1c',
+                      margin: '0 0 8px 0',
+                    }}
+                  >
+                    Danger Zone
+                  </h3>
+                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
+                    These actions are permanent and will restart the app after completion.
+                  </p>
+                </div>
+
+                {dangerMessage && (
+                  <div
+                    style={{
+                      padding: '12px 16px',
+                      borderRadius: '10px',
+                      border: dangerMessage.type === 'success' ? '1px solid #bbf7d0' : '1px solid #fecaca',
+                      backgroundColor: dangerMessage.type === 'success' ? '#f0fdf4' : '#fef2f2',
+                      color: dangerMessage.type === 'success' ? '#166534' : '#991b1b',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {dangerMessage.text}
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    border: '1px solid #ef4444',
+                    borderRadius: '16px',
+                    backgroundColor: '#fff7f7',
+                    padding: '24px',
+                    display: 'grid',
+                    gap: '20px',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: '16px',
+                      flexWrap: 'wrap',
+                      alignItems: 'flex-start',
+                    }}
+                  >
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#b91c1c' }}>
+                        Clear Database
+                      </h4>
+                      <p style={{ margin: '6px 0 0', color: '#7f1d1d', maxWidth: '640px' }}>
+                        Deletes the local database file and restarts the app. All learners, payments,
+                        fee structures, user accounts, school settings, and activity logs are removed.
+                        The license file stays in place.
+                      </p>
+                    </div>
+                    <div
+                      style={{
+                        minWidth: '320px',
+                        flex: '1 1 320px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                      }}
+                    >
+                      <label style={{ fontSize: '13px', fontWeight: 700, color: '#7f1d1d' }}>
+                        Type {getDangerZoneConfirmationPhrase('clear-database')} to enable
+                      </label>
+                      <input
+                        className="input-default"
+                        value={clearDatabaseConfirm}
+                        onChange={e => setClearDatabaseConfirm(e.target.value)}
+                        placeholder="CLEAR DATABASE"
+                        style={{
+                          borderColor: '#fca5a5',
+                          backgroundColor: 'white',
+                          color: 'var(--text-primary)',
+                        }}
+                      />
+                      <button
+                        className="btn btn-danger"
+                        disabled={
+                          dangerActionLoading !== null ||
+                          clearDatabaseConfirm.trim() !== getDangerZoneConfirmationPhrase('clear-database')
+                        }
+                        onClick={() => handleDangerAction('clear-database')}
+                        style={{
+                          width: '100%',
+                          opacity:
+                            dangerActionLoading !== null ||
+                            clearDatabaseConfirm.trim() !== getDangerZoneConfirmationPhrase('clear-database')
+                              ? 0.6
+                              : 1,
+                        }}
+                      >
+                        {dangerActionLoading === 'clear-database'
+                          ? 'Clearing...'
+                          : 'Clear Database'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ borderTop: '1px solid #fca5a5' }} />
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: '16px',
+                      flexWrap: 'wrap',
+                      alignItems: 'flex-start',
+                    }}
+                  >
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#b91c1c' }}>
+                        Reset App
+                      </h4>
+                      <p style={{ margin: '6px 0 0', color: '#7f1d1d', maxWidth: '640px' }}>
+                        Clears the database, removes the license file, removes generated print output,
+                        and restarts the app so it behaves like a first launch.
+                      </p>
+                    </div>
+                    <div
+                      style={{
+                        minWidth: '320px',
+                        flex: '1 1 320px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                      }}
+                    >
+                      <label style={{ fontSize: '13px', fontWeight: 700, color: '#7f1d1d' }}>
+                        Type {getDangerZoneConfirmationPhrase('reset-app')} to enable
+                      </label>
+                      <input
+                        className="input-default"
+                        value={resetAppConfirm}
+                        onChange={e => setResetAppConfirm(e.target.value)}
+                        placeholder="RESET APP"
+                        style={{
+                          borderColor: '#fca5a5',
+                          backgroundColor: 'white',
+                          color: 'var(--text-primary)',
+                        }}
+                      />
+                      <button
+                        className="btn btn-danger"
+                        disabled={
+                          dangerActionLoading !== null ||
+                          resetAppConfirm.trim() !== getDangerZoneConfirmationPhrase('reset-app')
+                        }
+                        onClick={() => handleDangerAction('reset-app')}
+                        style={{
+                          width: '100%',
+                          opacity:
+                            dangerActionLoading !== null ||
+                            resetAppConfirm.trim() !== getDangerZoneConfirmationPhrase('reset-app')
+                              ? 0.6
+                              : 1,
+                        }}
+                      >
+                        {dangerActionLoading === 'reset-app' ? 'Resetting...' : 'Reset App'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

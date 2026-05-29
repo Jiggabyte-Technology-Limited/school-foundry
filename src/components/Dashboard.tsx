@@ -3,6 +3,7 @@ import { db } from '../lib/db-client';
 import PaymentWizard from './PaymentWizard';
 import StudentWizard from './StudentWizard';
 import SynthetixCard from './ui/SynthetixCard';
+import PaymentMethodToggle, { PaymentMethod } from './ui/PaymentMethodToggle';
 import Receipt from './Receipt';
 import StudentStatementPreview from './StudentStatementPreview';
 import { getCurrencySymbol } from '../lib/currency';
@@ -59,9 +60,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
   const [selectedStudentForPayment, setSelectedStudentForPayment] = useState<any>(null);
+  const [paymentSelectionMode, setPaymentSelectionMode] = useState<'search' | 'actions' | 'record'>(
+    'search'
+  );
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentYear, setPaymentYear] = useState<number | null>(null);
   const [paymentTerm, setPaymentTerm] = useState<number | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [years, setYears] = useState<any[]>([]);
   const [recordingPayment, setRecordingPayment] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<any>(null);
@@ -104,12 +109,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
       const currentYear = await db.get('SELECT id FROM academic_years ORDER BY label DESC LIMIT 1');
       const [studentList, yearList] = await Promise.all([
         db.all(
-          `SELECT s.id, s.full_name, g.label as grade_label, sye.grade_id, s.is_active,
+          `SELECT s.id, s.full_name,
+                  CASE
+                    WHEN cs.label IS NULL OR cs.label = '' THEN g.label
+                    ELSE g.label || ' - ' || cs.label
+                  END as grade_label,
+                  sye.grade_id, s.is_active,
           COALESCE((SELECT SUM(sf.amount_cents) FROM student_fees sf JOIN fee_structure fs ON sf.fee_structure_id = fs.id WHERE sf.student_id = s.id AND fs.year_id = ?), 0) -
           COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
           FROM students s
           LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
           LEFT JOIN grades g ON sye.grade_id = g.id
+          LEFT JOIN class_sections cs ON sye.class_section_id = cs.id
           WHERE s.is_active = 1
           ORDER BY s.full_name`,
           [currentYear?.id, currentYear?.id, currentYear?.id]
@@ -166,7 +177,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
   const viewStatement = async (student: any) => {
     if (!paymentYear) return;
     setStatementLoading(true);
-    setShowStatementPreview(true);
+    setShowStatementPreview(false);
     try {
       const [payments, fees] = await Promise.all([
         db.all(
@@ -201,11 +212,24 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
         balance,
         generatedAt: new Date().toLocaleDateString(),
       });
+      setShowStatementPreview(true);
     } catch (err: any) {
       console.error('Error loading statement:', err);
+      setShowStatementPreview(true);
     } finally {
       setStatementLoading(false);
     }
+  };
+
+  const resetPaymentSelection = () => {
+    setSelectedStudentForPayment(null);
+    setPaymentSelectionMode('search');
+    setStudentSearchQuery('');
+    setShowStudentDropdown(false);
+    setPaymentAmount('');
+    setPaymentTerm(null);
+    setPaymentMethod('cash');
+    setPaymentError('');
   };
 
   // Helper to find oldest term with outstanding balance
@@ -291,7 +315,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
           enrollment.grade_id,
           receiptNumber,
           amountCents,
-          'cash',
+          paymentMethod,
           1,
         ]
       );
@@ -329,9 +353,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
       }
 
       setSelectedStudentForPayment(null);
+      setPaymentSelectionMode('search');
       setStudentSearchQuery('');
       setPaymentAmount('');
       setPaymentTerm(null);
+      setPaymentMethod('cash');
       fetchDashboardData();
       loadStudentsAndYears(); // Reload students with updated balances
     } catch (err: any) {
@@ -886,7 +912,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
         }}
       >
         <h3 className="mb-4" style={{ color: 'white' }}>
-          Record Payment
+          Search Learner
         </h3>
 
         {!selectedStudentForPayment ? (
@@ -933,8 +959,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
                     key={s.id}
                     onClick={async () => {
                       setSelectedStudentForPayment(s);
+                      setPaymentSelectionMode('actions');
                       setShowStudentDropdown(false);
                       setStudentSearchQuery('');
+                      setPaymentAmount('');
+                      setPaymentError('');
 
                       // Auto-determine payment term: oldest term with outstanding balance
                       if (paymentYear) {
@@ -986,14 +1015,43 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center',
+                alignItems: 'flex-start',
+                gap: '16px',
                 marginBottom: '16px',
+                width: '100%',
               }}
             >
-              <div>
-                <div style={{ fontSize: '12px', opacity: 0.8 }}>Recording payment for</div>
-                <div style={{ fontSize: '20px', fontWeight: 700 }}>
-                  {selectedStudentForPayment.full_name}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                <div style={{ fontSize: '12px', opacity: 0.8 }}>Learner selected</div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: '12px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ fontSize: '20px', fontWeight: 700 }}>
+                    {selectedStudentForPayment.full_name}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      padding: '4px 10px',
+                      borderRadius: '999px',
+                      background: 'rgba(255,255,255,0.2)',
+                      border: '1px solid rgba(255,255,255,0.25)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Balance:{' '}
+                    {selectedStudentForPayment.balance > 0
+                      ? `-${getCurrencySymbol()}${Math.abs(selectedStudentForPayment.balance / 100).toFixed(2)}`
+                      : selectedStudentForPayment.balance < 0
+                        ? `+${getCurrencySymbol()}${Math.abs(selectedStudentForPayment.balance / 100).toFixed(2)}`
+                        : `${getCurrencySymbol()}0.00`}
+                  </div>
                 </div>
                 <div style={{ fontSize: '13px', opacity: 0.8 }}>
                   {selectedStudentForPayment.grade_label}
@@ -1001,206 +1059,246 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedStudentForPayment(null);
-                  setPaymentAmount('');
-                  setPaymentTerm(null);
-                }}
+                onClick={() => resetPaymentSelection()}
                 style={{
-                  background: 'rgba(255,255,255,0.2)',
-                  border: 'none',
-                  color: 'white',
+                  background: 'white',
+                  border: '1px solid #fed7aa',
+                  color: 'var(--primary)',
                   cursor: 'pointer',
                   fontSize: '14px',
                   padding: '8px 16px',
                   borderRadius: '8px',
-                }}
-              >
-                Change Learner
-              </button>
-              <button
-                type="button"
-                onClick={() => onViewStatement?.(selectedStudentForPayment.id)}
-                style={{
-                  background: 'rgba(255,255,255,0.2)',
-                  border: 'none',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                }}
-              >
-                View Statement
-              </button>
-            </div>
-
-            <div
-              style={{
-                background: 'rgba(255,255,255,0.95)',
-                borderRadius: '8px',
-                padding: '12px 16px',
-                marginBottom: '16px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                color: '#1f2937',
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontSize: '11px',
-                    color: '#6b7280',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                  }}
-                >
-                  Current Balance
-                </div>
-                <div
-                  style={{
-                    fontSize: '22px',
-                    fontWeight: 700,
-                    color: selectedStudentForPayment.balance > 0 ? '#dc2626' : '#059669',
-                  }}
-                >
-                  {selectedStudentForPayment.balance > 0
-                    ? `-${getCurrencySymbol()}${Math.abs(selectedStudentForPayment.balance / 100).toFixed(2)}`
-                    : selectedStudentForPayment.balance < 0
-                      ? `+${getCurrencySymbol()}${Math.abs(selectedStudentForPayment.balance / 100).toFixed(2)}`
-                      : `${getCurrencySymbol()}0.00`}
-                </div>
-              </div>
-              <div
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  fontSize: '12px',
                   fontWeight: 700,
-                  textTransform: 'uppercase',
-                  backgroundColor: selectedStudentForPayment.balance > 0 ? '#FEE2E2' : '#D1FAE5',
-                  color: selectedStudentForPayment.balance > 0 ? '#991B1B' : '#065F46',
+                  flexShrink: 0,
                 }}
               >
-                {selectedStudentForPayment.balance > 0 ? 'Owing' : 'Paid'}
-              </div>
+                Clear
+              </button>
             </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label
-                  style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}
-                >
-                  YEAR
-                </label>
-                <select
-                  className="input-default"
-                  value={paymentYear || ''}
-                  onChange={async e => {
-                    const newYear = Number(e.target.value);
-                    setPaymentYear(newYear);
-                    // Auto-set payment term for selected student
-                    if (selectedStudentForPayment) {
-                      const termId = await findOldestOutstandingTerm(
-                        selectedStudentForPayment.id,
-                        newYear
-                      );
-                      setPaymentTerm(termId);
-                    } else {
-                      setPaymentTerm(null);
-                    }
+            <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onViewStatement?.(selectedStudentForPayment.id);
+                    resetPaymentSelection();
                   }}
-                  style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
-                >
-                  {years.map(y => (
-                    <option key={y.id} value={y.id}>
-                      {y.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label
-                  style={{ fontSize: '11px', opacity: 0.8, display: 'block', marginBottom: '4px' }}
-                >
-                  AMOUNT ($)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  className="input-default"
-                  value={paymentAmount}
-                  onChange={e => setPaymentAmount(e.target.value)}
-                  placeholder="0.00"
-                  autoFocus
                   style={{
                     background: 'white',
-                    color: '#1f2937',
+                    border: '1px solid #fed7aa',
+                    color: 'var(--primary)',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
                     fontWeight: 700,
-                    fontSize: '16px',
-                    border: '2px solid #1f2937',
                   }}
-                />
-                {selectedStudentForPayment.balance > 0 && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPaymentAmount(Math.abs(selectedStudentForPayment.balance / 100).toFixed(2))
-                    }
+                >
+                  View Account
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentSelectionMode('record')}
+                  style={{
+                    background: 'white',
+                    border: '1px solid #fed7aa',
+                    color: 'var(--primary)',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                  }}
+                >
+                  Record Payment
+                </button>
+              </div>
+
+            {paymentSelectionMode === 'record' && (
+              <div style={{ marginTop: '18px' }}>
+                <div
+                  style={{
+                    background: 'rgba(255,255,255,0.95)',
+                    borderRadius: '8px',
+                    padding: '12px 16px',
+                    marginBottom: '16px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    color: '#1f2937',
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        color: '#6b7280',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                      }}
+                    >
+                      Current Balance
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '22px',
+                        fontWeight: 700,
+                        color: selectedStudentForPayment.balance > 0 ? '#dc2626' : '#059669',
+                      }}
+                    >
+                      {selectedStudentForPayment.balance > 0
+                        ? `-${getCurrencySymbol()}${Math.abs(selectedStudentForPayment.balance / 100).toFixed(2)}`
+                        : selectedStudentForPayment.balance < 0
+                          ? `+${getCurrencySymbol()}${Math.abs(selectedStudentForPayment.balance / 100).toFixed(2)}`
+                          : `${getCurrencySymbol()}0.00`}
+                    </div>
+                  </div>
+                  <div
                     style={{
-                      marginTop: '8px',
                       padding: '6px 12px',
-                      fontSize: '12px',
-                      backgroundColor: '#FEF3C7',
-                      color: '#92400E',
-                      border: '1px solid #F59E0B',
                       borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                      width: '100%',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      backgroundColor: selectedStudentForPayment.balance > 0 ? '#FEE2E2' : '#D1FAE5',
+                      color: selectedStudentForPayment.balance > 0 ? '#991B1B' : '#065F46',
                     }}
                   >
-                    Pay Balance (-${getCurrencySymbol()}$
-                    {Math.abs(selectedStudentForPayment.balance / 100).toFixed(2)})
-                  </button>
-                )}
-              </div>
-            </div>
+                    {selectedStudentForPayment.balance > 0 ? 'Owing' : 'Paid'}
+                  </div>
+                </div>
 
-            {paymentError && (
-              <div
-                style={{
-                  marginTop: '12px',
-                  padding: '12px',
-                  backgroundColor: '#FEE2E2',
-                  border: '1px solid #FCA5A5',
-                  borderRadius: '8px',
-                  color: '#991B1B',
-                  fontSize: '14px',
-                }}
-              >
-                {paymentError}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label
+                      style={{
+                        fontSize: '11px',
+                        opacity: 0.8,
+                        display: 'block',
+                        marginBottom: '4px',
+                      }}
+                    >
+                      YEAR
+                    </label>
+                    <select
+                      className="input-default"
+                      value={paymentYear || ''}
+                      onChange={async e => {
+                        const newYear = Number(e.target.value);
+                        setPaymentYear(newYear);
+                        // Auto-set payment term for selected student
+                        if (selectedStudentForPayment) {
+                          const termId = await findOldestOutstandingTerm(
+                            selectedStudentForPayment.id,
+                            newYear
+                          );
+                          setPaymentTerm(termId);
+                        } else {
+                          setPaymentTerm(null);
+                        }
+                      }}
+                      style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
+                    >
+                      {years.map(y => (
+                        <option key={y.id} value={y.id}>
+                          {y.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      style={{
+                        fontSize: '11px',
+                        opacity: 0.8,
+                        display: 'block',
+                        marginBottom: '4px',
+                      }}
+                    >
+                      AMOUNT ($)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      className="input-default"
+                      value={paymentAmount}
+                      onChange={e => setPaymentAmount(e.target.value)}
+                      placeholder="0.00"
+                      autoFocus
+                      style={{
+                        background: 'white',
+                        color: '#1f2937',
+                        fontWeight: 700,
+                        fontSize: '16px',
+                        border: '2px solid #1f2937',
+                        }}
+                      />
+                      {selectedStudentForPayment.balance > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPaymentAmount(
+                            Math.abs(selectedStudentForPayment.balance / 100).toFixed(2)
+                          )
+                        }
+                        style={{
+                          marginTop: '8px',
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          backgroundColor: '#FEF3C7',
+                          color: '#92400E',
+                          border: '1px solid #F59E0B',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          width: '100%',
+                        }}
+                      >
+                        Pay Balance (-${getCurrencySymbol()}$
+                        {Math.abs(selectedStudentForPayment.balance / 100).toFixed(2)})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '12px' }}>
+                    <PaymentMethodToggle value={paymentMethod} onChange={setPaymentMethod} />
+                  </div>
+
+                  {paymentError && (
+                    <div
+                      style={{
+                      marginTop: '12px',
+                      padding: '12px',
+                      backgroundColor: '#FEE2E2',
+                      border: '1px solid #FCA5A5',
+                      borderRadius: '8px',
+                      color: '#991B1B',
+                      fontSize: '14px',
+                    }}
+                  >
+                    {paymentError}
+                  </div>
+                )}
+
+                <button
+                  className="btn"
+                  style={{
+                    marginTop: '16px',
+                    width: '100%',
+                    background: 'white',
+                    color: 'var(--primary)',
+                    fontWeight: 700,
+                    fontSize: '16px',
+                    padding: '14px',
+                  }}
+                  disabled={recordingPayment || !paymentAmount}
+                  onClick={handleRecordPayment}
+                >
+                  {recordingPayment ? 'Recording...' : 'Record Payment'}
+                </button>
               </div>
             )}
-
-            <button
-              className="btn"
-              style={{
-                marginTop: '16px',
-                width: '100%',
-                background: 'white',
-                color: 'var(--primary)',
-                fontWeight: 700,
-                fontSize: '16px',
-                padding: '14px',
-              }}
-              disabled={recordingPayment || !paymentAmount}
-              onClick={handleRecordPayment}
-            >
-              {recordingPayment ? 'Recording...' : 'Record Payment'}
-            </button>
           </div>
         )}
       </div>
@@ -1405,6 +1503,33 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
           onClose={() => setSelectedReceipt(null)}
           canVoid={false}
         />
+      )}
+      {selectedStudentForPayment && statementLoading && !showStatementPreview && (
+        <div
+          className="card-surface"
+          style={{
+            minHeight: 420,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            gap: 16,
+          }}
+        >
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              border: '4px solid var(--secondary)',
+              borderTopColor: 'var(--primary)',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }}
+          />
+          <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+            Loading learner statement...
+          </div>
+        </div>
       )}
       {showStatementPreview && (
         <StudentStatementPreview

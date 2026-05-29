@@ -101,6 +101,19 @@ CREATE INDEX IF NOT EXISTS idx_students_full_name      ON students(full_name COL
 CREATE INDEX IF NOT EXISTS idx_students_is_active     ON students(is_active);
 
 -- ============================================
+-- 6a. class_sections — Subgrades/Class Sections (e.g. 1A, 1B)
+-- ============================================
+CREATE TABLE IF NOT EXISTS class_sections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  grade_id INTEGER NOT NULL REFERENCES grades(id) ON DELETE CASCADE,
+  label TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(grade_id, label)
+);
+
+CREATE INDEX IF NOT EXISTS idx_class_sections_grade_id ON class_sections(grade_id);
+
+-- ============================================
 -- 7. student_year_enrollment — Links students to academic years and grades
 -- ============================================
 CREATE TABLE IF NOT EXISTS student_year_enrollment (
@@ -108,6 +121,7 @@ CREATE TABLE IF NOT EXISTS student_year_enrollment (
   student_id   INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   year_id      INTEGER NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE,
   grade_id     INTEGER NOT NULL REFERENCES grades(id) ON DELETE RESTRICT,
+  class_section_id INTEGER REFERENCES class_sections(id) ON DELETE SET NULL,
   is_active    INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
   enrolled_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at   TEXT    NOT NULL DEFAULT (datetime('now')),

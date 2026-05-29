@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import bcryptjs from 'bcryptjs';
 import { db } from '../lib/db-client';
-import SphereCanvas from './SphereCanvas';
-import { FeatureCards } from './FeatureCards';
 
 interface SetupWizardProps {
   onComplete: () => void;
@@ -59,6 +57,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
   const [currentStep, setCurrentStep] = useState<Step>('welcome');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [importSuccess, setImportSuccess] = useState(false);
 
   // Form data
   const [schoolName, setSchoolName] = useState('');
@@ -260,32 +259,32 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
 
     try {
       // 1. Save school info
-      await db.run('INSERT INTO app_settings (key, value) VALUES (?, ?)', [
+      await db.run('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', [
         'school_name',
         schoolName,
       ]);
       if (schoolAddress.trim())
-        await db.run('INSERT INTO app_settings (key, value) VALUES (?, ?)', [
+        await db.run('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', [
           'school_address',
           schoolAddress,
         ]);
       if (schoolPhone.trim())
-        await db.run('INSERT INTO app_settings (key, value) VALUES (?, ?)', [
+        await db.run('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', [
           'school_phone',
           schoolPhone,
         ]);
       if (schoolEmail.trim())
-        await db.run('INSERT INTO app_settings (key, value) VALUES (?, ?)', [
+        await db.run('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', [
           'school_email',
           schoolEmail,
         ]);
       if (schoolWebsite.trim())
-        await db.run('INSERT INTO app_settings (key, value) VALUES (?, ?)', [
+        await db.run('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', [
           'school_website',
           schoolWebsite,
         ]);
       if (schoolLogo)
-        await db.run('INSERT INTO app_settings (key, value) VALUES (?, ?)', [
+        await db.run('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', [
           'school_logo',
           schoolLogo,
         ]);
@@ -298,15 +297,20 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       );
 
       // 3. Create academic year
-      const yearResult = await db.run('INSERT INTO academic_years (label) VALUES (?)', [
+      const yearResult = await db.run('INSERT OR IGNORE INTO academic_years (label) VALUES (?)', [
         academicYear,
       ]);
-      const yearId = yearResult.lastInsertRowid;
+      // If year already exists (IGNORE), we would need to query it. But setup runs on fresh DB. 
+      // If it fails, we fall back. Let's just keep INSERT for the rest, except maybe users:
+      
+      // Wait, just the app_settings are usually populated or causing uniqueness conflicts if a user hit 'Complete Setup' and it failed midway (e.g. at user creation).
+      // Let's also use INSERT OR IGNORE for the initial user.
+      const yearId = yearResult.lastInsertRowid || (await db.get('SELECT id FROM academic_years WHERE label = ?', [academicYear])).id;
 
       // 4. Create terms with dates and period type
       for (const p of periods) {
         await db.run(
-          'INSERT INTO terms (year_id, label, term_number, period_type, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT OR IGNORE INTO terms (year_id, label, term_number, period_type, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)',
           [yearId, p.label, p.term_number, periodType, p.start_date || null, p.end_date || null]
         );
       }
@@ -319,8 +323,8 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       // 6. Create grades and fee structure
       const gradeIds: Record<string, number> = {};
       for (let i = 0; i < grades.length; i++) {
-        const gradeResult = await db.run('INSERT INTO grades (label) VALUES (?)', [grades[i]]);
-        gradeIds[grades[i]] = gradeResult.lastInsertRowid;
+        const gradeResult = await db.run('INSERT OR IGNORE INTO grades (label) VALUES (?)', [grades[i]]);
+        gradeIds[grades[i]] = gradeResult.lastInsertRowid || (await db.get('SELECT id FROM grades WHERE label = ?', [grades[i]])).id;
       }
 
       // 7. Create fee structure
@@ -350,7 +354,27 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'An error occurred during setup. Please try again.');
-    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleImportDatabase = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const result = await window.api.fsRestore();
+      if (result) {
+        setImportSuccess(true);
+        // Give user a moment to see the success state, then relaunch
+        setTimeout(() => {
+          onComplete();
+        }, 1500);
+      } else {
+        // User cancelled the file dialog
+        setIsLoading(false);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to import database. Please try again.');
       setIsLoading(false);
     }
   };
@@ -359,7 +383,16 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
     switch (currentStep) {
       case 'welcome':
         return (
-          <div style={{ textAlign: 'left', padding: '0 20px' }}>
+          <div
+            style={{
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              padding: '0 20px',
+            }}
+          >
             {/* Badge */}
             <div
               style={{
@@ -374,6 +407,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                 marginBottom: '24px',
                 fontSize: '13px',
                 fontFamily: 'monospace',
+                margin: '0 auto 24px',
               }}
             >
               <span
@@ -403,6 +437,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
               style={{
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '16px',
                 marginBottom: '24px',
               }}
@@ -432,6 +467,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                 marginBottom: '32px',
                 maxWidth: '500px',
                 lineHeight: 1.6,
+                margin: '0 auto 32px',
               }}
             >
               Let's get your school's financial infrastructure set up in just a few minutes.
@@ -443,6 +479,9 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                 padding: '24px',
                 textAlign: 'left',
                 border: '1px solid var(--border)',
+                width: '100%',
+                maxWidth: '520px',
+                margin: '0 auto',
               }}
             >
               <h4
@@ -1288,6 +1327,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
         color: 'var(--text-primary)',
         display: 'flex',
         alignItems: 'center',
+        justifyContent: 'center',
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -1434,22 +1474,34 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
         </div>
       )}
 
-      {/* Main Content - Two Column Layout */}
+      {/* Main Content - Single Column Layout */}
       <div
         style={{
-          maxWidth: '1400px',
+          maxWidth: 'none',
           margin: '0 auto',
-          padding: currentStep !== 'complete' ? '80px 60px 60px' : '0 60px',
+          padding: currentStep !== 'complete' ? '84px 40px 56px' : '0 40px',
           width: '100%',
           position: 'relative',
           zIndex: 10,
         }}
       >
         <div
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '80px' }}
+          style={{
+            display: 'grid',
+            placeItems: 'center',
+            gap: '0',
+            width: '100%',
+            minHeight: currentStep === 'complete' ? 'auto' : 'calc(100vh - 140px)',
+          }}
         >
-          {/* Left Column - Wizard Form */}
-          <div style={{ flex: 1, maxWidth: '650px' }}>
+          {/* Main Wizard Form Container */}
+          <div
+            style={{
+              width: '100%',
+              maxWidth: currentStep === 'fees' ? '1280px' : '760px',
+              margin: '0 auto',
+            }}
+          >
             <div style={{ background: 'transparent', boxShadow: 'none', padding: '0' }}>
               {/* Content */}
               <div style={{ padding: '0' }}>
@@ -1466,9 +1518,10 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                   <div
                     style={{
                       display: 'flex',
-                      justifyContent: 'flex-start',
+                      justifyContent: 'center',
                       marginTop: '32px',
                       gap: '16px',
+                      flexWrap: 'wrap',
                     }}
                   >
                     {currentStep !== 'welcome' && (
@@ -1491,24 +1544,59 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                       </button>
                     )}
                     {currentStep === 'welcome' && (
-                      <button
-                        className="btn btn-primary btn-lg"
-                        onClick={goNext}
-                        style={{ padding: '16px 48px', fontSize: '16px' }}
-                      >
-                        Get Started
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          style={{ marginLeft: 8 }}
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap', width: '100%' }}>
+                        <button
+                          className="btn btn-primary btn-lg"
+                          onClick={goNext}
+                          disabled={isLoading}
+                          style={{ padding: '16px 48px', fontSize: '16px' }}
                         >
-                          <polyline points="9 18 15 12 9 6" />
-                        </svg>
-                      </button>
+                          Get Started
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            style={{ marginLeft: 8 }}
+                          >
+                            <polyline points="9 18 15 12 9 6" />
+                          </svg>
+                        </button>
+                        <button
+                          className="btn btn-outline btn-lg"
+                          onClick={handleImportDatabase}
+                          disabled={isLoading}
+                          style={{ padding: '16px 32px', fontSize: '16px', display: 'flex', alignItems: 'center' }}
+                        >
+                          {isLoading ? (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                                <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" opacity="0.3" />
+                                <path d="M21 12a9 9 0 00-9-9" />
+                              </svg>
+                              Importing...
+                            </span>
+                          ) : importSuccess ? (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#10b981' }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                              Success!
+                            </span>
+                          ) : (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                                <polyline points="17 8 12 3 7 8" />
+                                <line x1="12" y1="3" x2="12" y2="15" />
+                              </svg>
+                              Import Database
+                            </span>
+                          )}
+                        </button>
+                      </div>
                     )}
                     {currentStep === 'fees' && (
                       <button
@@ -1557,32 +1645,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
             </div>
           </div>
 
-          {/* Right Column - Spinning Globe with Feature Cards - Only on welcome */}
-          {currentStep === 'welcome' && (
-            <div
-              style={{
-                flex: 1,
-                display: 'flex',
-                justifyContent: 'flex-start',
-                alignItems: 'center',
-                overflow: 'visible',
-                position: 'relative',
-              }}
-            >
-              <div
-                style={{
-                  width: '500px',
-                  height: '500px',
-                  position: 'relative',
-                  borderRadius: '50%',
-                  background: 'radial-gradient(circle, rgba(249,115,22,0.08) 0%, transparent 70%)',
-                }}
-              >
-                <SphereCanvas />
-                <FeatureCards position="right" />
-              </div>
-            </div>
-          )}
+          {/* Right Column (Spinning Globe & Feature Cards) removed for perfect centering of welcome content */}
         </div>
       </div>
     </div>

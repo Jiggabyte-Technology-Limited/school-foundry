@@ -11,6 +11,8 @@ import { getCurrencySymbol } from '../lib/currency';
 import SchoolPaymentsOverview from './payments/SchoolPaymentsOverview';
 import PaymentReceiptPreview from './payments/PaymentReceiptPreview';
 import StudentStatementPreview from './StudentStatementPreview';
+import PaymentMethodToggle, { PaymentMethod } from './ui/PaymentMethodToggle';
+import ChipSelector from './ui/ChipSelector';
 
 interface Payment {
   id: number;
@@ -357,6 +359,7 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
   const [showFullLogs, setShowFullLogs] = useState(false);
   const [logPage, setLogPage] = useState(1);
   const LOGS_PER_PAGE = 50;
+  const [exportingActivity, setExportingActivity] = useState(false);
 
   // Print statements state
   const [showPrintModal, setShowPrintModal] = useState(false);
@@ -366,6 +369,10 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
   const [schoolContact, setSchoolContact] = useState<string>('');
   const [currentTermLabel, setCurrentTermLabel] = useState<string>('');
+  const [currentTermWindow, setCurrentTermWindow] = useState<{
+    start: string;
+    end: string;
+  } | null>(null);
   const [voidKey, setVoidKey] = useState<string>('1234');
   const [showVoidKeyModal, setShowVoidKeyModal] = useState(false);
   const [voidKeyInput, setVoidKeyInput] = useState('');
@@ -378,13 +385,17 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [selectedGradeFilter, setSelectedGradeFilter] = useState<string>('all');
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
+  const [paymentSelectionMode, setPaymentSelectionMode] = useState<'search' | 'actions' | 'record'>(
+    'search'
+  );
+  const [selectedStudentForPayment, setSelectedStudentForPayment] = useState<any | null>(null);
 
   const [form, setForm] = useState({
     student_id: '',
     year_id: '',
     amount: '',
     receipt_number: '',
-    payment_method: 'cash',
+    payment_method: 'cash' as PaymentMethod,
     notes: '',
   });
 
@@ -432,6 +443,16 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
   const [statementLoading, setStatementLoading] = useState(false);
   const [termsList, setTermsList] = useState<any[]>([]);
 
+  const formatBalance = (cents: number) => {
+    const amount = `${getCurrencySymbol()}${Math.abs(cents / 100).toFixed(2)}`;
+    if (cents > 0) return `-${amount}`;
+    if (cents < 0) return `+${amount}`;
+    return `${getCurrencySymbol()}0.00`;
+  };
+
+  const formatActivityAction = (action: string) =>
+    action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
   useEffect(() => {
     setLoading(true);
 
@@ -469,15 +490,22 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
         `SELECT id FROM academic_years ORDER BY label DESC LIMIT 1`
       );
       const currentTerm = await db.get(
-        `SELECT label FROM terms WHERE year_id = ? AND start_date IS NOT NULL AND end_date IS NOT NULL AND date('now') >= date(start_date) AND date('now') <= date(end_date) ORDER BY term_number LIMIT 1`,
+        `SELECT label, start_date, end_date FROM terms WHERE year_id = ? AND start_date IS NOT NULL AND end_date IS NOT NULL AND date('now') >= date(start_date) AND date('now') <= date(end_date) ORDER BY term_number LIMIT 1`,
         [currentYearId?.id || 0]
       );
       // Fallback to first term if no current term found
       const fallbackTerm = await db.get(
-        `SELECT label FROM terms WHERE year_id = ? ORDER BY term_number LIMIT 1`,
+        `SELECT label, start_date, end_date FROM terms WHERE year_id = ? ORDER BY term_number LIMIT 1`,
         [currentYearId?.id || 0]
       );
       setCurrentTermLabel(currentTerm?.label || fallbackTerm?.label || '');
+      const activeTerm = currentTerm || fallbackTerm;
+      if (activeTerm?.start_date && activeTerm?.end_date) {
+        setCurrentTermWindow({
+          start: activeTerm.start_date,
+          end: activeTerm.end_date,
+        });
+      }
       setLoading(false);
     })();
 
@@ -487,7 +515,7 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
   const viewStatement = async (student: any) => {
     if (!form.year_id) return;
     setStatementLoading(true);
-    setShowStatementPreview(true);
+    setShowStatementPreview(false);
     try {
       const [payments, fees] = await Promise.all([
         db.all(
@@ -522,61 +550,31 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
         balance,
         generatedAt: new Date().toLocaleDateString(),
       });
+      setShowStatementPreview(true);
     } catch (err: any) {
       console.error('Error loading statement:', err);
+      setShowStatementPreview(true);
     } finally {
       setStatementLoading(false);
     }
   };
 
-  if (loading)
-    return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '80px 40px',
-          gap: '16px',
-          minHeight: '100vh',
-          backgroundColor: '#f9fafb',
-        }}
-        className="text-display"
-      >
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            border: '3px solid #e5e7eb',
-            borderTopColor: '#f97316',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-          }}
-        />
-        <span style={{ color: '#6b7280', fontSize: '14px' }}>Loading payments...</span>
-      </div>
-    );
-
-  if (!canRecordPayments) {
-    return (
-      <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
-        <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
-        <p>You do not have permission to record payments.</p>
-      </div>
-    );
-  }
-
   const loadStudents = async () => {
     const currentYear = await db.get('SELECT id FROM academic_years ORDER BY label DESC LIMIT 1');
     const [studentList, gradeList, yearList] = await Promise.all([
       db.all(
-        `SELECT s.id, s.full_name, g.label as grade_label, sye.grade_id, s.is_active,
+        `SELECT s.id, s.full_name,
+        CASE
+          WHEN cs.label IS NULL OR cs.label = '' THEN g.label
+          ELSE g.label || ' - ' || cs.label
+        END as grade_label,
+        sye.grade_id, s.is_active,
         COALESCE((SELECT SUM(amount_cents) FROM fee_structure fs JOIN terms t ON fs.term_id = t.id WHERE fs.year_id = ? AND fs.grade_id = sye.grade_id AND (t.start_date IS NULL OR t.start_date <= date('now'))), 0) -
         COALESCE((SELECT SUM(amount_paid_cents) FROM payments WHERE student_id = s.id AND year_id = ? AND is_voided = 0), 0) as balance
         FROM students s
         LEFT JOIN student_year_enrollment sye ON s.id = sye.student_id AND sye.year_id = ?
         LEFT JOIN grades g ON sye.grade_id = g.id
+        LEFT JOIN class_sections cs ON sye.class_section_id = cs.id
         WHERE s.is_active = 1
         ORDER BY s.full_name`,
         [currentYear?.id, currentYear?.id, currentYear?.id]
@@ -791,37 +789,146 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
     });
   };
 
-  const loadActivityLogs = async (page = 1) => {
-    try {
-      const offset = (page - 1) * LOGS_PER_PAGE;
-      let whereClause = "WHERE al.action IN ('payment_recorded', 'payment_voided')";
-      const params: any[] = [];
+  const buildActivityLogQuery = (
+    options: {
+      includeLimit?: boolean;
+      page?: number;
+      searchQuery?: string;
+      timePeriod?: string;
+      currentTermWindow?: { start: string; end: string } | null;
+    } = {}
+  ) => {
+    const includeLimit = options.includeLimit !== false;
+    const page = options.page || 1;
+    const searchQuery = options.searchQuery ?? activitySearchQuery;
+    const timePeriod = options.timePeriod ?? timePeriodFilter;
+    const termWindow = options.currentTermWindow ?? currentTermWindow;
+    const offset = (page - 1) * LOGS_PER_PAGE;
+    let whereClause = "WHERE al.action IN ('payment_recorded', 'payment_voided')";
+    const params: any[] = [];
 
-      if (activitySearchQuery) {
-        whereClause += ` AND (p.receipt_number LIKE ? OR s.full_name LIKE ? OR u.username LIKE ?)`;
-        const searchTerm = `%${activitySearchQuery}%`;
-        params.push(searchTerm, searchTerm, searchTerm);
-      }
+    if (searchQuery.trim()) {
+      whereClause += ` AND (p.receipt_number LIKE ? OR s.full_name LIKE ? OR u.username LIKE ?)`;
+      const searchTerm = `%${searchQuery.trim()}%`;
+      params.push(searchTerm, searchTerm, searchTerm);
+    }
 
-      const logs = await db.all(
-        `
-        SELECT al.*, u.username, p.receipt_number, p.amount_paid_cents, s.full_name as student_name
+    if (timePeriod === 'week') {
+      whereClause += ` AND datetime(al.logged_at) >= datetime(?)`;
+      params.push(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+    } else if (timePeriod === 'month') {
+      whereClause += ` AND datetime(al.logged_at) >= datetime(?)`;
+      params.push(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+    } else if (timePeriod === 'term' && termWindow?.start && termWindow?.end) {
+      whereClause += ` AND date(al.logged_at) BETWEEN date(?) AND date(?)`;
+      params.push(termWindow.start, termWindow.end);
+    }
+
+    const sql = `
+        SELECT al.id, al.action, al.details, al.logged_at, al.entity, al.entity_id,
+               u.username, p.receipt_number, p.amount_paid_cents, s.full_name as student_name
         FROM activity_log al
         LEFT JOIN users u ON al.user_id = u.id
         LEFT JOIN payments p ON al.entity = 'payments' AND al.entity_id = p.id
         LEFT JOIN students s ON p.student_id = s.id
         ${whereClause}
         ORDER BY al.logged_at DESC
-        LIMIT ? OFFSET ?
-      `,
-        [...params, LOGS_PER_PAGE, offset]
-      );
+        ${includeLimit ? 'LIMIT ? OFFSET ?' : ''}
+      `;
+
+    if (includeLimit) {
+      params.push(LOGS_PER_PAGE, offset);
+    }
+
+    return { sql, params };
+  };
+
+  const loadActivityLogs = async (page = 1, searchQuery = activitySearchQuery) => {
+    try {
+      const { sql, params } = buildActivityLogQuery({
+        includeLimit: true,
+        page,
+        searchQuery,
+      });
+      const logs = await db.all(sql, params);
       setActivityLogs(logs);
       setLogPage(page);
     } catch (err) {
       console.error('Error loading activity logs:', err);
     }
   };
+
+  const handleExportActivityXlsx = async () => {
+    setExportingActivity(true);
+    try {
+      const { sql, params } = buildActivityLogQuery({ includeLimit: false });
+      const logs = await db.all(sql, params);
+      if (logs.length === 0) {
+        showToast('info', 'No Activity', 'There are no activity records for the selected filters.');
+        return;
+      }
+      const result = await window.api.exportXlsxReport({
+        suggestedFileName: `recent-activity-${timePeriodFilter}-${new Date()
+          .toISOString()
+          .slice(0, 10)}`,
+        workbook: {
+          sheetName: 'Recent Activity',
+          topRows: [
+            { value: schoolName, mergeAcross: 6 },
+            { value: 'Recent Payment Activity', mergeAcross: 6 },
+            {
+              value: `Filters: ${getPeriodLabel()}${activitySearchQuery.trim() ? ` | Search: ${activitySearchQuery.trim()}` : ''}`,
+              mergeAcross: 6,
+            },
+            {
+              value:
+                [new Date().toLocaleDateString(), schoolContact].filter(Boolean).join(' | ') ||
+                'Recent activity export',
+              mergeAcross: 6,
+            },
+          ],
+          columns: [
+            { key: 'loggedAt', header: 'Date & Time', width: 22 },
+            { key: 'receiptNumber', header: 'Receipt Number', width: 18 },
+            { key: 'studentName', header: 'Learner', width: 28 },
+            { key: 'userName', header: 'User', width: 18 },
+            { key: 'action', header: 'Action', width: 18 },
+            { key: 'amount', header: 'Amount', width: 14, type: 'currency' },
+            { key: 'details', header: 'Details', width: 36 },
+          ],
+          rows: logs.map((log: any) => ({
+            loggedAt: formatDate(log.logged_at),
+            receiptNumber: log.receipt_number || '-',
+            studentName: log.student_name || '-',
+            userName: log.username || 'System',
+            action: formatActivityAction(log.action),
+            amount: (log.amount_paid_cents || 0) / 100,
+            details: log.details || '-',
+          })),
+          freezeRows: 5,
+          autoFilter: true,
+        },
+      });
+
+      if (result.success) {
+        showToast('success', 'Excel Exported', `Saved to ${result.filePath}`);
+      } else if (!result.canceled) {
+        showToast('error', 'Export Failed', result.error || 'Could not export recent activity.');
+      }
+    } catch (err) {
+      showToast(
+        'error',
+        'Export Failed',
+        err instanceof Error ? err.message : 'Could not export recent activity.'
+      );
+    } finally {
+      setExportingActivity(false);
+    }
+  };
+
+  useEffect(() => {
+    loadActivityLogs(1);
+  }, [timePeriodFilter, currentTermWindow]);
 
   const loadPrintPreview = async () => {
     try {
@@ -1114,10 +1221,33 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
   };
 
   const handleSelectStudent = (studentId: number) => {
-    setForm({ ...form, student_id: String(studentId) });
+    const student = students.find(s => s.id === studentId) || null;
+    setForm(f => ({
+      ...f,
+      student_id: String(studentId),
+      amount: '',
+      notes: '',
+    }));
+    setSelectedStudentForPayment(student);
+    setPaymentSelectionMode('actions');
     setShowStudentDropdown(false);
     setStudentSearchQuery('');
     setSelectedGradeFilter('all');
+    setError('');
+  };
+
+  const resetPaymentSelection = () => {
+    setSelectedStudentForPayment(null);
+    setPaymentSelectionMode('search');
+    setStudentSearchQuery('');
+    setShowStudentDropdown(false);
+    setError('');
+    setForm(f => ({
+      ...f,
+      student_id: '',
+      amount: '',
+      notes: '',
+    }));
   };
 
   const getPeriodLabel = (): string => {
@@ -1150,6 +1280,45 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
     });
   };
 
+  if (loading) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '80px 40px',
+          gap: '16px',
+          minHeight: '100vh',
+          backgroundColor: '#f9fafb',
+        }}
+        className="text-display"
+      >
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            border: '3px solid #e5e7eb',
+            borderTopColor: '#f97316',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+          }}
+        />
+        <span style={{ color: '#6b7280', fontSize: '14px' }}>Loading payments...</span>
+      </div>
+    );
+  }
+
+  if (!canRecordPayments) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
+        <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
+        <p>You do not have permission to record payments.</p>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -1159,11 +1328,13 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
         alignItems: 'start',
       }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        <div className="flex-between mb-4 no-print">
-          <h2 style={{ margin: 0 }}>Payments</h2>
-        </div>
+      <div className="flex-between" style={{ gap: '16px', alignItems: 'center', gridColumn: '1 / -1' }}>
+        <h2 style={{ margin: 0, fontSize: '28px', fontWeight: 600 }} className="text-display">
+          Payments
+        </h2>
+      </div>
 
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         {/* Record Payment - First Row */}
         <div
           className="card no-print"
@@ -1173,10 +1344,10 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
           }}
         >
           <h3 className="mb-4" style={{ color: 'white' }}>
-            Record Payment
+            Search Learner
           </h3>
 
-          {!form.student_id ? (
+          {paymentSelectionMode === 'search' ? (
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
@@ -1215,33 +1386,29 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
                     color: 'var(--text-primary)',
                   }}
                 >
-                  {getFilteredStudents()
-                    .slice(0, 10)
-                    .map(s => (
-                      <div
-                        key={s.id}
-                        onClick={() => handleSelectStudent(s.id)}
-                        style={{
-                          padding: '12px 16px',
-                          borderBottom: '1px solid var(--border)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                        }}
-                        onMouseEnter={e =>
-                          (e.currentTarget.style.backgroundColor = 'var(--secondary)')
-                        }
-                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 700 }}>{s.full_name}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                            ID: {s.id} - {s.grade_label}
-                          </div>
+                  {getFilteredStudents().slice(0, 10).map(s => (
+                    <div
+                      key={s.id}
+                      onClick={() => handleSelectStudent(s.id)}
+                      style={{
+                        padding: '12px 16px',
+                        borderBottom: '1px solid var(--border)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--secondary)')}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700 }}>{s.full_name}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                          ID: {s.id} - {s.grade_label}
                         </div>
                       </div>
-                    ))}
+                    </div>
+                  ))}
                   {getFilteredStudents().length === 0 && (
                     <div
                       style={{
@@ -1256,187 +1423,220 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
                 </div>
               )}
             </div>
-          ) : (
+          ) : selectedStudentForPayment ? (
             <form onSubmit={handleSubmit}>
               <div
                 style={{
-                  background: 'rgba(255,255,255,0.15)',
-                  borderRadius: '12px',
-                  padding: '20px',
-                  backdropFilter: 'blur(10px)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: '16px',
+                  marginBottom: '16px',
+                  width: '100%',
                 }}
               >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '16px',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: '12px', opacity: 0.8 }}>Recording payment for</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                  <div style={{ fontSize: '12px', opacity: 0.8 }}>Learner selected</div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'baseline',
+                      gap: '12px',
+                      flexWrap: 'wrap',
+                    }}
+                  >
                     <div style={{ fontSize: '20px', fontWeight: 700 }}>
-                      {students.find(s => s.id === Number(form.student_id))?.full_name}
+                      {selectedStudentForPayment.full_name}
                     </div>
-                    <div style={{ fontSize: '13px', opacity: 0.8 }}>
-                      {students.find(s => s.id === Number(form.student_id))?.grade_label}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setForm({ ...form, student_id: '' });
-                      setStudentSearchQuery('');
-                      setShowStudentDropdown(false);
-                    }}
-                    style={{
-                      background: 'rgba(255,255,255,0.2)',
-                      border: 'none',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                    }}
-                  >
-                    Change Learner
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onViewStatement?.(Number(form.student_id))}
-                    style={{
-                      background: 'rgba(255,255,255,0.2)',
-                      border: 'none',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                    }}
-                  >
-                    View Statement
-                  </button>
-                </div>
-
-                {(() => {
-                  const selectedStudent = students.find(s => s.id === Number(form.student_id));
-                  if (!selectedStudent) return null;
-                  return (
                     <div
                       style={{
-                        background: 'rgba(255,255,255,0.95)',
-                        borderRadius: '8px',
-                        padding: '12px 16px',
-                        marginBottom: '16px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        color: '#1f2937',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        padding: '4px 10px',
+                        borderRadius: '999px',
+                        background: 'rgba(255,255,255,0.2)',
+                        border: '1px solid rgba(255,255,255,0.25)',
+                        whiteSpace: 'nowrap',
                       }}
                     >
-                      <div>
-                        <div
-                          style={{
-                            fontSize: '11px',
-                            color: '#6b7280',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.05em',
-                          }}
-                        >
-                          Current Balance
-                        </div>
-                        <div
-                          style={{
-                            fontSize: '22px',
-                            fontWeight: 700,
-                            color: selectedStudent.balance > 0 ? '#dc2626' : '#059669',
-                          }}
-                        >
-                          {selectedStudent.balance > 0
-                            ? `-${getCurrencySymbol()}${Math.abs(selectedStudent.balance / 100).toFixed(2)}`
-                            : selectedStudent.balance < 0
-                              ? `+${getCurrencySymbol()}${Math.abs(selectedStudent.balance / 100).toFixed(2)}`
-                              : `${getCurrencySymbol()}0.00`}
-                        </div>
+                      Balance: {formatBalance(selectedStudentForPayment.balance)}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '13px', opacity: 0.8 }}>
+                    {selectedStudentForPayment.grade_label}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={resetPaymentSelection}
+                  style={{
+                    background: 'white',
+                    border: '1px solid #fed7aa',
+                    color: 'var(--primary)',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onViewStatement) {
+                      onViewStatement(selectedStudentForPayment.id);
+                    } else {
+                      void viewStatement(selectedStudentForPayment);
+                    }
+                  }}
+                  style={{
+                    background: 'white',
+                    border: '1px solid #fed7aa',
+                    color: 'var(--primary)',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                  }}
+                >
+                  View Statement
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentSelectionMode('record')}
+                  style={{
+                    background: 'white',
+                    border: '1px solid #fed7aa',
+                    color: 'var(--primary)',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                  }}
+                >
+                  Record Payment
+                </button>
+              </div>
+
+              {paymentSelectionMode === 'record' && (
+                <div style={{ marginTop: '18px' }}>
+                  <div
+                    style={{
+                      background: 'rgba(255,255,255,0.95)',
+                      borderRadius: '8px',
+                      padding: '12px 16px',
+                      marginBottom: '16px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      color: '#1f2937',
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          fontSize: '11px',
+                          color: '#6b7280',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                        }}
+                      >
+                        Current Balance
                       </div>
                       <div
                         style={{
-                          padding: '6px 12px',
-                          borderRadius: '6px',
-                          fontSize: '12px',
+                          fontSize: '22px',
                           fontWeight: 700,
-                          textTransform: 'uppercase',
-                          backgroundColor: selectedStudent.balance > 0 ? '#FEE2E2' : '#D1FAE5',
-                          color: selectedStudent.balance > 0 ? '#991B1B' : '#065F46',
+                          color: selectedStudentForPayment.balance > 0 ? '#dc2626' : '#059669',
                         }}
                       >
-                        {selectedStudent.balance > 0 ? 'Owing' : 'Paid'}
+                        {formatBalance(selectedStudentForPayment.balance)}
                       </div>
                     </div>
-                  );
-                })()}
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label
+                    <div
                       style={{
-                        fontSize: '11px',
-                        opacity: 0.8,
-                        display: 'block',
-                        marginBottom: '4px',
-                      }}
-                    >
-                      YEAR
-                    </label>
-                    <select
-                      className="input-default"
-                      value={form.year_id}
-                      onChange={e => setForm({ ...form, year_id: e.target.value })}
-                      style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
-                    >
-                      {years.map(y => (
-                        <option key={y.id} value={y.id}>
-                          {y.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label
-                      style={{
-                        fontSize: '11px',
-                        opacity: 0.8,
-                        display: 'block',
-                        marginBottom: '4px',
-                      }}
-                    >
-                      AMOUNT ($)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      className="input-default"
-                      value={form.amount}
-                      onChange={e => setForm({ ...form, amount: e.target.value })}
-                      placeholder="0.00"
-                      autoFocus
-                      style={{
-                        background: 'white',
-                        color: '#1f2937',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
                         fontWeight: 700,
-                        fontSize: '16px',
-                        border: '2px solid #1f2937',
+                        textTransform: 'uppercase',
+                        backgroundColor: selectedStudentForPayment.balance > 0 ? '#FEE2E2' : '#D1FAE5',
+                        color: selectedStudentForPayment.balance > 0 ? '#991B1B' : '#065F46',
                       }}
-                    />
-                    {(() => {
-                      const selectedStudent = students.find(s => s.id === Number(form.student_id));
-                      return selectedStudent && selectedStudent.balance > 0 ? (
+                    >
+                      {selectedStudentForPayment.balance > 0 ? 'Owing' : 'Paid'}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label
+                        style={{
+                          fontSize: '11px',
+                          opacity: 0.8,
+                          display: 'block',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        YEAR
+                      </label>
+                      <select
+                        className="input-default"
+                        value={form.year_id}
+                        onChange={e => setForm({ ...form, year_id: e.target.value })}
+                        style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
+                      >
+                        {years.map(y => (
+                          <option key={y.id} value={y.id}>
+                            {y.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label
+                        style={{
+                          fontSize: '11px',
+                          opacity: 0.8,
+                          display: 'block',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        AMOUNT ($)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        className="input-default"
+                        value={form.amount}
+                        onChange={e => setForm({ ...form, amount: e.target.value })}
+                        placeholder="0.00"
+                        autoFocus
+                        style={{
+                          background: 'white',
+                          color: '#1f2937',
+                          fontWeight: 700,
+                          fontSize: '16px',
+                          border: '2px solid #1f2937',
+                        }}
+                      />
+                      {selectedStudentForPayment.balance > 0 && (
                         <button
                           type="button"
                           onClick={() =>
-                            setForm({ ...form, amount: (selectedStudent.balance / 100).toFixed(2) })
+                            setForm({
+                              ...form,
+                              amount: (Math.abs(selectedStudentForPayment.balance) / 100).toFixed(2),
+                            })
                           }
                           style={{
                             marginTop: '8px',
@@ -1451,115 +1651,134 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
                             width: '100%',
                           }}
                         >
-                          Pay Balance (-${getCurrencySymbol()}$
-                          {Math.abs(selectedStudent.balance / 100).toFixed(2)})
+                          Pay Balance ({getCurrencySymbol()}
+                          {Math.abs(selectedStudentForPayment.balance / 100).toFixed(2)})
                         </button>
-                      ) : null;
-                    })()}
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '12px',
-                    marginTop: '12px',
-                  }}
-                >
-                  <div>
-                    <label
-                      style={{
-                        fontSize: '11px',
-                        opacity: 0.8,
-                        display: 'block',
-                        marginBottom: '4px',
-                      }}
-                    >
-                      PAYMENT METHOD
-                    </label>
-                    <select
-                      className="input-default"
-                      value={form.payment_method}
-                      onChange={e => setForm({ ...form, payment_method: e.target.value })}
-                      style={{ background: 'white', color: '#1f2937', fontWeight: 600 }}
-                    >
-                      <option value="cash">Cash</option>
-                      <option value="ecocash">EcoCash / Mobile</option>
-                      <option value="bank_transfer">Bank Transfer</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label
-                      style={{
-                        fontSize: '11px',
-                        opacity: 0.8,
-                        display: 'block',
-                        marginBottom: '4px',
-                      }}
-                    >
-                      NOTES
-                    </label>
-                    <input
-                      type="text"
-                      className="input-default"
-                      value={form.notes}
-                      onChange={e => setForm({ ...form, notes: e.target.value })}
-                      placeholder="Optional notes..."
-                      style={{ background: 'white', color: '#1f2937' }}
-                    />
-                  </div>
-                </div>
-
-                {error && (
                   <div
                     style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '12px',
                       marginTop: '12px',
-                      padding: '12px',
-                      backgroundColor: '#FEE2E2',
-                      border: '1px solid #FCA5A5',
-                      borderRadius: '8px',
-                      color: '#991B1B',
-                      fontSize: '14px',
                     }}
                   >
-                    {error}
+                    <PaymentMethodToggle
+                      value={form.payment_method}
+                      onChange={payment_method => setForm({ ...form, payment_method })}
+                    />
+                    <div>
+                      <label
+                        style={{
+                          fontSize: '11px',
+                          opacity: 0.8,
+                          display: 'block',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        NOTES
+                      </label>
+                      <input
+                        type="text"
+                        className="input-default"
+                        value={form.notes}
+                        onChange={e => setForm({ ...form, notes: e.target.value })}
+                        placeholder="Optional notes..."
+                        style={{ background: 'white', color: '#1f2937' }}
+                      />
+                    </div>
                   </div>
-                )}
 
-                <button
-                  type="submit"
-                  className="btn"
-                  style={{
-                    marginTop: '16px',
-                    width: '100%',
-                    background: 'white',
-                    color: 'var(--primary)',
-                    fontWeight: 700,
-                    fontSize: '16px',
-                    padding: '14px',
-                  }}
-                  disabled={saving || !form.amount}
-                >
-                  {saving ? 'Recording...' : 'Record Payment'}
-                </button>
-              </div>
+                  {error && (
+                    <div
+                      style={{
+                        marginTop: '12px',
+                        padding: '12px',
+                        backgroundColor: '#FEE2E2',
+                        border: '1px solid #FCA5A5',
+                        borderRadius: '8px',
+                        color: '#991B1B',
+                        fontSize: '14px',
+                      }}
+                    >
+                      {error}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="btn"
+                    style={{
+                      marginTop: '16px',
+                      width: '100%',
+                      background: 'white',
+                      color: 'var(--primary)',
+                      fontWeight: 700,
+                      fontSize: '16px',
+                      padding: '14px',
+                    }}
+                    disabled={saving || !form.amount}
+                  >
+                    {saving ? 'Recording...' : 'Record Payment'}
+                  </button>
+                </div>
+              )}
             </form>
-          )}
+          ) : null}
         </div>
 
         {/* RECENT ACTIVITY: Payment Activity Log */}
         <div className="card">
           <div className="flex-between mb-4">
             <h3 style={{ margin: 0 }}>Recent Activity</h3>
-            <button
-              className="btn btn-outline"
-              onClick={handleOpenPrintModal}
-              style={{ padding: '8px 16px', fontSize: '12px' }}
-            >
-              Print Recent Activity
-            </button>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                className="btn btn-outline"
+                onClick={handleExportActivityXlsx}
+                disabled={exportingActivity}
+                style={{ padding: '8px 16px', fontSize: '12px' }}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                {exportingActivity ? 'Exporting Excel...' : 'Export Excel'}
+              </button>
+              <button
+                className="btn btn-outline"
+                onClick={handleOpenPrintModal}
+                style={{ padding: '8px 16px', fontSize: '12px' }}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                  <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                Print Recent Activity
+              </button>
+            </div>
           </div>
 
           {/* Filters for Activity - Buttons */}
@@ -1599,8 +1818,9 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
               placeholder="Search receipt, learner, or user..."
               value={activitySearchQuery}
               onChange={e => {
-                setActivitySearchQuery(e.target.value);
-                loadActivityLogs(1);
+                const nextQuery = e.target.value;
+                setActivitySearchQuery(nextQuery);
+                loadActivityLogs(1, nextQuery);
               }}
               style={{
                 marginLeft: 'auto',
@@ -1893,7 +2113,21 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
                 }}
                 style={{ flex: 1 }}
               >
-                Print
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                  <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                Print Receipt
               </button>
               {selectedReceipt.amount_paid_cents > 0 && selectedReceipt.is_voided !== 1 && (
                 <button
@@ -1969,25 +2203,19 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
             </p>
 
             <div style={{ marginBottom: '16px' }}>
-              <label
-                style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}
-              >
-                Reason *
-              </label>
-              <select
-                value={voidReason}
-                onChange={e => setVoidReason(e.target.value)}
-                className="input-default"
-                style={{ width: '100%' }}
-              >
-                <option value="">Select a reason...</option>
-                <option value="Mistake">Mistake</option>
-                <option value="Wrong learner">Wrong learner</option>
-                <option value="Wrong amount">Wrong amount</option>
-                <option value="Duplicate payment">Duplicate payment</option>
-                <option value="Customer request">Customer request</option>
-                <option value="Other">Other</option>
-              </select>
+              <ChipSelector
+                label="Reason *"
+                value={voidReason || null}
+                onChange={value => setVoidReason((value as string) || '')}
+                options={[
+                  { value: 'Mistake', label: 'Mistake' },
+                  { value: 'Wrong learner', label: 'Wrong learner' },
+                  { value: 'Wrong amount', label: 'Wrong amount' },
+                  { value: 'Duplicate payment', label: 'Duplicate payment' },
+                  { value: 'Customer request', label: 'Customer request' },
+                  { value: 'Other', label: 'Other' },
+                ]}
+              />
             </div>
 
             <div style={{ marginBottom: '20px' }}>
@@ -2311,9 +2539,50 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
                   });
                 }}
               >
-                Print
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                  <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                Print Statement
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {selectedStudentForPayment && statementLoading && !showStatementPreview && (
+        <div
+          className="card-surface"
+          style={{
+            minHeight: 420,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            gap: 16,
+          }}
+        >
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              border: '4px solid var(--secondary)',
+              borderTopColor: 'var(--primary)',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }}
+          />
+          <div style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+            Loading payment statement...
           </div>
         </div>
       )}

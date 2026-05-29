@@ -7,6 +7,12 @@ declare module '*.gif';
 declare module '*.webp';
 declare module 'jszip';
 
+declare module '*?raw' {
+  const content: string;
+  export default content;
+}
+
+
 interface Window {
   api: {
     dbQuery: (sql: string, params: any[]) => Promise<any[]>;

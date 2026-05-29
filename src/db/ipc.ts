@@ -4,9 +4,263 @@ import * as fs from 'fs';
 import * as path from 'path';
 import JSZip from 'jszip';
 import { checkAndDebitFees } from '../lib/auto-debit';
+import {
+  getClearDatabaseTargets,
+  getResetAppTargets,
+} from '../lib/app-maintenance.mjs';
+import { buildWorkbookBytes } from '../lib/xlsx-export.mjs';
+import { pathToFileURL } from 'url';
+
+let userGuideWindow: BrowserWindow | null = null;
+
+const GUIDE_SECTION_IDS = [
+  'app-tour',
+  'add-learner',
+  'edit-learner',
+  'activate-deactivate',
+  'open-account',
+  'record-payment',
+  'void-payment',
+  'statements-export',
+  'class-list',
+  'school-fees',
+  'backup-restore',
+  'settings-admin',
+  'first-run',
+] as const;
+
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.ogg']);
+
+function closeDatabase(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    db.close(err => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+function removeTarget(targetPath: string) {
+  if (fs.existsSync(targetPath)) {
+    fs.rmSync(targetPath, { recursive: true, force: true });
+  }
+}
+
+async function wipeUserData(targetPaths: string[]) {
+  await closeDatabase();
+  targetPaths.forEach(removeTarget);
+}
+
+function scheduleAppRestart() {
+  setTimeout(() => {
+    app.relaunch();
+    app.exit(0);
+  }, 250);
+}
+
+function getAppIconPath() {
+  if (app.isPackaged) {
+    return path.join(__dirname, 'img', 'schoolfoundry-icon.ico');
+  }
+
+  return path.join(process.cwd(), 'public', 'img', 'schoolfoundry-icon.ico');
+}
+
+function openUserGuideWindow() {
+  const isDev = !app.isPackaged;
+  const preloadPath = path.join(__dirname, 'preload.js');
+  ensureGuideMediaFolders(app.getPath('userData'));
+
+  if (userGuideWindow && !userGuideWindow.isDestroyed()) {
+    userGuideWindow.show();
+    userGuideWindow.focus();
+    return;
+  }
+
+  userGuideWindow = new BrowserWindow({
+    width: 1180,
+    height: 860,
+    minWidth: 980,
+    minHeight: 720,
+    title: 'SchoolFoundry User Guide',
+    autoHideMenuBar: true,
+    icon: getAppIconPath(),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: preloadPath,
+      plugins: true,
+    },
+  });
+
+  userGuideWindow.on('closed', () => {
+    userGuideWindow = null;
+  });
+
+  if (isDev) {
+    userGuideWindow.loadURL('http://localhost:5173/?window=user-guide');
+  } else {
+    userGuideWindow.loadFile(path.join(__dirname, 'index.html'), {
+      search: '?window=user-guide',
+    });
+  }
+}
+
+async function saveWorkbookToDisk(options: {
+  suggestedFileName: string;
+  workbook: {
+    sheetName: string;
+    topRows?: Array<{ value: string; styleId?: number; mergeAcross?: number }>;
+    columns: Array<{ key: string; header: string; width?: number; type?: string }>;
+    rows: Array<Record<string, any>>;
+    summaryRows?: Array<{
+      label: string;
+      value: string | number;
+      valueType?: string;
+      valueStyleId?: number;
+    }>;
+    freezeRows?: number;
+    autoFilter?: boolean;
+  };
+}) {
+  const result = await dialog.showSaveDialog({
+    defaultPath: options.suggestedFileName.endsWith('.xlsx')
+      ? options.suggestedFileName
+      : `${options.suggestedFileName}.xlsx`,
+    filters: [{ name: 'Excel Workbook', extensions: ['xlsx'] }],
+  });
+
+  if (result.canceled || !result.filePath) {
+    return { success: false, canceled: true };
+  }
+
+  const bytes = await buildWorkbookBytes({
+    sheetName: options.workbook.sheetName,
+    topRows: options.workbook.topRows,
+    columns: options.workbook.columns,
+    rows: options.workbook.rows,
+    summaryRows: options.workbook.summaryRows,
+    freezeRows: options.workbook.freezeRows,
+    autoFilter: options.workbook.autoFilter,
+  });
+
+  fs.writeFileSync(result.filePath, Buffer.from(bytes));
+  return { success: true, filePath: result.filePath };
+}
+
+async function saveWorkbookZipToDisk(options: {
+  suggestedFileName: string;
+  statements: Array<{
+    filename: string;
+    workbook: {
+      sheetName: string;
+      topRows?: Array<{ value: string; styleId?: number; mergeAcross?: number }>;
+      columns: Array<{ key: string; header: string; width?: number; type?: string }>;
+      rows: Array<Record<string, any>>;
+      summaryRows?: Array<{
+        label: string;
+        value: string | number;
+        valueType?: string;
+        valueStyleId?: number;
+      }>;
+      freezeRows?: number;
+      autoFilter?: boolean;
+    };
+  }>;
+}) {
+  const result = await dialog.showSaveDialog({
+    defaultPath: options.suggestedFileName.endsWith('.zip')
+      ? options.suggestedFileName
+      : `${options.suggestedFileName}.zip`,
+    filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
+  });
+
+  if (result.canceled || !result.filePath) {
+    return { success: false, canceled: true };
+  }
+
+  const zip = new JSZip();
+  for (const statement of options.statements) {
+    const bytes = await buildWorkbookBytes({
+      sheetName: statement.workbook.sheetName,
+      topRows: statement.workbook.topRows,
+      columns: statement.workbook.columns,
+      rows: statement.workbook.rows,
+      summaryRows: statement.workbook.summaryRows,
+      freezeRows: statement.workbook.freezeRows,
+      autoFilter: statement.workbook.autoFilter,
+    });
+    zip.file(
+      statement.filename.endsWith('.xlsx') ? statement.filename : `${statement.filename}.xlsx`,
+      Buffer.from(bytes)
+    );
+  }
+
+  const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+  fs.writeFileSync(result.filePath, zipBuffer);
+  return { success: true, filePath: result.filePath };
+}
 
 function getDbPath(): string {
   return path.join(app.getPath('userData'), 'data.db');
+}
+
+function getGuideMediaRoot(userDataPath: string) {
+  return path.join(userDataPath, 'guide-media');
+}
+
+function ensureGuideMediaFolders(userDataPath: string) {
+  const root = getGuideMediaRoot(userDataPath);
+
+  for (const sectionId of GUIDE_SECTION_IDS) {
+    fs.mkdirSync(path.join(root, sectionId, 'screenshots'), { recursive: true });
+    fs.mkdirSync(path.join(root, sectionId, 'videos'), { recursive: true });
+  }
+
+  return root;
+}
+
+function listMediaFiles(directory: string, extensions: Set<string>) {
+  if (!fs.existsSync(directory)) return [];
+
+  return fs
+    .readdirSync(directory)
+    .map(fileName => {
+      const fullPath = path.join(directory, fileName);
+      const extension = path.extname(fileName).toLowerCase();
+      const stats = fs.statSync(fullPath);
+
+      if (!stats.isFile() || !extensions.has(extension)) {
+        return null;
+      }
+
+      return {
+        fileName,
+        fileUrl: pathToFileURL(fullPath).toString(),
+      };
+    })
+    .filter((item): item is { fileName: string; fileUrl: string } => item !== null)
+    .sort((a, b) => a.fileName.localeCompare(b.fileName));
+}
+
+function getGuideMediaLibrary(userDataPath: string) {
+  const rootPath = ensureGuideMediaFolders(userDataPath);
+
+  return {
+    rootPath,
+    sections: GUIDE_SECTION_IDS.map(sectionId => {
+      const sectionRoot = path.join(rootPath, sectionId);
+      return {
+        id: sectionId,
+        screenshots: listMediaFiles(path.join(sectionRoot, 'screenshots'), IMAGE_EXTENSIONS),
+        videos: listMediaFiles(path.join(sectionRoot, 'videos'), VIDEO_EXTENSIONS),
+      };
+    }),
+  };
 }
 
 export function setupIpcHandlers() {
@@ -258,6 +512,50 @@ export function setupIpcHandlers() {
     }
   );
 
+  ipcMain.handle(
+    'export-xlsx-statements-to-zip',
+    async (
+      _event,
+      options: {
+        suggestedFileName: string;
+        statements: Array<{
+          filename: string;
+          workbook: {
+            sheetName: string;
+            topRows?: Array<{ value: string; styleId?: number; mergeAcross?: number }>;
+            columns: Array<{ key: string; header: string; width?: number; type?: string }>;
+            rows: Array<Record<string, any>>;
+            summaryRows?: Array<{
+              label: string;
+              value: string | number;
+              valueType?: string;
+              valueStyleId?: number;
+            }>;
+            freezeRows?: number;
+            autoFilter?: boolean;
+          };
+        }>;
+      }
+    ) => {
+      try {
+        return await saveWorkbookZipToDisk(options);
+      } catch (err) {
+        console.error('[IPC] export-xlsx-statements-to-zip error:', err);
+        return { success: false, error: String(err) };
+      }
+    }
+  );
+
+  ipcMain.handle('open-user-guide-window', async () => {
+    try {
+      openUserGuideWindow();
+      return { success: true };
+    } catch (err) {
+      console.error('[IPC] open-user-guide-window error:', err);
+      return { success: false, error: String(err) };
+    }
+  });
+
   // Auto-debit fees handler
   ipcMain.handle('auto-debit-fees', async () => {
     try {
@@ -265,6 +563,46 @@ export function setupIpcHandlers() {
       return { success: true };
     } catch (err) {
       console.error('[IPC] auto-debit-fees error:', err);
+      return { success: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('clear-database', async () => {
+    try {
+      await wipeUserData(getClearDatabaseTargets(app.getPath('userData')));
+      scheduleAppRestart();
+      return { success: true };
+    } catch (err) {
+      console.error('[IPC] clear-database error:', err);
+      return { success: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('reset-app', async () => {
+    try {
+      await wipeUserData(getResetAppTargets(app.getPath('userData')));
+      scheduleAppRestart();
+      return { success: true };
+    } catch (err) {
+      console.error('[IPC] reset-app error:', err);
+      return { success: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('export-xlsx-report', async (_event, options) => {
+    try {
+      return await saveWorkbookToDisk(options);
+    } catch (err) {
+      console.error('[IPC] export-xlsx-report error:', err);
+      return { success: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle('get-guide-media-library', async () => {
+    try {
+      return { success: true, ...getGuideMediaLibrary(app.getPath('userData')) };
+    } catch (err) {
+      console.error('[IPC] get-guide-media-library error:', err);
       return { success: false, error: String(err) };
     }
   });

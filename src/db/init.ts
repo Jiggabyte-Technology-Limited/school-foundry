@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
 import { runMigrations } from './migrations';
+import schemaSql from './schema.sql?raw';
 
 const dbPath = path.join(app.getPath('userData'), 'data.db');
 const db = new sqlite3.Database(dbPath);
@@ -15,29 +16,8 @@ export function initializeDatabase(): Promise<void> {
       fs.mkdirSync(dbDir, { recursive: true });
     }
 
-    const pathsToTry = [
-      path.join(__dirname, 'schema.sql'),
-      path.join(process.cwd(), 'src', 'db', 'schema.sql'),
-      path.join(process.cwd(), 'dist', 'db', 'schema.sql'),
-      path.join(app.getAppPath(), 'dist', 'db', 'schema.sql'),
-    ];
+    const schema = schemaSql;
 
-    let actualSchemaPath = '';
-    for (const p of pathsToTry) {
-      if (fs.existsSync(p)) {
-        actualSchemaPath = p;
-        break;
-      }
-    }
-
-    if (!actualSchemaPath) {
-      const errorMsg = 'Could not find schema.sql in any of: ' + pathsToTry.join(', ');
-      console.error(errorMsg);
-      reject(new Error(errorMsg));
-      return;
-    }
-
-    const schema = fs.readFileSync(actualSchemaPath, 'utf8');
     db.serialize(() => {
       db.exec(schema, async (err) => {
         if (err) {
