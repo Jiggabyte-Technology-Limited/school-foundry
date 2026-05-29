@@ -1323,6 +1323,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
     <div
       style={{
         minHeight: '100vh',
+        width: '100%',
         backgroundColor: 'var(--background)',
         color: 'var(--text-primary)',
         display: 'flex',
