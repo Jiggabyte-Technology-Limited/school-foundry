@@ -2197,7 +2197,7 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
             <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '14px' }}>
               Receipt: <strong>{voidingPayment.receipt_number}</strong>
               <br />
-              Learner: <strong>{voidingPayment.student_name}</strong>
+              Student: <strong>{voidingPayment.student_name}</strong>
               <br />
               Amount: <strong>{formatCurrency(voidingPayment.amount_paid_cents)}</strong>
             </p>

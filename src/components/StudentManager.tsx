@@ -431,7 +431,7 @@ const StudentManager: React.FC = () => {
               ))}
               {students.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="table-empty">No learners found</td>
+                  <td colSpan={5} className="table-empty">No students found</td>
                 </tr>
               )}
             </tbody>

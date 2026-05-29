@@ -17,7 +17,7 @@ type Step = 'details' | 'guardian' | 'enrollment' | 'confirm';
 const STEPS: { id: Step; label: string; icon: React.ReactElement }[] = [
   {
     id: 'details',
-    label: 'Learner Details',
+    label: 'Student Details',
     icon: (
       <svg
         width="16"
@@ -126,7 +126,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
     return (
       <div className="card" style={{ textAlign: 'center', padding: '48px' }}>
         <h3 style={{ color: '#ef4444' }}>Access Denied</h3>
-        <p>You do not have permission to manage learners.</p>
+        <p>You do not have permission to manage students.</p>
       </div>
     );
   }
@@ -184,7 +184,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
     switch (currentStep) {
       case 'details':
         if (!form.full_name.trim()) {
-          setError('Please enter the learner name');
+          setError('Please enter the student name');
           return false;
         }
         break;
@@ -304,11 +304,11 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
         ]
       );
 
-      showToast('success', 'Learner Added', `${form.full_name} has been successfully enrolled.`);
+      showToast('success', 'Student Added', `${form.full_name} has been successfully enrolled.`);
       onSuccess();
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Failed to add learner. Please try again.');
+      setError(err.message || 'Failed to add student. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -333,7 +333,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
               Student Details
             </h2>
             <p className="wizard-subtitle" style={{ textAlign: 'left', marginBottom: 24 }}>
-              Enter the basic information about the learner.
+              Enter the basic information about the student.
             </p>
 
             <div className="wizard-form">
@@ -345,7 +345,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                   type="text"
                   value={form.full_name}
                   onChange={e => setForm({ ...form, full_name: e.target.value })}
-                  placeholder="Enter learner's full name"
+                  placeholder="Enter student's full name"
                   autoFocus
                 />
               </div>
@@ -491,7 +491,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
               Enrollment
             </h2>
             <p className="wizard-subtitle" style={{ textAlign: 'left', marginBottom: 24 }}>
-              Select the grade level for this learner.
+              Select the grade level for this student.
             </p>
 
             <div className="wizard-form">
@@ -504,7 +504,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                   style={{ backgroundColor: 'var(--color-sage-cream)', cursor: 'not-allowed' }}
                 />
                 <p style={{ fontSize: 12, color: 'var(--color-sage-placeholder)', marginTop: 4 }}>
-                  Learners are automatically enrolled in the current academic year
+                  Students are automatically enrolled in the current academic year
                 </p>
               </div>
 
@@ -633,7 +633,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
               Confirm Details
             </h2>
             <p className="wizard-subtitle" style={{ textAlign: 'left', marginBottom: 24 }}>
-              Please review the information before adding this learner.
+              Please review the information before adding this student.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -645,7 +645,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                 }}
               >
                 <h4 style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--color-accent-teal)' }}>
-                  Learner Information
+                  Student Information
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
@@ -752,7 +752,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
         style={{ maxWidth: 600 }}
       >
         <div className="modal-header">
-          <h2>Add New Learner</h2>
+            <h2>Add New Student</h2>
           <button className="modal-close" onClick={onClose}>
             <svg
               width="20"
@@ -906,7 +906,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                   onClick={handleSubmit}
                   disabled={isLoading}
                 >
-                  {isLoading ? 'Adding Learner...' : 'Add Learner'}
+                  {isLoading ? 'Adding Student...' : 'Add Student'}
                   <svg
                     width="16"
                     height="16"

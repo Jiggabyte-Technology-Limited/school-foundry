@@ -883,7 +883,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
               {stats.currentTermLabel}
             </div>
           </div>
-          <button className="btn btn-primary btn-lg" onClick={() => setShowStudentWizard(true)}>
+          <button 
+            className="btn btn-primary btn-lg" 
+            onClick={() => setShowStudentWizard(true)}
+            aria-label="Add a new student to the school"
+            title="Add a new student to the school"
+          >
             <svg
               width="20"
               height="20"
@@ -893,11 +898,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
+              aria-hidden="true"
             >
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            Add Learner
+            Add Student
           </button>
         </div>
       </div>
@@ -912,17 +918,17 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
         }}
       >
         <h3 className="mb-4" style={{ color: 'white' }}>
-          Search Learner
+          Search Student
         </h3>
 
         {!selectedStudentForPayment ? (
           <div style={{ position: 'relative' }}>
             <input
-              type="text"
-              placeholder="Start typing learner name or ID..."
-              value={studentSearchQuery}
-              onChange={e => {
-                setStudentSearchQuery(e.target.value);
+            type="text"
+            placeholder="Search by student name or ID..."
+            value={studentSearchQuery}
+            onChange={e => {
+              setStudentSearchQuery(e.target.value);
                 setShowStudentDropdown(true);
               }}
               onFocus={() => setShowStudentDropdown(true)}
