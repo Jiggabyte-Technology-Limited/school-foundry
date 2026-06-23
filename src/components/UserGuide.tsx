@@ -1,19 +1,15 @@
 import React, { useEffect, useState } from 'react';
+import { db } from '../lib/db-client';
+import { printDocument } from '../lib/print/print-document';
+import {
+  buildPrintableGuideHtml,
+  type PrintableGuideSection,
+} from '../lib/print/user-guide';
+import { useToast } from './Toast';
 
-type GuideAudience = 'All users' | 'Admin only';
+type GuideAudience = PrintableGuideSection['audience'];
 
-type GuideSection = {
-  id: string;
-  group: 'Getting Started' | 'Learners' | 'Payments' | 'Reports' | 'Admin';
-  title: string;
-  audience: GuideAudience;
-  summary: string;
-  before: string[];
-  steps: string[];
-  after: string[];
-  tips: string[];
-  warnings?: string[];
-};
+type GuideSection = PrintableGuideSection;
 
 type GuideMediaItem = {
   fileName: string;
@@ -392,11 +388,84 @@ const groupTitles: Record<GuideSection['group'], string> = {
 };
 
 const UserGuide: React.FC = () => {
+  const { showToast } = useToast();
   useEffect(() => {
     document.title = 'SchoolFoundry User Guide';
   }, []);
 
   const [mediaLibrary, setMediaLibrary] = useState<GuideMediaLibrary | null>(null);
+
+  // Live school name for print + on-screen header. Always reads from
+  // app_settings so it stays correct after a database import/restore.
+  const [schoolName, setSchoolName] = useState<string>('');
+  const [schoolNameMissing, setSchoolNameMissing] = useState<boolean>(false);
+  const [isPrinting, setIsPrinting] = useState<boolean>(false);
+
+  const fetchSchoolName = async (): Promise<{ value: string; missing: boolean }> => {
+    try {
+      const setting = await db.get("SELECT value FROM app_settings WHERE key = 'school_name'");
+      const value = setting?.value?.toString()?.trim() ?? '';
+      return { value, missing: value.length === 0 };
+    } catch (err) {
+      console.error('Failed to load school name for user guide:', err);
+      return { value: '', missing: true };
+    }
+  };
+
+  useEffect(() => {
+    fetchSchoolName().then(({ value, missing }) => {
+      setSchoolName(value);
+      setSchoolNameMissing(missing);
+    });
+  }, []);
+
+  const handlePrintGuide = async () => {
+    if (isPrinting) return;
+    setIsPrinting(true);
+    try {
+      // Re-fetch at print time so the latest DB value is always used.
+      const fresh = await fetchSchoolName();
+      setSchoolName(fresh.value);
+      setSchoolNameMissing(fresh.missing);
+
+      const html = buildPrintableGuideHtml({
+        schoolName: fresh.value,
+        generatedAt: new Date().toLocaleString(),
+        sections: sections as PrintableGuideSection[],
+        groupTitles: groupTitles as Record<string, string>,
+        printOnly: true,
+      });
+      const safeName = (fresh.value || 'schoolfoundry')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+      const filename = `${safeName || 'schoolfoundry'}-user-guide.pdf`;
+      const titleSuffix = fresh.value ? ` — ${fresh.value}` : '';
+      const filePath = await printDocument({
+        html,
+        filename,
+        title: `SchoolFoundry User Guide${titleSuffix}`,
+      });
+      if (filePath) {
+        showToast('success', 'User Guide Printed', `Saved to ${filePath}`);
+      } else {
+        showToast('error', 'Print Failed', 'Could not generate the PDF. Check the print output folder.');
+      }
+      if (fresh.missing) {
+        showToast(
+          'info',
+          'School name not set',
+          'Open Settings → School Details to set the school name so it shows on the next print.'
+        );
+      }
+    } catch (err: any) {
+      console.error('User guide print failed:', err);
+      showToast('error', 'Print Failed', err?.message || 'Unexpected error while printing the guide.');
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
 
   useEffect(() => {
     let mounted = true;
@@ -487,6 +556,9 @@ const UserGuide: React.FC = () => {
               <h1 style={{ margin: '0 0 8px', fontSize: 30, lineHeight: 1.1 }}>
                 How to actually do things in SchoolFoundry
               </h1>
+              <p style={{ margin: '0 0 4px', fontSize: 14, color: 'var(--primary)', fontWeight: 700 }}>
+                {schoolName || 'SchoolFoundry'}
+              </p>
               <p style={{ margin: 0, color: 'var(--text-secondary)', maxWidth: 900 }}>
                 This guide is written as a practical handbook. Each page explains where to click,
                 what to enter, what should happen next, and where a short video or GIF can be
@@ -526,6 +598,68 @@ const UserGuide: React.FC = () => {
                 Put screenshots in <code>screenshots</code> and videos in <code>videos</code> under each
                 tutorial folder.
               </div>
+              <button
+                type="button"
+                onClick={handlePrintGuide}
+                disabled={isPrinting}
+                title={
+                  schoolNameMissing
+                    ? 'Print now &mdash; school name will fall back to "SchoolFoundry" until set in Settings.'
+                    : `Print this guide with the current school name: ${schoolName || 'SchoolFoundry'}`
+                }
+                style={{
+                  marginTop: 14,
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: 12,
+                  border: 'none',
+                  background: isPrinting
+                    ? 'rgba(249,115,22,0.4)'
+                    : 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: isPrinting ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  boxShadow: '0 4px 14px rgba(249, 115, 22, 0.25)',
+                }}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polyline points="6 9 6 2 18 2 18 9" />
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                  <rect x="6" y="14" width="12" height="8" />
+                </svg>
+                {isPrinting ? 'Saving PDF...' : 'Print / Save PDF'}
+              </button>
+              {schoolNameMissing && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 11,
+                    color: '#9a3412',
+                    background: 'rgba(249,115,22,0.08)',
+                    border: '1px solid rgba(249,115,22,0.18)',
+                    padding: '6px 8px',
+                    borderRadius: 8,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  School name not set &mdash; showing "SchoolFoundry". Open Settings to set it.
+                </div>
+              )}
             </div>
           </div>
         </div>

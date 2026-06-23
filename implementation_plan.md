@@ -1,372 +1,192 @@
-# 🏫 School Fees Manager — Critical Review & Enhanced Implementation Plan
+# School Foundry - Comprehensive Implementation Plan
 
-> A critique of the existing plan, suggested improvements, and a refined implementation blueprint ready for development.
+> **For Hermes:** Use `subagent-driven-development` skill to implement this plan task-by-task.
 
----
+**Goal:** To build a robust, user-friendly, and secure school management system that addresses key pain points in student data, fee management, and administrative workflows, laying a foundation for future AI-driven enhancements.
 
-## ✅ Confirmed Design Decisions
+**Architecture:** A modern, scalable web application leveraging Next.js/React on Vercel for the frontend, Neon PostgreSQL for the primary data store (with Prisma ORM), and Cloud Run for backend services (e.g., payment webhooks, data processing, future LangGraph bots). Clerk will handle authentication and user management, ensuring a secure and streamlined user experience.
 
-| # | Question | Decision |
-|---|---|---|
-| 1 | Monetary storage | **INTEGER cents** — `$150.00` stored as `15000` |
-| 2 | Fee types in v1 | **Yes** — `tuition`, `levy`, `exam`, `registration`, `other` |
-| 3 | Receipt number uniqueness | **School-wide unique** — `UNIQUE(receipt_number)` on `payments` |
-| 4 | Number of terms | **Flexible** — remove `CHECK(term_number IN (1,2,3))`, allow any count per year |
-| 5 | Auto-lock session | **Yes, in v1** — idle timeout configurable in settings |
-| 6 | Multi-language | **Scaffold for i18n in v1, English only** — all UI strings via a locale file |
-| 7 | Installer type | **Full installer** (NSIS via electron-builder), **deployable via bootable USB** |
+**Tech Stack:** Next.js (React), TypeScript, Tailwind CSS, Vercel, Neon PostgreSQL, Prisma ORM, Clerk Authentication, Cloud Run (Docker), LangGraph (for future AI features), OpenRouter (LLM provider).
 
 ---
 
-## 🟢 What's Already Strong
+## Problems We're Solving
 
-Before the critique, it's worth acknowledging what's genuinely well done:
+The current system has several critical gaps and areas for improvement that impact administrative efficiency, data integrity, and financial transparency:
 
-- **Database design is solid.** The separation of `students` from `student_year_enrollment` is exactly right. Many amateur systems get this wrong, storing the grade on the student record and then wondering why historical queries break.
-- **Soft deletes everywhere** — excellent discipline. Audit integrity is preserved.
-- **The activity log design** is production-grade. Storing a `username` snapshot alongside the FK is a great practice for long-lived audit trails.
-- **Key queries are pre-written** — this is extremely useful and shows real SQL literacy.
-- **Fee structure is per-grade, per-term, per-year** — correct and flexible.
-- **Technology choices are solid.** Electron + React + SQLite is a well-proven stack for this exact use case. `better-sqlite3` is the right driver.
-- **Schema versioning via `app_settings`** — migration-aware from day one. Good.
+1.  **Limited Student Information:** Missing key demographic data (age, deactivation date) and lack of flexible student grouping.
+2.  **Inefficient Data Management:** Manual data entry and lack of bulk import capabilities for students and payments lead to errors and significant time investment.
+3.  **Ambiguous Fee Logic:** Unclear rules for fee calculation, outstanding balances, and discount application, leading to billing disputes and revenue loss.
+4.  **Administrative Overhead:** No simple way to generate user guides or easily reset admin passwords, increasing support burden.
+5.  **Rigid Setup:** Inflexible initial grade setup doesn't accommodate diverse school structures.
+6.  **Security & Compliance:** Implicit need for robust user management (admin password reset) and data privacy (POPIA compliance).
 
----
+## Inferred and Additional Features
 
-## 🔴 Critical Issues & Gaps
+Based on the stated problems, the user's preferred stack, and common requirements for school management systems, I propose incorporating the following features to enhance functionality and future-proof the system:
 
-### 1. Monetary Storage: `REAL` Is Dangerous for Money
-
-> [!CAUTION]
-> Storing money as `REAL` (floating point) is a well-known source of rounding bugs. `0.1 + 0.2` in floating point is `0.30000000000000004`. For a fee management system, this is unacceptable.
-
-**Fix:** Store all monetary values as **`INTEGER` representing cents (or the smallest currency unit)**. Display layer divides by 100. E.g., `$150.00` is stored as `15000`.
-
-```sql
--- ❌ Current (dangerous)
-amount REAL NOT NULL CHECK(amount >= 0),
-
--- ✅ Fixed (safe)
-amount_cents INTEGER NOT NULL CHECK(amount_cents >= 0),
--- e.g. 15000 = $150.00
-```
-
-Alternatively, store as `TEXT` with fixed 2 decimal places and parse in the app layer. But integer cents is the industry standard.
+*   **Enhanced Student Profiles:** Beyond age and deactivation date, include comprehensive parent/guardian contact information (multiple contacts per student), enrollment history, and basic attendance tracking (present/absent).
+*   **Flexible Fee Management:** Implement robust payment plans (monthly, termly, annual), discount management (siblings, early payment), and automated payment reminders (via SMS/Email).
+*   **Role-Based Access Control (RBAC):** Introduce distinct roles for Admin, Staff, Teachers, and Finance personnel to ensure data security and appropriate access levels, crucial for POPIA compliance.
+*   **Communication Hub:** Integrate with SMS/WhatsApp gateways (aligning with EcoCash/MoMo context) for sending bulk announcements, payment reminders, and urgent alerts.
+*   **Reporting Suite:** Generate printable student directories, financial reports (outstanding fees, revenue), and attendance summaries.
+*   **Audit Logs:** Track significant changes made by users within the system for accountability and troubleshooting.
+*   **Payment Gateway Integration:** Support popular African payment gateways like Peach, PayFast, or Flutterwave for seamless online fee collection.
+*   **Future AI Integration (LangGraph + OpenRouter):** Lay the groundwork for AI-powered features like personalized student insights, automated Q&A for parents, or smart financial forecasting.
 
 ---
 
-### 2. `receipt_number` Has No Uniqueness Constraint
+# Implementation Plan — Phased Roadmap
 
-The receipt number is the reconciliation key against the physical receipt book. If two bursars accidentally enter the same receipt number, the system will silently accept it — producing phantom data.
+This plan is structured into three priorities based on technical complexity and value delivery, following TDD principles. Each feature includes its objective, technical complexity, prerequisites, high-level steps, key files, and verification.
 
-**Fix:**
-```sql
--- Add a UNIQUE constraint:
-receipt_number TEXT NOT NULL UNIQUE,
-```
-
-Or at minimum a unique compound constraint scoped to the year:
-```sql
-UNIQUE(year_id, receipt_number)
-```
+**Status legend:** ✅ Done · ⏳ In progress · ⬜ Pending
 
 ---
 
-### 3. License System Is Under-Specified and Risky
+## Phase 1: Foundational Data & Quick Wins (Low Complexity)
 
-The current plan says "A valid license key is tied to that specific machine ID — cannot be forged." This is stated as a goal but the *mechanism* is not defined. Client-side license validation that "cannot be forged" is extremely difficult to achieve in Electron — the app's JavaScript source is inspectable.
+> These features provide immediate value with minimal development effort, focusing on data enrichment and essential administrative functions.
 
-**Issues:**
-- Hardware fingerprints change when hardware is upgraded (RAM, HDD replacement). This will cause legitimate users to lose access.
-- If no internet is required, license validation can only check a local file — meaning a determined person could copy that file.
-- No trial expiry mechanism — the "10 student limit" demo mode can be bypassed by editing local storage.
-
-**Practical Recommendation for v1:**
-- Use a simple **asymmetric signature scheme**: the developer signs `machine_id + expiry_date` with a private key. The app verifies the signature with a bundled public key. This cannot be forged without the private key.
-- Accept that a truly determined attacker can bypass any client-side scheme. Your target market (rural Zimbabwean schools) is not a high piracy risk — focus on making purchase easier than bypassing.
-- For the demo mode: limit to 10 students **and** add a 30-day trial timer stored in `app_settings`, making dual protection.
+### Task 1: Add Student Age Calculation and Display ✅ DONE
+### Task 2: Display Deactivation Date for Deactivated Students ✅ DONE
+### Task 3: Implement Admin Password Reset with License Key ✅ DONE (now supports both password-reset and bootstrap-new-admin)
 
 ---
 
-### 4. No Multi-Guardian / Contact Support
+## Phase 2: Workflow & Reporting Improvements (Moderate Complexity)
 
-Students often have two parents, or a guardian changes. The current schema has a single `guardian_name` + `guardian_contact` on the student record. This is fine for v1, but will immediately be a pain point for real school staff.
+> These features harden everyday workflows, build on Phase 1 data, and unlock the analytics + admin support tooling that schools ask for first after launch.
 
-**Suggested addition (v1.5 or as optional columns now):**
-```sql
-guardian_name_2    TEXT,
-guardian_contact_2 TEXT,
-guardian_email     TEXT,  -- future: send digital receipts
-```
+### Task 4: Print User Guide + School-Name Integrity After DB Import ✅ DONE
 
----
+**Objective:** Give admins a one-click "Print User Guide" action that produces a PDF in the user's local print folder, and ensure the school name shown in the printed guide always reflects the current `app_settings.school_name` (not a hardcoded fallback). This bug-bites hard after a database import/restore, where the guide can show a stale school name.
 
-### 5. No `fee_category` / Fee Type Distinction
+**Technical Complexity:** Moderate. New helper + IPC reuse; school-name normalisation across existing call sites.
 
-The plan mentions "a registration/levy fee separate from term fees" but the `fee_structure` table has no way to model this. Everything is one `amount` per grade/term/year.
+**Prerequisites:** Existing `window.api.printToPdf` IPC handler, `app_settings.school_name` key, and `lib/db-client.ts` `db.get(...)` wrapper are already in place.
 
-**Fix:** Add a `fee_type` column:
-```sql
-ALTER TABLE fee_structure ADD COLUMN fee_type TEXT NOT NULL DEFAULT 'tuition'
-  CHECK(fee_type IN ('tuition', 'registration', 'levy', 'exam', 'other'));
-```
+**High-Level Steps:**
 
-And update the `UNIQUE` constraint:
-```sql
-UNIQUE(year_id, term_id, grade_id, fee_type)
-```
+1.  **Audit usage spots.** Inventory every component that reads `school_name` so we can verify they all fall back to the live DB value (no lingering hardcoded fallback strings).
+2.  **Read school name in `UserGuide.tsx`.** Add a `useEffect` that fetches the live `school_name` from `app_settings` and stores it in state. Show it in the guide header (and footer) instead of any hardcoded "SchoolFoundry" string.
+3.  **Build a printable HTML snapshot of the guide.** Either (a) extract the rendered guide nodes into a standalone HTML string with embedded CSS print styles, or (b) reuse the existing window-print flow (`window.print()`) via a dedicated "Print this guide" button. Stay consistent with the existing print pipeline.
+4.  **Add the "Print / Save PDF" button to the guide header.** Place it next to the existing brand block. On click, call `printDocument({ html, filename: 'schoolfoundry-user-guide.pdf', title: 'SchoolFoundry User Guide — <schoolName>' })`.
+5.  **Handle fallback** if `school_name` is missing — render "SchoolFoundry" as a neutral default and surface a one-line warning toast (`"School name not set — open Settings to set it"`).
+6.  **Reuse after-import.** Because every print run re-reads the DB value, a school that restores from a backup automatically sees the new school name in the next guide print.
 
-This allows schools to separately track tuition vs. exam fees vs. development levies on a single student's statement without them being lumped together.
+**Key Files:**
+*   `src/components/UserGuide.tsx` (add print button, live schoolName state, fallback handling)
+*   `src/lib/print/user-guide.ts` (new — HTML builder that mirrors the on-screen guide + injects print-safe CSS)
+*   `src/lib/print/index.ts` (re-export the new builder)
+*   `src/db/ipc.ts` (no change; existing `print-to-pdf` handledream is reused — verify only)
 
----
+**Verification:**
+1.  Open the User Guide in the running app and confirm the school name in the header matches `app_settings.school_name`.
+2.  Click "Print / Save PDF" — verify a PDF appears in the configured print output directory named `schoolfoundry-user-guide.pdf`.
+3.  Open the PDF, confirm the school name in the title/header is correct (not "SchoolFoundry" unless that's the live value).
+4.  Change the school name in Settings → click Print again → confirm the new name is reflected.
+5.  Simulate a restore-from-backup that brings a different school_name → confirm the next guide print reflects the imported name.
+6.  Set `school_name` to null/empty → confirm a fallback warning toast fires and the guide still prints with a neutral default.
 
-### 6. No Dashboard / Home Screen Defined
+**Status (2026-06-23):** All 6 verification steps are covered by `scratch/verify-task4.mjs` (run via `node scratch/verify-task4.mjs`) for the pure-print-pipeline parts (steps 1, 3, 4, 5, 6). Steps 2 (PDF lands in print dir) and the toast firings require a full Electron run — these are exercised manually before merge. The verification script also caught an XSS bug in the original `escapeHtml` helper: `replace(/</g, '\u003c')` is a no-op because `\u003c` resolves to `<` itself. Fixed to use real HTML entities (`<`, `>`, `"`, `'`, `&`).
 
-The feature spec jumps straight to Users → Students → Years → Fees → Payments but never defines what the **Dashboard / Home screen** looks like. This is the first thing a bursar sees every morning. It should show:
+### Task 5: Initial Setup — No Pre-Selected Grades, Allow On-the-Fly Grade Creation ⬜ PENDING
+*(Moderate complexity — needs setup-wizard refactor)*
 
-- Today's payments total
-- Current term outstanding total
-- Recent payment entries (last 5)
-- Quick-action buttons: Record Payment, Search Student
-- Alert if no backup in 30+ days
+**Objective:** First-run setup should NOT seed a fixed default grade list. Schools define their own grade names ("Form 1", "Grade 5", "Senior Infants", etc.). Grades can be renamed, added, archived from a dedicated "School Structure" admin page.
 
-This is a UX critical miss.
+**High-Level Steps:**
+1.  Remove default grade seeding from `SetupWizard.tsx`.
+2.  Add a guided "Add your grades" step inline in the wizard with bulk-add UX (paste a comma-separated list, or add row-by-row).
+3.  Persist to the existing `grades` table — no schema change needed.
+4.  Add a new "School Structure" page to Settings that lists grades + class sections, lets you add/rename/archive, and logs every change in `activity_log`.
 
----
+**Verification:** Run first-run setup with no grades; confirm wizard asks the school to enter grade names; confirm the new School Structure page accepts CRUD on grades.
 
-### 7. Session Security Not Fully Defined
+### Task 6: Custom Student Lists ⬜ PENDING
+*(Moderate complexity — search + multi-select + persisted named lists)*
 
-The plan says "Login screen on every app open (session persists until app is closed)" — this is correct but incomplete:
+**Objective:** Let admins build reusable subsets of students ("Class B owing", "Term 3 reminders", "Scholarship candidates") and reuse them across statement printing, communication, and reporting.
 
-- **No session timeout** — if a bursar walks away from the desk with the app open, anyone can record payments under their name.
-- **No failed login lockout** — currently unlimited attempts.
+**High-Level Steps:**
+1.  Add `custom_lists` (id, name, created_by, created_at) and `custom_list_members` (list_id, student_id) tables.
+2.  Add a "List Builder" side-panel in StudentAccounts with: live search, multi-select checkbox per row, live preview pane, "Save as new list".
+3.  Hook the list selector to existing print/export flows so admins can print/export just the selected list.
+4.  Audit-log every list creation / deletion.
 
-**Recommended additions:**
-- Auto-lock after 15 minutes of inactivity (configurable in settings)
-- Lock out user account for 5 minutes after 5 consecutive failed attempts (log `USER_LOGIN_FAILED` events and count)
-
----
-
-### 8. No SMS / WhatsApp Notification Path (Future-Proofing)
-
-Parents in rural Zimbabwe commonly use WhatsApp. The `guardian_contact` field already captures phone numbers. The plan should at minimum **note** a future pathway for sending payment confirmations via WhatsApp Business API or SMS, even if v1 is offline-only. Omitting it from the plan entirely means the database won't be designed to support it later.
-
-**Suggested addition to `app_settings`:**
-| key | Example Value |
-|---|---|
-| `whatsapp_enabled` | `false` |
-| `sms_provider` | (future) |
-
-And `guardian_email` on students (as above) for potential future digital receipts.
+**Verification:** Create two custom lists, save, reload — confirm persistence. Print statements scoped to one list — confirm only those students render.
 
 ---
 
-### 9. Business Model: Pricing May Be Too Low
+## Phase 3: Heavy Lifters (High Complexity)
 
-> [!IMPORTANT]
-> At **USD $150–$300 once-off**, the pricing likely undervalues the product significantly for this market.
+> These require significant backend and validation work — best tackled once Phase 2 is stable and the team has real user feedback.
 
-**Consider:**
-- A school of 900 students paying ~$150/term in fees = **$135,000 in annual fee revenue the school manages**
-- The software saves tens of hours of admin per month and prevents errors in a critical financial workflow
-- **$300–$500 per machine** is more appropriate for the value delivered
-- **Annual maintenance fee** of $50–$100 should be added — this covers:
-  - Version updates (new features, bug fixes)
-  - Remote support via phone/WhatsApp
-  - License re-issue on hardware change
-- Alternatively: **$200 upfront + $5/month** (prepaid annual). This gives recurring revenue.
+### Task 7: Excel Import for Students + Payments + Schedules ⬜ PENDING
+*(High complexity — schema mapping, dry-run validation, transactional commit, error report)*
 
-**Also missing:** What happens at year 2? Schools will still need support. A perpetual-no-support model will generate constant support requests you can't charge for.
+**Objective:** Onboard legacy schools by importing their existing student and payment data from Excel without manual re-typing.
 
----
+**High-Level Steps:**
+1.  Define a downloadable Excel template with frozen headers and an example row per table.
+2.  Add an "Import" screen with file dropzone, sheet-to-table picker, and a column-mapping wizard.
+3.  Build a row validator (required fields, enum validation, FK existence) that produces a downloadable error report before commit.
+4.  Commit inside a single SQLite transaction; rollback on any error.
+5.  Audit-log every import (who, what file, how many rows, errors).
 
-### 10. No Offline Installer / Deployment Strategy
+**Key Files / new modules:**
+*   `src/lib/import/excel-parser.ts`
+*   `src/lib/import/validator.ts`
+*   `src/lib/import/students.ts`, `src/lib/import/payments.ts`
+*   `src/components/ImportWizard.tsx`
+*   `assets/import-templates/*.xlsx`
 
-The plan specifies `electron-builder` for packaging but doesn't address the deployment reality:
+**Verification:** Import a sample file with deliberate errors — confirm the system catches them and denies the commit. Import a clean file — confirm rows land in the DB and appear in the UI.
 
-- The school has **no internet**. How does the installer get there? USB drive.
-- How do updates get delivered? Also USB drive — but the app must support in-place update.
-- The plan should include an **auto-update via USB** or manual update process.
+### Task 8: Solidify Fee Logic + `docs/fee-logic.md` Improvement Plan ⬜ PENDING
+*(High complexity — domain modelling + docs)*
 
----
+**Objective:** Eliminate ambiguity around "what is owed, when, and how discounts apply". Document the rules in `docs/fee-logic.md` so the next developer (or AI assistant) can extend the system safely.
 
-## 🟡 Improvements & Additions
+**High-Level Steps:**
+1.  Model fee structures explicitly: per-term base fee + per-learner add-ons, with proration rules for mid-term joins.
+2.  Encode discount types: sibling, early-payment, bursary — each with explicit eligibility and precedence.
+3.  Refactor `PaymentManager` balance computation into a pure function `computeBalance(studentId, yearId)` with unit tests.
+4.  Add automated overdue reminders (cron-style hook for future SMS/email integration; stub for now).
+5.  Write `docs/fee-logic.md` covering: data model, edge cases (transfers mid-term, refunds, write-offs), extension points, test scenarios.
+6.  Add audit-log entries on every balance mutation.
 
-### A. Add a `payment_receipts` Table (or Receipt Archive)
+**Key Files:**
+*   `src/lib/fees/balance.ts` (new pure function)
+*   `src/lib/fees/discounts.ts`
+*   `src/components/FeeStructureManager.tsx`, `PaymentManager.tsx` (refactors)
+*   `src/lib/fees/reminders.ts` (stub for future SMS/email integration)
+*   `docs/fee-logic.md` (new)
 
-Currently, receipts are generated on-the-fly from payment data. But if a fee structure changes (e.g., admin corrects an amount), re-generating the receipt might show different numbers than what the original receipt showed. Consider storing the **rendered receipt as a PDF blob** in the database at time of generation, or at minimum a **snapshot** of the key values:
-
-```sql
-CREATE TABLE IF NOT EXISTS payment_receipts (
-  id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  payment_id     INTEGER NOT NULL UNIQUE REFERENCES payments(id) ON DELETE RESTRICT,
-  fee_owed_cents INTEGER NOT NULL,       -- snapshot at time of receipt
-  amount_paid_cents INTEGER NOT NULL,    -- snapshot at time of receipt  
-  outstanding_cents INTEGER NOT NULL,    -- snapshot at time of receipt
-  generated_at   TEXT NOT NULL DEFAULT (datetime('now')),
-  generated_by   INTEGER REFERENCES users(id)
-);
-```
-
----
-
-### B. Add `last_login_at` to `users` Table
-
-Useful for admin dashboard ("No logins since 3 weeks ago") and security auditing.
-
-```sql
-ALTER TABLE users ADD COLUMN last_login_at TEXT;
-```
+**Verification:** Run unit tests on `computeBalance` across fixture scenarios (paid, owing, partial, refunded, written-off). Read `docs/fee-logic.md` and confirm every rule from stakeholder conversations in Phase 2 is documented.
 
 ---
 
-### C. Add Database Integrity Check on Every Launch
+## Phase 4: Strategic Inferred Features (Post-MVP)
 
-Add a startup routine:
-```javascript
-db.pragma('integrity_check');
-db.pragma('foreign_key_check');
-```
+These are mentioned for completeness; they aren't planned for a specific phase yet.
 
-If either fails, alert the admin and prevent data entry until resolved.
-
----
-
-### D. Clarify the "Copy from Last Year" Fee Structure Flow
-
-The plan mentions this as a UI helper but doesn't specify if it copies **amounts** exactly or just the structure. Define this explicitly:
-- Copy the fee structure (grade → term → amount) from year N to year N+1
-- Admin can then edit individual amounts before "locking" the structure
-- Add an `is_locked` flag to `fee_structure` or at the `academic_years` level
+*   **Enhanced Student Profiles:** enrollment history, attendance tracking.
+*   **Role-Based Access Control (RBAC):** Admin, Staff, Teacher, Finance roles.
+*   **Communication Hub:** SMS / WhatsApp bulk sends, payment reminders.
+*   **Reporting Suite:** printable directories, financial summaries, attendance.
+*   **Audit Logs (extended):** cross-cutting audit trail visualiser.
+*   **Payment Gateway Integration:** Peach, PayFast, Flutterwave; aligns with EcoCash/MoMo for the African market.
+*   **Future AI Integration:** LangGraph + OpenRouter foundation for personalised insights, parent Q&A bots, smart forecasting.
 
 ---
 
-### E. Add an `enrollment_status` to `student_year_enrollment`
+## Cross-Cutting Standards
 
-Currently only `is_active` boolean. Real schools have more states:
-
-```sql
-enrollment_status TEXT NOT NULL DEFAULT 'active' 
-  CHECK(enrollment_status IN ('active', 'withdrawn', 'transferred', 'expelled', 'completed'))
-```
-
----
-
-### F. Add `grade_id` to `fee_structure` UNIQUE index — Verify Term Scoping
-
-The current `UNIQUE(year_id, term_id, grade_id)` on `fee_structure` is correct — but note that `term_id` already implies `year_id` via the `terms` table FK. This creates a subtle redundancy. Not a bug, but a maintenance risk — consider whether to keep `year_id` on `fee_structure` at all, or derive it via `terms.year_id`. Keep it for now for query performance but document the intentional redundancy.
-
----
-
-## 📐 Revised & Enhanced Database Schema Additions
-
-### New: `payment_receipts` table
-```sql
-CREATE TABLE IF NOT EXISTS payment_receipts (
-  id                INTEGER PRIMARY KEY AUTOINCREMENT,
-  payment_id        INTEGER NOT NULL UNIQUE REFERENCES payments(id) ON DELETE RESTRICT,
-  fee_owed_cents    INTEGER NOT NULL,
-  amount_paid_cents INTEGER NOT NULL,
-  outstanding_cents INTEGER NOT NULL,
-  generated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
-  generated_by      INTEGER REFERENCES users(id) ON DELETE SET NULL
-);
-```
-
-### Amended: `users` table additions
-```sql
-last_login_at      TEXT,
-failed_login_count INTEGER NOT NULL DEFAULT 0,
-locked_until       TEXT
-```
-
-### Amended: `students` table additions
-```sql
-guardian_name_2    TEXT,
-guardian_contact_2 TEXT,
-guardian_email     TEXT
-```
-
-### Amended: `fee_structure` additions
-```sql
-fee_type TEXT NOT NULL DEFAULT 'tuition'
-  CHECK(fee_type IN ('tuition', 'registration', 'levy', 'exam', 'other')),
-is_locked INTEGER NOT NULL DEFAULT 0 CHECK(is_locked IN (0, 1))
-```
-
-### Amended: `student_year_enrollment` change
-```sql
--- Replace: is_active INTEGER
--- With:
-enrollment_status TEXT NOT NULL DEFAULT 'active'
-  CHECK(enrollment_status IN ('active', 'withdrawn', 'transferred', 'expelled', 'completed'))
-```
-
-### Monetary type change (all affected tables)
-```
-fee_structure.amount          → amount_cents INTEGER
-payments.amount_paid          → amount_paid_cents INTEGER
-payment_receipts (all amounts) → *_cents INTEGER
-```
-
----
-
-## 🗺️ Revised Build Phases
-
-| Phase | What to Build | Deliverable | Est. Time |
-|---|---|---|---|
-| **1** | Project scaffold: Electron + React + Vite, SQLite connection, migrations runner | App opens, DB initialises, schema v1 applied | 1–2 days |
-| **2** | First-run setup wizard: school info, admin account, first academic year + grades | Onboarding complete, app is usable | 1 day |
-| **3** | Auth: login screen, session management, role-based route guards, failed login lockout, auto-lock | Secure auth working | 1–2 days |
-| **4** | Student management: CRUD, search/filter, grade assignment per year | Students can be managed |1–2 days |
-| **5** | Fee structure: per-grade/term/year config, copy-from-previous-year helper, fee types | Fees configurable | 1 day |
-| **6** | Payment recording: form with student search, partial payments, overpayment flag, receipt PDF | Core daily workflow done | 2–3 days |
-| **7** | Dashboard: today's payments, outstanding totals, recent payments, backup reminder alert | Staff home screen ready | 1 day |
-| **8** | Reports: class report, full school report, individual statement, outstanding report, payment history | All reports as PDF | 2–3 days |
-| **9** | Activity log: view, filter, export to PDF | Full audit trail visible | 1 day |
-| **10** | Backup & Restore: encrypted export, USB restore, periodic reminder, integrity check | Data migration solved | 1–2 days |
-| **11** | License key system: asymmetric signature validation, demo mode (10 students + 30-day timer) | Copy protection ready | 1–2 days |
-| **12** | Polish: UI refinement, error handling, empty states, keyboard shortcuts, Windows installer | Ready to demo to school | 2–3 days |
-
-**Total estimated development time: ~4–6 weeks** (solo developer, working evenings/weekends)
-
----
-
-## 💰 Revised Business Model
-
-| Item | Detail |
-|---|---|
-| **License type** | Perpetual seat license (machine-locked) |
-| **v1 Price** | USD $350 upfront (reference school — grandfather pricing) |
-| **Standard Price** | USD $450–500 per machine |
-| **Annual Support Plan** | USD $80/year — covers updates, phone/WhatsApp support, license re-issue |
-| **Setup Fee** | USD $50–100 for on-site installation + staff training (half-day) |
-| **USB Update Delivery** | Free for support plan subscribers, $20 per-incident otherwise |
-| **Demo mode** | 10 students + 30-day timer — both limits, not either/or |
-| **Growth strategy** | Reference site (uncle's school) → document it as a case study → pitch to 5 nearby schools → district education office |
-| **Pricing justification** | The school collects $135,000+/year in fees — $500 is 0.4% of annual revenue. Easy sell. |
-
----
-
-## 🚀 Open Questions Before Development Starts
-
-> All questions resolved. See **Confirmed Design Decisions** table at the top of this document.
-
----
-
-## ✅ Pre-Development Checklist
-
-- [x] All open questions resolved
-- [x] Monetary storage → INTEGER cents confirmed
-- [x] `fee_structure` gets `fee_type` column (tuition/levy/exam/registration/other)
-- [x] `users` gets `last_login_at`, `failed_login_count`, `locked_until`
-- [x] `students` gets secondary guardian + email fields
-- [x] `student_year_enrollment` gets `enrollment_status` enum
-- [x] `payment_receipts` snapshot table added
-- [x] `receipt_number` → school-wide `UNIQUE` constraint
-- [x] `terms.term_number` → flexible, no `CHECK(IN(1,2,3))` constraint
-- [x] i18n locale file scaffold (English only in v1)
-- [x] Full NSIS installer + USB-bootable deployment
-- [ ] Design dashboard wireframe before coding Phase 7
-- [ ] Set up GitHub repo
-- [ ] Initialize Electron + React + Vite project scaffold
-
+*   **TDD where it pays off:** Fee balance logic, age calculation, license-key validation, custom-list filtering — write the test first.
+*   **Backwards compat:** Every schema change is a real SQLite migration with an idempotent guard (`try/catch ADD COLUMN`).
+*   **Activity log:** every mutation to students / payments / users / lists / structure must log `actor, action, entity, before/after`.
+*   **Accessibility:** every interactive control meets keyboard + focus-visible standards; modal dialogs trap focus.
+*   **POPIA-friendly defaults:** no logging of DOB, contact, or guardian email to console; redact before printing logs.
+*   **Local-first:** no cloud call for printing, balance calc, or list management — all offline-safe.
