@@ -13,6 +13,7 @@ export interface Student {
   guardian_email: string;
   school_logo?: string;
   is_active: number;
+  deactivated_at?: string | null;
 }
 
 export interface Grade {

@@ -5,6 +5,7 @@ import { db } from '../../lib/db-client';
 import { useAuth } from '../../lib/auth-context';
 import SphereCanvas from '../SphereCanvas';
 import { FeatureCards } from '../FeatureCards';
+import ResetPasswordModal from './ResetPasswordModal';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 5;
@@ -18,6 +19,7 @@ export const Login: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [schoolName, setSchoolName] = useState('SchoolFoundry');
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
+  const [showResetModal, setShowResetModal] = useState(false);
 
   React.useEffect(() => {
     const fetchSchoolDetails = async () => {
@@ -381,9 +383,7 @@ export const Login: React.FC = () => {
                 <div style={{ marginTop: '16px' }}>
                   <button
                     type="button"
-                    onClick={() =>
-                      alert('Password reset not configured. Contact your administrator.')
-                    }
+                    onClick={() => setShowResetModal(true)}
                     style={{
                       background: 'none',
                       border: 'none',
@@ -470,6 +470,16 @@ export const Login: React.FC = () => {
           <span style={{ fontWeight: 400 }}>Foundry</span> | v1.2.0 | Build 2026 | &copy; Jiggabyte Technology Limited
         </span>
       </div>
+
+      {showResetModal && (
+        <ResetPasswordModal
+          onClose={() => setShowResetModal(false)}
+          onSuccess={() => {
+            // No-op: login state lives in the Login component itself.
+            // The modal closes after success and the user can retry their password.
+          }}
+        />
+      )}
     </div>
   );
 };

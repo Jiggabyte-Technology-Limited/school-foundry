@@ -556,6 +556,40 @@ const migrations: MigrationStep[] = [
       );
     },
   },
+  {
+    version: '1.9',
+    description: 'Add date_of_birth to students table if missing',
+    run: async db => {
+      try {
+        await runSql(db, `ALTER TABLE students ADD COLUMN date_of_birth TEXT;`);
+        console.log('[Migrations] Added date_of_birth column to students table.');
+      } catch (e) {
+        console.warn('[Migrations] students: date_of_birth column already exists or other error:', e);
+      }
+
+      await runSql(
+        db,
+        `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '1.9', datetime('now'));`
+      );
+    },
+  },
+  {
+    version: '2.0',
+    description: 'Add deactivated_at to students table if missing',
+    run: async db => {
+      try {
+        await runSql(db, `ALTER TABLE students ADD COLUMN deactivated_at TEXT;`);
+        console.log('[Migrations] Added deactivated_at column to students table.');
+      } catch (e) {
+        console.warn('[Migrations] students: deactivated_at column already exists or other error:', e);
+      }
+
+      await runSql(
+        db,
+        `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '2.0', datetime('now'));`
+      );
+    },
+  },
 ];
 
 export async function runMigrations(db: sqlite3.Database): Promise<void> {

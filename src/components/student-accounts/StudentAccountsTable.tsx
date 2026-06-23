@@ -68,8 +68,16 @@ const StudentAccountsTable: React.FC<StudentAccountsTableProps> = ({
                       padding: '2px 6px',
                       borderRadius: '4px',
                     }}
+                    title={
+                      student.deactivated_at
+                        ? `Deactivated on ${new Date(student.deactivated_at).toLocaleString()}`
+                        : 'Deactivated'
+                    }
                   >
                     INACTIVE
+                    {student.deactivated_at
+                      ? ` ${new Date(student.deactivated_at).toLocaleDateString()}`
+                      : ''}
                   </span>
                 )}
               </td>
