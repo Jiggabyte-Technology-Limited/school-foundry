@@ -1,18 +1,25 @@
 import React, { useState } from 'react';
 import bcryptjs from 'bcryptjs';
 import { db } from '../lib/db-client';
+import {
+  SUGGESTED_GRADES,
+  toggleGrade as toggleGradePure,
+  applyCustomGrade,
+  validateGradesStep,
+} from './setup-wizard/grade-selectors';
 
 interface SetupWizardProps {
   onComplete: () => void;
 }
 
-type Step = 'welcome' | 'school' | 'admin' | 'periods' | 'fees' | 'complete';
+type Step = 'welcome' | 'school' | 'admin' | 'periods' | 'grades' | 'fees' | 'complete';
 
 const STEPS: { id: Step; label: string }[] = [
   { id: 'welcome', label: 'Welcome' },
   { id: 'school', label: 'School Info' },
   { id: 'admin', label: 'Admin Account' },
   { id: 'periods', label: 'Payment Periods' },
+  { id: 'grades', label: 'School Structure' },
   { id: 'fees', label: 'Fee Setup' },
   { id: 'complete', label: 'Complete' },
 ];
@@ -32,26 +39,10 @@ interface GradeFee {
   copyToAll?: boolean;
 }
 
-const DEFAULT_GRADES = [
-  'Grade 1',
-  'Grade 2',
-  'Grade 3',
-  'Grade 4',
-  'Grade 5',
-  'Grade 6',
-  'Grade 7',
-  'Grade 8',
-  'Grade 9',
-  'Grade 10',
-  'Grade 11',
-  'Grade 12',
-  'Form 1',
-  'Form 2',
-  'Form 3',
-  'Form 4',
-  'Form 5',
-  'Form 6',
-];
+// Schools define their own grade names ("Form 1", "Grade 5", "Senior
+// Infants", etc.) — nothing is pre-selected on the first-run wizard step.
+// `SUGGESTED_GRADES` is imported above from grade-selectors.ts so the pure
+// helpers can be unit-tested without booting React.
 
 const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
   const [currentStep, setCurrentStep] = useState<Step>('welcome');
@@ -74,8 +65,8 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
   const [periodType, setPeriodType] = useState<PeriodType>('terms');
   const [customPeriodCount, setCustomPeriodCount] = useState(3);
   const [periods, setPeriods] = useState<PaymentPeriod[]>([]);
-  const [grades, setGrades] = useState<string[]>(DEFAULT_GRADES);
-  const [newGrade, setNewGrade] = useState('');
+  const [selectedGrades, setSelectedGrades] = useState<string[]>([]);
+  const [customGradeInput, setCustomGradeInput] = useState('');
   const [gradeFees, setGradeFees] = useState<GradeFee[]>([]);
 
   // Initialize periods on mount
@@ -123,12 +114,20 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
           return false;
         }
         break;
+      case 'grades': {
+        const e = validateGradesStep(selectedGrades);
+        if (e) {
+          setError(e);
+          return false;
+        }
+        return true;
+      }
       case 'fees':
-        if (grades.length === 0) {
+        if (selectedGrades.length === 0) {
           setError('Please add at least one grade');
           return false;
         }
-        for (const grade of grades) {
+        for (const grade of selectedGrades) {
           const gradeFee = gradeFees.find(f => f.grade === grade);
           const hasAmount = periods.some(p => gradeFee?.amounts?.[p.term_number]);
           if (!hasAmount) {
@@ -240,17 +239,18 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
     setPeriods(generatePeriods('custom', count));
   };
 
-  const addGrade = () => {
-    if (newGrade.trim() && !grades.includes(newGrade.trim())) {
-      setGrades([...grades, newGrade.trim()]);
-      setNewGrade('');
-    }
+  const toggleGrade = (label: string, isOn: boolean) => {
+    setSelectedGrades(prev => toggleGradePure(prev, label, isOn));
   };
 
-  const removeGrade = (index: number) => {
-    if (grades.length > 1) {
-      setGrades(grades.filter((_, i) => i !== index));
+  const submitCustomGrade = () => {
+    const r = applyCustomGrade(selectedGrades, customGradeInput);
+    if (r.ok) {
+      setSelectedGrades(r.next);
+      setCustomGradeInput('');
+      return;
     }
+    setError(r.reason);
   };
 
   const handleComplete = async () => {
@@ -322,13 +322,23 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
 
       // 6. Create grades and fee structure
       const gradeIds: Record<string, number> = {};
-      for (let i = 0; i < grades.length; i++) {
-        const gradeResult = await db.run('INSERT OR IGNORE INTO grades (label) VALUES (?)', [grades[i]]);
-        gradeIds[grades[i]] = gradeResult.lastInsertRowid || (await db.get('SELECT id FROM grades WHERE label = ?', [grades[i]])).id;
+      for (let i = 0; i < selectedGrades.length; i++) {
+        const gradeResult = await db.run('INSERT OR IGNORE INTO grades (label) VALUES (?)', [selectedGrades[i]]);
+        gradeIds[selectedGrades[i]] = gradeResult.lastInsertRowid || (await db.get('SELECT id FROM grades WHERE label = ?', [selectedGrades[i]])).id;
       }
 
+      // Audit-log: who picked which grades during setup.
+      await db.run(
+        'INSERT INTO activity_log (action, entity, details) VALUES (?, ?, ?)',
+        [
+          'SCHOOL_STRUCTURE_DEFINED',
+          'grades',
+          JSON.stringify(selectedGrades),
+        ]
+      );
+
       // 7. Create fee structure
-      for (const grade of grades) {
+      for (const grade of selectedGrades) {
         const gradeId = gradeIds[grade];
         const gradeFee = gradeFees.find(f => f.grade === grade);
 
@@ -962,11 +972,158 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
           </div>
         );
 
-      case 'fees':
+      case 'grades':
         return (
           <div>
             <div className="metric-label" style={{ textAlign: 'center' }}>
               Step 04
+            </div>
+            <h2 className="wizard-title text-display">School Structure</h2>
+            <p className="wizard-subtitle text-display">
+              Every school is different. Tick every grade you actually run. You
+              need at least one. You can change this any time in Settings &rsaquo;
+              School Structure.
+            </p>
+
+            <div className="wizard-form">
+              <div className="wizard-field">
+                <label className="text-display">Suggested grades</label>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: 8,
+                  }}
+                >
+                  {SUGGESTED_GRADES.map(g => {
+                    const checked = selectedGrades.includes(g);
+                    return (
+                      <label
+                        key={g}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          border: `1px solid ${
+                            checked ? 'var(--primary)' : 'var(--border)'
+                          }`,
+                          background: checked
+                            ? 'rgba(249,115,22,0.08)'
+                            : 'transparent',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          fontSize: 13,
+                          color: 'var(--text-primary)',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={e => toggleGrade(g, e.target.checked)}
+                          style={{ accentColor: 'var(--primary)' }}
+                        />
+                        {g}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="wizard-field">
+                <label className="text-display">Add a custom grade</label>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <input
+                    className="text-display"
+                    type="text"
+                    value={customGradeInput}
+                    onChange={e => setCustomGradeInput(e.target.value)}
+                    placeholder='e.g. "Senior Infants", "Year 7", "ECD A"'
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        submitCustomGrade();
+                      }
+                    }}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={submitCustomGrade}
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              <div className="wizard-field">
+                <label className="text-display">
+                  Selected ({selectedGrades.length})
+                </label>
+                <div
+                  className="chip-list"
+                  style={{ marginBottom: 16, minHeight: 36 }}
+                >
+                  {selectedGrades.length === 0 ? (
+                    <span
+                      style={{
+                        color: 'var(--text-secondary)',
+                        fontSize: 13,
+                        fontStyle: 'italic',
+                      }}
+                    >
+                      None yet — pick at least one above or add a custom name.
+                    </span>
+                  ) : (
+                    selectedGrades.map(g => (
+                      <span
+                        key={g}
+                        className="chip chip-active text-display"
+                        style={{ padding: '6px 12px', gap: 8 }}
+                      >
+                        {g}
+                        <button
+                          type="button"
+                          onClick={() => toggleGrade(g, false)}
+                          aria-label={`Remove ${g}`}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'white',
+                            cursor: 'pointer',
+                            padding: 0,
+                            display: 'flex',
+                          }}
+                        >
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="3"
+                          >
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'fees':
+        return (
+          <div>
+            <div className="metric-label" style={{ textAlign: 'center' }}>
+              Step 05
             </div>
             <h2 className="wizard-title text-display">Fee Structure</h2>
             <p className="wizard-subtitle text-display">
@@ -976,54 +1133,51 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
 
             <div className="wizard-form">
               <div className="wizard-field">
-                <label className="text-display">Grade Registry</label>
-                <div className="chip-list" style={{ marginBottom: '16px' }}>
-                  {grades.map((grade, index) => (
-                    <span
-                      key={index}
-                      className="chip chip-active text-display"
-                      style={{ padding: '6px 12px', gap: '8px' }}
-                    >
-                      {grade}
-                      <button
-                        type="button"
-                        onClick={() => removeGrade(index)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: 'white',
-                          cursor: 'pointer',
-                          padding: 0,
-                          display: 'flex',
-                        }}
-                      >
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="3"
+                <label className="text-display">School Structure</label>
+                <div
+                  className="card-surface"
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    marginBottom: 16,
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flex: 1 }}>
+                    {selectedGrades.length === 0 ? (
+                      <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                        No grades selected yet.
+                      </span>
+                    ) : (
+                      selectedGrades.map(g => (
+                        <span
+                          key={g}
+                          className="chip chip-active text-display"
+                          style={{ padding: '4px 10px', gap: 6 }}
                         >
-                          <line x1="18" y1="6" x2="6" y2="18" />
-                          <line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <input
-                    className="text-display"
-                    type="text"
-                    value={newGrade}
-                    onChange={e => setNewGrade(e.target.value)}
-                    placeholder="Add custom grade..."
-                    onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), addGrade())}
-                    style={{ flex: 1 }}
-                  />
-                  <button type="button" className="btn btn-primary" onClick={addGrade}>
-                    Add
+                          {g}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={goBack}
+                    className="btn"
+                    style={{
+                      border: '1px solid var(--border)',
+                      background: 'transparent',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Change grades
                   </button>
                 </div>
               </div>
@@ -1104,7 +1258,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {grades.map(grade => {
+                      {selectedGrades.map(grade => {
                         const gradeFee = gradeFees.find(f => f.grade === grade) || {
                           grade,
                           amounts: {},
