@@ -6,6 +6,15 @@ import ConfigWizard from './ui/ConfigWizard';
 import ChipSelector from './ui/ChipSelector';
 import { generateFeeStructureHtml, printDocument } from '../lib/print-service';
 import { getCurrencySymbol, getCurrencies, loadCurrency, setCurrency } from '../lib/currency';
+import {
+  validateGradeName,
+  nextSortOrder,
+  computeMoveUp,
+  computeMoveDown,
+  buildGradeActivityEntry,
+  SUGGESTED_GRADES,
+  type GradeRow,
+} from './setup-wizard/school-structure-actions';
 
 interface AcademicYear {
   id: number;
@@ -23,6 +32,8 @@ interface Term {
 interface Grade {
   id: number;
   label: string;
+  sort_order: number;
+  is_active: number; // 0 or 1
 }
 interface FeeStructure {
   id: number;
@@ -98,7 +109,7 @@ const FeeStructureManager: React.FC = () => {
       feesTermsSetting,
     ] = await Promise.all([
       db.all('SELECT * FROM academic_years ORDER BY label DESC'),
-      db.all('SELECT * FROM grades ORDER BY id'),
+      db.all('SELECT * FROM grades ORDER BY sort_order, label'),
       db.get("SELECT value FROM app_settings WHERE key = 'school_name'"),
       db.get("SELECT value FROM app_settings WHERE key = 'school_logo'"),
       db.get("SELECT value FROM app_settings WHERE key = 'school_phone'"),
@@ -372,13 +383,127 @@ const FeeStructureManager: React.FC = () => {
     loadInitialData();
   };
 
+  // -------------------------------------------------------------------------
+  // School Structure — grade CRUD + audit
+  // -------------------------------------------------------------------------
+
+  // Local edit/rename buffer; key=grade.id, value=current typed label.
+  const [editingGradeId, setEditingGradeId] = useState<number | null>(null);
+  const [editingGradeLabel, setEditingGradeLabel] = useState('');
+  const [showArchivedGrades, setShowArchivedGrades] = useState(false);
+
+  const wrapGradeActivity = async (
+    grade: GradeRow,
+    action:
+      | 'GRADE_CREATED'
+      | 'GRADE_RENAMED'
+      | 'GRADE_ARCHIVED'
+      | 'GRADE_RESTORED'
+      | 'GRADE_REORDERED',
+    extra?: Record<string, unknown>
+  ) => {
+    const entry = buildGradeActivityEntry(action, grade, extra);
+    try {
+      await db.run(
+        'INSERT INTO activity_log (action, entity, entity_id, details) VALUES (?, ?, ?, ?)',
+        [entry.action, 'grades', grade.id, entry.details]
+      );
+    } catch (e) {
+      console.warn('[activity_log] grade mutation not recorded:', e);
+    }
+  };
+
   const addGrade = async () => {
-    if (!gradeLabel.trim()) return;
-    await db.run('INSERT INTO grades (label) VALUES (?)', [gradeLabel]);
-    showToast('success', 'Grade/Form Added', `Grade/Form ${gradeLabel} has been added.`);
+    const r = validateGradeName(grades, gradeLabel);
+    if (!r.ok) {
+      showToast('error', 'Cannot add grade', r.reason);
+      return;
+    }
+    const sortOrder = nextSortOrder(grades);
+    const result = await db.run(
+      'INSERT INTO grades (label, sort_order, is_active) VALUES (?, ?, 1)',
+      [r.label, sortOrder]
+    );
+    const newId: number =
+      (result as any).lastInsertRowid ?? (result as any).lastID ?? 0;
+    await wrapGradeActivity(
+      { id: newId, label: r.label, sort_order: sortOrder, is_active: 1 },
+      'GRADE_CREATED'
+    );
+    showToast('success', 'Grade added', `"${r.label}" is now in your structure.`);
     setGradeLabel('');
     loadInitialData();
   };
+
+  const startRenameGrade = (g: GradeRow) => {
+    setEditingGradeId(g.id);
+    setEditingGradeLabel(g.label);
+  };
+
+  const cancelRenameGrade = () => {
+    setEditingGradeId(null);
+    setEditingGradeLabel('');
+  };
+
+  const commitRenameGrade = async (g: GradeRow) => {
+    const r = validateGradeName(grades, editingGradeLabel, g.id);
+    if (!r.ok) {
+      showToast('error', 'Cannot rename', r.reason);
+      return;
+    }
+    if (r.label === g.label) {
+      cancelRenameGrade();
+      return;
+    }
+    await db.run('UPDATE grades SET label = ? WHERE id = ?', [r.label, g.id]);
+    await wrapGradeActivity(g, 'GRADE_RENAMED', { from: g.label, to: r.label });
+    showToast('success', 'Grade renamed', `"${g.label}" -> "${r.label}".`);
+    cancelRenameGrade();
+    loadInitialData();
+  };
+
+  const archiveGrade = async (g: GradeRow) => {
+    await db.run('UPDATE grades SET is_active = 0 WHERE id = ?', [g.id]);
+    await wrapGradeActivity(g, 'GRADE_ARCHIVED', { was_active: g.is_active });
+    showToast('info', 'Grade archived', `"${g.label}" is now read-only.`);
+    loadInitialData();
+  };
+
+  const restoreGrade = async (g: GradeRow) => {
+    await db.run('UPDATE grades SET is_active = 1 WHERE id = ?', [g.id]);
+    await wrapGradeActivity(g, 'GRADE_RESTORED', { is_active: 1 });
+    showToast('success', 'Grade restored', `"${g.label}" is active again.`);
+    loadInitialData();
+  };
+
+  const moveGrade = async (g: GradeRow, index: number, direction: 'up' | 'down') => {
+    const orderedActive = grades.filter(x => x.is_active === 1);
+    const reorderFn = direction === 'up'
+      ? computeMoveUp(orderedActive, index)
+      : computeMoveDown(orderedActive, index);
+    if (!reorderFn) return; // boundary
+    await db.run('BEGIN');
+    try {
+      for (const r of reorderFn) {
+        await db.run('UPDATE grades SET sort_order = ? WHERE id = ?', [
+          r.sort_order,
+          r.id,
+        ]);
+      }
+      await db.run('COMMIT');
+    } catch (e) {
+      await db.run('ROLLBACK');
+      throw e;
+    }
+    await wrapGradeActivity(g, 'GRADE_REORDERED', {
+      direction,
+      from_position: index,
+      to_position: direction === 'up' ? index - 1 : index + 1,
+    });
+    showToast('success', 'Grades reordered', `"${g.label}" moved ${direction}.`);
+    loadInitialData();
+  };
+
 
   const saveTerm = async () => {
     if (!selectedYear || !termForm.label) return;
@@ -916,26 +1041,300 @@ const FeeStructureManager: React.FC = () => {
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
-              Grades/Forms
+              School Structure
             </h4>
+            <p className="text-secondary" style={{ fontSize: 12, marginTop: 0, marginBottom: 12 }}>
+              Add, rename, archive, and reorder the grades your school runs.
+              Archived grades are kept in the database so historical
+              payments still resolve.
+            </p>
+
             <div className="flex-row gap-2 mb-3">
               <input
                 className="input-default"
-                placeholder="e.g. Form 1"
+                placeholder="e.g. Senior Infants"
                 value={gradeLabel}
                 onChange={e => setGradeLabel(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addGrade();
+                  }
+                }}
+                aria-label="New grade name"
               />
               <button className="btn btn-primary" onClick={addGrade}>
                 Add
               </button>
             </div>
-            <div className="chip-list">
-              {grades.map(g => (
-                <span key={g.id} className="chip">
-                  {g.label}
-                </span>
+
+            {/* Palette hint — guided pick. Pure palette mention only; admin clicks the input above. */}
+            <div
+              className="chip-list"
+              style={{ marginBottom: 14, alignItems: 'center' }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  color: 'var(--text-secondary)',
+                  marginRight: 4,
+                }}
+              >
+                Suggested:
+              </span>
+              {SUGGESTED_GRADES.slice(0, 6).map(g => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setGradeLabel(g)}
+                  className="chip"
+                  style={{
+                    cursor: 'pointer',
+                    background: 'transparent',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  + {g}
+                </button>
               ))}
+              {SUGGESTED_GRADES.length > 6 && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  +{SUGGESTED_GRADES.length - 6} more
+                </span>
+              )}
             </div>
+
+            {/* Active grade list */}
+            <div style={{ marginBottom: 12 }}>
+              {(() => {
+                const active = grades.filter(g => g.is_active === 1);
+                if (active.length === 0) {
+                  return (
+                    <span
+                      style={{
+                        fontSize: 13,
+                        color: 'var(--text-secondary)',
+                        fontStyle: 'italic',
+                      }}
+                    >
+                      No active grades yet. Add one above.
+                    </span>
+                  );
+                }
+                return active.map((g, idx) => {
+                  const isEditing = editingGradeId === g.id;
+                  return (
+                    <div
+                      key={g.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface)',
+                        marginBottom: 6,
+                      }}
+                    >
+                      {isEditing ? (
+                        <>
+                          <input
+                            className="input-default"
+                            value={editingGradeLabel}
+                            onChange={e => setEditingGradeLabel(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                commitRenameGrade(g);
+                              } else if (e.key === 'Escape') {
+                                cancelRenameGrade();
+                              }
+                            }}
+                            autoFocus
+                            aria-label={`Rename grade ${g.label}`}
+                            style={{ flex: 1, padding: '4px 8px' }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => commitRenameGrade(g)}
+                            style={{ padding: '4px 10px', fontSize: 12 }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={cancelRenameGrade}
+                            style={{
+                              padding: '4px 10px',
+                              fontSize: 12,
+                              border: '1px solid var(--border)',
+                              background: 'transparent',
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>
+                            {g.label}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => moveGrade(g, idx, 'up')}
+                            disabled={idx === 0}
+                            aria-label={`Move ${g.label} up`}
+                            className="btn"
+                            style={{
+                              padding: '2px 8px',
+                              fontSize: 12,
+                              border: '1px solid var(--border)',
+                              background: 'transparent',
+                              opacity: idx === 0 ? 0.4 : 1,
+                              cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                            }}
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveGrade(g, idx, 'down')}
+                            disabled={idx === active.length - 1}
+                            aria-label={`Move ${g.label} down`}
+                            className="btn"
+                            style={{
+                              padding: '2px 8px',
+                              fontSize: 12,
+                              border: '1px solid var(--border)',
+                              background: 'transparent',
+                              opacity: idx === active.length - 1 ? 0.4 : 1,
+                              cursor:
+                                idx === active.length - 1
+                                  ? 'not-allowed'
+                                  : 'pointer',
+                            }}
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => startRenameGrade(g)}
+                            aria-label={`Rename ${g.label}`}
+                            className="btn"
+                            style={{
+                              padding: '2px 10px',
+                              fontSize: 12,
+                              border: '1px solid var(--border)',
+                              background: 'transparent',
+                            }}
+                          >
+                            Rename
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => archiveGrade(g)}
+                            aria-label={`Archive ${g.label}`}
+                            className="btn"
+                            style={{
+                              padding: '2px 10px',
+                              fontSize: 12,
+                              border: '1px solid var(--border)',
+                              background: 'transparent',
+                              color: 'var(--text-secondary)',
+                            }}
+                          >
+                            Archive
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Archived section */}
+            {(() => {
+              const archived = grades.filter(g => g.is_active === 0);
+              if (archived.length === 0) return null;
+              return (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowArchivedGrades(s => !s)}
+                    className="btn"
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: 12,
+                      border: '1px solid var(--border)',
+                      background: 'transparent',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    {showArchivedGrades ? 'Hide' : 'Show'} archived ({archived.length})
+                  </button>
+                  {showArchivedGrades && (
+                    <div style={{ marginTop: 8 }}>
+                      {archived.map(g => (
+                        <div
+                          key={g.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '6px 10px',
+                            borderRadius: 8,
+                            border: '1px solid var(--border)',
+                            background: 'rgba(0,0,0,0.03)',
+                            marginBottom: 6,
+                            opacity: 0.7,
+                          }}
+                        >
+                          <span
+                            style={{
+                              flex: 1,
+                              fontSize: 13,
+                              textDecoration: 'line-through',
+                            }}
+                          >
+                            {g.label}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: 'var(--text-secondary)',
+                              marginRight: 4,
+                            }}
+                          >
+                            archived
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => restoreGrade(g)}
+                            aria-label={`Restore ${g.label}`}
+                            className="btn btn-primary"
+                            style={{
+                              padding: '2px 10px',
+                              fontSize: 12,
+                            }}
+                          >
+                            Restore
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           <div className="card" style={{ padding: '24px', height: '100%' }}>
