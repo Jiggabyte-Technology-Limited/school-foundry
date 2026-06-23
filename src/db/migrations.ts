@@ -590,6 +590,49 @@ const migrations: MigrationStep[] = [
       );
     },
   },
+  {
+    version: '2.1',
+    description: 'Add custom_lists + custom_list_members tables (Task 6)',
+    run: async db => {
+      // custom_lists: saved subsets of students. Soft-deletable via deleted_at.
+      await runSql(
+        db,
+        `CREATE TABLE IF NOT EXISTS custom_lists (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          name        TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+          description TEXT,
+          created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at  TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+          updated_at  TEXT,
+          deleted_at  TEXT
+        );`
+      );
+
+      // M-N between custom_lists and students. CASCADE on both sides so
+      // deleting a list or a student cleans up its membership rows.
+      await runSql(
+        db,
+        `CREATE TABLE IF NOT EXISTS custom_list_members (
+          list_id    INTEGER NOT NULL REFERENCES custom_lists(id) ON DELETE CASCADE,
+          student_id INTEGER NOT NULL REFERENCES students(id)     ON DELETE CASCADE,
+          added_at   TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+          PRIMARY KEY (list_id, student_id)
+        );`
+      );
+
+      // Reverse lookup: which lists does this student belong to?
+      await runSql(
+        db,
+        `CREATE INDEX IF NOT EXISTS idx_custom_list_members_student
+           ON custom_list_members(student_id);`
+      );
+
+      await runSql(
+        db,
+        `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '2.1', datetime('now'));`
+      );
+    },
+  },
 ];
 
 export async function runMigrations(db: sqlite3.Database): Promise<void> {
