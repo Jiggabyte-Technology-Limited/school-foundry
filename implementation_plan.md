@@ -146,7 +146,7 @@ This plan is structured into three priorities based on technical complexity and 
     rename (collision guard fires); archive; reorder up/down; confirm
     each mutation produces one matching row in `activity_log`.
 
-### Task 6: Custom Student Lists ⬜ PENDING
+### Task 6: Custom Student Lists ✅ DONE
 *(Moderate complexity — search + multi-select + persisted named lists)*
 
 **Objective:** Let admins build reusable subsets of students ("Class B owing", "Term 3 reminders", "Scholarship candidates") and reuse them across statement printing, communication, and reporting.
@@ -158,6 +158,78 @@ This plan is structured into three priorities based on technical complexity and 
 4.  Audit-log every list creation / deletion.
 
 **Verification:** Create two custom lists, save, reload — confirm persistence. Print statements scoped to one list — confirm only those students render.
+
+**Status (2026-06-23):** Shipped across 3 commits on `main`:
+
+- `feat(lists): Custom Lists migration v2.1 + pure selectors`
+  - Migration adds `custom_lists` (soft-deletable via `deleted_at`,
+    `name UNIQUE COLLATE NOCASE`) and `custom_list_members`
+    (composite PK, CASCADE both directions, reverse-lookup index).
+    Pure helpers in
+    `src/components/student-accounts/custom-list-selectors.ts` cover
+    name validation, member-set ops, scope composition, and the
+    audit-log membership diff payload.
+  - `scratch/verify-task7.mjs` runs 35 assertions (including 7
+    belt-and-braces migration-shape regex matches so the script
+    catches copy/paste migration typos).
+
+- `feat(students): Custom Lists UI (dropdown chip + Manage Lists modal)`
+  - New `ManageListsModal.tsx` with three views (index, builder, new).
+    Member saves go through `BEGIN/COMMIT/ROLLBACK` and emit one
+    `LIST_MEMBERS_REPLACED` audit row per save (added/removed/total)
+    rather than one per checkbox toggle.
+  - `StudentAccounts.tsx` got a "Saved Lists" chip row above the
+    existing filters, an `Apply list…` dropdown populated from
+    `listsAvailable`, and a `Clear` action. The existing
+    `filteredStudents` reducer was split into a two-stage pipeline:
+    existing search/paid/owing/showInactive filter, then
+    intersect `activeListMembers` when a list is set. Bulk
+    statements ZIP now picks up the active list for free; its
+    filename includes the list slug
+    (`Student_Statements_<list-slug>_<YYYY-MM-DD>.zip`), and the
+    empty-list guard toasts a helpful message instead of silent
+    no-op.
+
+- `feat(students): surface active list name in the statement view + plan flip`
+  - `StudentStatementPreview.tsx` accepts an optional
+    `activeListName` and shows a non-blocking banner
+    ("Active list: <name> — single-student view, not scoped to
+    the list.") so the admin's mental model stays consistent.
+
+- Out of scope for this task (deliberately):
+  - Activity-log export in `PaymentManager.tsx`
+    (`exportXlsxReport` path at line 870) is a date-filtered
+    activities feed; scoping it to a student list would need a
+    custom_lists <-> payments bridge table. Tracked for a Phase 4
+    follow-up.
+
+- Activity-log tags now added (six new mutation tags):
+  - `LIST_CREATED`, `LIST_RENAMED`, `LIST_DELETED`, `LIST_RESTORED`,
+    `LIST_MEMBERS_REPLACED` (one per save), `LIST_BULK_ZIP` reserved
+    for a future per-bulk-export logging point — currently the
+    existing `payments_zip_downloaded` analogue at the StudentAccounts
+    level captures the bulk action implicitly.
+
+- Backwards compat: existing installs at schema_version < 2.1 get
+  the two new tables + index on next launch (idempotent
+  `CREATE TABLE IF NOT EXISTS`). No data is moved, dropped, or
+  renamed. Existing students / payments / fee rows are untouched.
+
+**Manual / Electron-only checks still required before push:**
+  - Open Student Accounts → dropdown chip row visible → "Apply
+    list…" empty-state copy reads correctly when no list is set.
+  - Create a list, add three students, save → survives a reload.
+  - Switch active list → table + bulk actions only show those
+    three.
+  - Bulk statements ZIP while a list is active → filename
+    contains the list slug; PDF count == list member count.
+  - Open a single-student statement while a list is active →
+    confirm the soft banner reads "Active list: <name> — single-
+    student view, not scoped to the list." and that the data on
+    display is *not* the list (intentional single-student view).
+  - `SELECT action FROM activity_log WHERE action LIKE 'LIST_%'
+    ORDER BY logged_at DESC LIMIT 10;` returns one row per UI
+    action.
 
 ---
 

@@ -773,6 +773,7 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
                 setShowPaymentWizard(true);
               }}
               onRetry={() => viewStatement(selectedStudent)}
+              activeListName={activeList?.name ?? null}
             />
           )}
           {!showPrintView && selectedStudent && isLoadingDetail && (

@@ -30,6 +30,10 @@ interface StudentStatementPreviewProps {
   onEditProfile: () => void;
   onRecordPayment: () => void;
   onRetry: () => void;
+  /** Optional list context — surfaced as a non-blocking banner so the
+   *  admin's mental model stays consistent with the chip on the parent
+   *  page when a saved list is active. */
+  activeListName?: string | null;
 }
 
 const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
@@ -46,7 +50,8 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
   onEditProfile,
   onRecordPayment,
   onRetry,
-}) => {
+  activeListName,
+
   const { showToast } = useToast();
   const [printStatus, setPrintStatus] = React.useState<
     'idle' | 'generating' | 'opening' | 'ready' | 'error'
@@ -295,6 +300,30 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
             </svg>
             Record Payment
           </button>
+        </div>
+      )}
+
+      {activeListName && statementData && (
+        <div
+          role="note"
+          aria-label="Active list"
+          className="card-surface"
+          style={{
+            padding: '8px 12px',
+            fontSize: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            color: 'var(--text-secondary)',
+            border: '1px solid var(--border)',
+            marginBottom: 8,
+          }}
+        >
+          <span style={{ fontWeight: 700 }}>Active list:</span>
+          <span>{activeListName}</span>
+          <span style={{ opacity: 0.7 }}>
+            — single-student view, not scoped to the list.
+          </span>
         </div>
       )}
 
