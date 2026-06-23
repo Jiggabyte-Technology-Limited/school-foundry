@@ -91,7 +91,7 @@ This plan is structured into three priorities based on technical complexity and 
 
 **Status (2026-06-23):** All 6 verification steps are covered by `scratch/verify-task4.mjs` (run via `node scratch/verify-task4.mjs`) for the pure-print-pipeline parts (steps 1, 3, 4, 5, 6). Steps 2 (PDF lands in print dir) and the toast firings require a full Electron run — these are exercised manually before merge. The verification script also caught an XSS bug in the original `escapeHtml` helper: `replace(/</g, '\u003c')` is a no-op because `\u003c` resolves to `<` itself. Fixed to use real HTML entities (`<`, `>`, `"`, `'`, `&`).
 
-### Task 5: Initial Setup — No Pre-Selected Grades, Allow On-the-Fly Grade Creation ⬜ PENDING
+### Task 5: Initial Setup — No Pre-Selected Grades, Allow On-the-Fly Grade Creation ✅ DONE
 *(Moderate complexity — needs setup-wizard refactor)*
 
 **Objective:** First-run setup should NOT seed a fixed default grade list. Schools define their own grade names ("Form 1", "Grade 5", "Senior Infants", etc.). Grades can be renamed, added, archived from a dedicated "School Structure" admin page.
@@ -103,6 +103,48 @@ This plan is structured into three priorities based on technical complexity and 
 4.  Add a new "School Structure" page to Settings that lists grades + class sections, lets you add/rename/archive, and logs every change in `activity_log`.
 
 **Verification:** Run first-run setup with no grades; confirm wizard asks the school to enter grade names; confirm the new School Structure page accepts CRUD on grades.
+
+**Status (2026-06-23):** Shipped across 3 commits on `main`:
+
+- `feat(wizard): empty-start grades step with configurable selection`
+  - First-run wizard now lands on a dedicated `grades` step between
+    `periods` and `fees` with an empty starting state. Palette is
+    11 un-selected options (Grade 1-7 + Form 1-4); admins tick what
+    they run or add custom names. Min 1 enforced.
+  - Pure helpers live in `src/components/setup-wizard/grade-selectors.ts`.
+  - `scratch/verify-task5.mjs` runs 23 assertions over the wizard's
+    pure selectors. All pass.
+
+- `feat(settings): School Structure surface (add/rename/archive/reorder)`
+  - Replaces the tiny "Grades/Forms" inline card in
+    `FeeStructureManager.tsx` with a full School Structure admin
+    panel: add (input + suggested-name chips), per-row
+    Rename / Archive / Move up / Move down, plus a "Show archived
+    (N)" toggle with one-click Restore.
+  - Pure helpers live in `src/components/setup-wizard/school-structure-actions.ts`.
+  - `scratch/verify-task6.mjs` runs 19 assertions over the pure
+    helpers. All pass.
+
+- Persistence is unchanged at the schema level. Activity log gets
+  five new tags for grade mutations:
+  - `SCHOOL_STRUCTURE_DEFINED` — wizard completion (one per setup)
+  - `GRADE_CREATED`, `GRADE_RENAMED`, `GRADE_ARCHIVED`,
+    `GRADE_RESTORED`, `GRADE_REORDERED` — admin panel mutations
+    (one each).
+- Backwards compat: existing installs with `setup_complete=1` are
+  untouched by the wizard change (the wizard never runs for them).
+  School Structure admin panel becomes their first/only path for
+  grade edits — no migration needed.
+
+**Manual / Electron-only checks still required before merge:**
+  - Fresh install: wizard shows `School Structure` as Step 04 with 11
+    un-ticked checkboxes; try Next empty -> validation error fires;
+    pick Grade 1 + Form 4 -> Next -> fees step shows read-only chips
+    + working "Change grades" back-button; complete setup;
+    `SELECT label FROM grades;` returns just those two.
+  - Existing install: open School Structure; add a custom grade;
+    rename (collision guard fires); archive; reorder up/down; confirm
+    each mutation produces one matching row in `activity_log`.
 
 ### Task 6: Custom Student Lists ⬜ PENDING
 *(Moderate complexity — search + multi-select + persisted named lists)*
