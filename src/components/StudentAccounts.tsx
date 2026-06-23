@@ -241,7 +241,7 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
       return;
     }
     try {
-      await db.run('UPDATE students SET is_active = 0 WHERE id = ?', [student.id]);
+      await db.run('UPDATE students SET is_active = 0, deactivated_at = datetime(\'now\') WHERE id = ?', [student.id]);
       await db.run('UPDATE student_year_enrollment SET is_active = 0 WHERE student_id = ?', [
         student.id,
       ]);
@@ -253,7 +253,7 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
 
   const handleActivateStudent = async (student: Student) => {
     try {
-      await db.run('UPDATE students SET is_active = 1 WHERE id = ?', [student.id]);
+      await db.run('UPDATE students SET is_active = 1, deactivated_at = NULL WHERE id = ?', [student.id]);
       await db.run('UPDATE student_year_enrollment SET is_active = 1 WHERE student_id = ?', [
         student.id,
       ]);

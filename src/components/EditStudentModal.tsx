@@ -273,28 +273,28 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <div className="wizard-field">
-                  <label>Date of Birth</label>
-                  <input
-                    type="date"
-                    className="input-default"
-                    value={form.date_of_birth}
-                    onChange={e => setForm({ ...form, date_of_birth: e.target.value })}
-                  />
-                </div>
-                <div className="wizard-field">
-                  <ChipSelector
-                    label="Gender"
-                    value={form.gender || null}
-                    onChange={value => setForm({ ...form, gender: (value as string) || '' })}
-                    options={[
-                      { value: 'male', label: 'Male' },
-                      { value: 'female', label: 'Female' },
-                      { value: 'other', label: 'Other' },
-                    ]}
-                  />
-                </div>
-              </div>
+                              <div className="wizard-field">
+                                <label>Date of Birth</label>
+                                <input
+                                  type="date"
+                                  className="input-default"
+                                  value={form.date_of_birth}
+                                  onChange={e => setForm({ ...form, date_of_birth: e.target.value })}
+                                />
+                              </div>
+                              <div className="wizard-field">
+                                <ChipSelector
+                                  label="Gender"
+                                  value={form.gender || null}
+                                  onChange={value => setForm({ ...form, gender: (value as string) || '' })}
+                                  options={[
+                                    { value: 'male', label: 'Male' },
+                                    { value: 'female', label: 'Female' },
+                                    { value: 'other', label: 'Other' },
+                                  ]}
+                                />
+                              </div>
+                            </div>
 
               <div className="wizard-field">
                 <ChipSelector

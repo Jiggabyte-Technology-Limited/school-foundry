@@ -86,6 +86,19 @@ const STEPS: { id: Step; label: string; icon: React.ReactElement }[] = [
   },
 ];
 
+function calculateAge(dob: string | null | undefined): number | null {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  if (isNaN(birth.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 const StudentWizard: React.FC<StudentWizardProps> = ({
   onClose,
   onSuccess,
@@ -660,7 +673,10 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                         Date of Birth
                       </span>
                       <p style={{ margin: '4px 0 0' }}>
-                        {new Date(form.date_of_birth).toLocaleDateString()}
+                        {(() => {
+                          const age = calculateAge(form.date_of_birth);
+                          return `${new Date(form.date_of_birth).toLocaleDateString()}${age !== null ? ` (${age} yr${age === 1 ? '' : 's'})` : ''}`;
+                        })()}
                       </p>
                     </div>
                   )}

@@ -40,3 +40,4 @@ school_fees.db
 *.njsproj
 *.sln
 *.sw?
+scratch/.verify*

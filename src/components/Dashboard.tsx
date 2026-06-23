@@ -156,10 +156,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewStatement }) => {
       try {
         const [nameSetting, logoSetting, phoneSetting, emailSetting, termsData] = await Promise.all(
           [
-            db.get('SELECT value FROM settings WHERE key = ?', ['school_name']),
-            db.get('SELECT value FROM settings WHERE key = ?', ['school_logo']),
-            db.get('SELECT value FROM settings WHERE key = ?', ['school_phone']),
-            db.get('SELECT value FROM settings WHERE key = ?', ['school_email']),
+            db.get("SELECT value FROM app_settings WHERE key = 'school_name'"),
+            db.get("SELECT value FROM app_settings WHERE key = 'school_logo'"),
+            db.get("SELECT value FROM app_settings WHERE key = 'school_phone'"),
+            db.get("SELECT value FROM app_settings WHERE key = 'school_email'"),
             db.all('SELECT id, label FROM terms ORDER BY term_number'),
           ]
         );

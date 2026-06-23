@@ -19,6 +19,19 @@ interface Student {
   grade_label?: string;
 }
 
+function calculateAge(dob: string | null | undefined): number | null {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  if (isNaN(birth.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+}
+
 interface Grade {
   id: number;
   label: string;
@@ -472,7 +485,13 @@ const StudentManager: React.FC = () => {
               {selectedStudent.date_of_birth && (
                 <div className="info-item">
                   <span className="info-label">Date of Birth</span>
-                  <span className="info-value">{formatDate(selectedStudent.date_of_birth)}</span>
+                  <span className="info-value">
+                    {formatDate(selectedStudent.date_of_birth)}
+                    {(() => {
+                      const age = calculateAge(selectedStudent.date_of_birth);
+                      return age !== null ? ` (${age} yr${age === 1 ? '' : 's'})` : '';
+                    })()}
+                  </span>
                 </div>
               )}
             </div>
