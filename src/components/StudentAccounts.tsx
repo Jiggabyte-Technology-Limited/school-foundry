@@ -11,8 +11,6 @@ import StudentAccountsFilters from './student-accounts/StudentAccountsFilters';
 import StudentAccountsTable from './student-accounts/StudentAccountsTable';
 import { buildOverviewData } from './student-accounts/overview';
 import type { AcademicYear, Grade, Student, Term } from './student-accounts/types';
-import ManageListsModal from './student-accounts/ManageListsModal';
-import { formatListChip, type ListRow } from './student-accounts/custom-list-selectors';
 
 interface StudentAccountsProps {
   preselectedStudentId?: number | null;
@@ -47,14 +45,7 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  // Custom Lists (Task 6): the active list, the page-loadable set of
-  // available lists, and a flag for opening the ManageListsModal.
-  const [activeList, setActiveList] = useState<ListRow | null>(null);
-  const [activeListMembers, setActiveListMembers] = useState<number[] | null>(null);
-  const [listsAvailable, setListsAvailable] = useState<ListRow[]>([]);
-  const [showManageListsModal, setShowManageListsModal] = useState(false);
 
-  // Early return for loading state - before any computations
   const statusFilteredStudents = students.filter(s => {
     const matchesSearch =
       s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -70,21 +61,13 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
     return matchesSearch && matchesStatus && matchesActive;
   });
 
-  // Task 6 — Custom Lists: intersect the active list's members over
-  // the status-filtered set. Null = "no list filter applied".
-  const filteredStudents = activeListMembers === null
-    ? statusFilteredStudents
-    : statusFilteredStudents.filter(s => activeListMembers.includes(s.id));
+  // Apply grade filter
+  const filteredStudents = selectedGrade
+    ? statusFilteredStudents.filter(s => s.grade_id === selectedGrade)
+    : statusFilteredStudents;
 
   const printAllStatements = async () => {
     if (filteredStudents.length === 0) {
-      if (activeList) {
-        showToast(
-          'error',
-          'Active list is empty',
-          `Add members to "${activeList.name}" in Manage Lists, or clear the active list.`
-        );
-      }
       return;
     }
     setIsPrintingAll(true);
@@ -230,9 +213,7 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
 
     updateLoading(loadingId, 80, 'Creating ZIP file...');
 
-    const listSuffix = activeList
-      ? `_${activeList.name.replace(/[^A-Za-z0-9]+/g, '_').slice(0, 32)}`
-      : '';
+    const listSuffix = '';
     const result = await window.api.exportXlsxStatementsToZip({
       suggestedFileName: `Student_Statements${listSuffix}_${new Date().toISOString().slice(0, 10)}`,
       statements,
@@ -302,50 +283,6 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
 
     return () => clearTimeout(timeout);
   }, []);
-
-  // Custom Lists helpers — keep tiny and reversible so any list edit
-  // by the ManageListsModal forces a refresh here.
-  const loadLists = async () => {
-    try {
-      const ls = await db.all(
-        `SELECT id, name, description, created_at, updated_at, deleted_at
-           FROM custom_lists
-           WHERE deleted_at IS NULL
-           ORDER BY name COLLATE NOCASE`
-      );
-      setListsAvailable(ls as ListRow[]);
-      // If the active list was just archived (deleted_at flipped),
-      // drop the active state so the UI falls back to "all students".
-      if (activeList) {
-        const stillThere = (ls as ListRow[]).some(l => l.id === activeList.id);
-        if (!stillThere) {
-          setActiveList(null);
-          setActiveListMembers(null);
-        }
-      }
-    } catch (err) {
-      console.error('Error loading custom lists:', err);
-    }
-  };
-
-  const setActiveListAndLoadMembers = async (list: ListRow | null) => {
-    if (!list) {
-      setActiveList(null);
-      setActiveListMembers(null);
-      return;
-    }
-    setActiveList(list);
-    try {
-      const rows = await db.all(
-        `SELECT student_id FROM custom_list_members WHERE list_id = ?`,
-        [list.id]
-      );
-      setActiveListMembers(rows.map((r: any) => Number(r.student_id)));
-    } catch (err) {
-      console.error('Error loading list members:', err);
-      setActiveListMembers([]);
-    }
-  };
 
   const loadInitialData = async () => {
     try {
@@ -624,98 +561,6 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: 8,
-              padding: '8px 12px',
-              background: 'var(--secondary)',
-              borderRadius: 10,
-              border: '1px solid var(--border)',
-            }}
-          >
-            <span
-              className="text-display"
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.04em',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              Saved Lists
-            </span>
-            {activeList ? (
-              <>
-                <span
-                  className="chip chip-active text-display"
-                  style={{ padding: '4px 10px', fontSize: 12 }}
-                  title={`Filtering by "${activeList.name}"`}
-                >
-                  {formatListChip(activeList.name, activeListMembers?.length ?? 0)}
-                </span>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setActiveListAndLoadMembers(null)}
-                  style={{
-                    padding: '2px 10px',
-                    fontSize: 12,
-                    border: '1px solid var(--border)',
-                    background: 'transparent',
-                  }}
-                >
-                  Clear
-                </button>
-              </>
-            ) : (
-              <span
-                style={{
-                  fontSize: 12,
-                  color: 'var(--text-secondary)',
-                  fontStyle: 'italic',
-                }}
-              >
-                No list selected — showing all students.
-              </span>
-            )}
-            <span style={{ flex: 1 }} />
-            <select
-              aria-label="Apply a saved list"
-              value=""
-              onChange={async e => {
-                const v = e.target.value;
-                e.target.value = '';
-                if (v === '__manage__') {
-                  setShowManageListsModal(true);
-                  return;
-                }
-                if (v === '') return;
-                const list = listsAvailable.find(l => String(l.id) === v);
-                if (list) await setActiveListAndLoadMembers(list);
-              }}
-              style={{
-                padding: '4px 10px',
-                fontSize: 12,
-                borderRadius: 8,
-                border: '1px solid var(--border)',
-                background: 'var(--surface)',
-                color: 'var(--text-primary)',
-              }}
-            >
-              <option value="">Apply list…</option>
-              <option value="__manage__">Manage lists…</option>
-              {listsAvailable.map(l => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
           <StudentAccountsFilters
             grades={grades}
             selectedGrade={selectedGrade}
@@ -773,7 +618,6 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
                 setShowPaymentWizard(true);
               }}
               onRetry={() => viewStatement(selectedStudent)}
-              activeListName={activeList?.name ?? null}
             />
           )}
           {!showPrintView && selectedStudent && isLoadingDetail && (
@@ -853,13 +697,6 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
           onSuccess={handlePaymentSuccess}
         />
       )}
-
-      <ManageListsModal
-        open={showManageListsModal}
-        onClose={() => setShowManageListsModal(false)}
-        onListsChanged={loadLists}
-        allStudents={students}
-      />
     </>
   );
 };

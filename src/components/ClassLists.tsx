@@ -4,6 +4,8 @@ import { useAuth } from '../lib/auth-context';
 import { buildClassListTitle } from '../lib/print-service';
 import ClassListPrintPreview from './ClassListPrintPreview';
 import StudentWizard from './StudentWizard';
+import ManageListsModal from './student-accounts/ManageListsModal';
+import { formatListChip, type ListRow } from './student-accounts/custom-list-selectors';
 
 interface Student {
   id: number;
@@ -47,6 +49,11 @@ const ClassLists: React.FC<ClassListsProps> = ({ onViewStudentAccount }) => {
   const [schoolName, setSchoolName] = useState('School Management');
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
   const [schoolContact, setSchoolContact] = useState('');
+
+  // Custom Lists
+  const [activeList, setActiveList] = useState<ListRow | null>(null);
+  const [listsAvailable, setListsAvailable] = useState<ListRow[]>([]);
+  const [showManageListsModal, setShowManageListsModal] = useState(false);
 
   useEffect(() => {
     loadInitialData();
@@ -132,6 +139,39 @@ const ClassLists: React.FC<ClassListsProps> = ({ onViewStudentAccount }) => {
       console.error('Error loading grade counts:', err);
     }
   };
+
+  // Custom Lists helpers
+  const loadLists = async () => {
+    try {
+      const ls = await db.all(
+        `SELECT id, name, description, created_at, updated_at, deleted_at
+           FROM custom_lists
+           WHERE deleted_at IS NULL
+           ORDER BY name COLLATE NOCASE`
+      );
+      setListsAvailable(ls as ListRow[]);
+      if (activeList) {
+        const stillThere = (ls as ListRow[]).some(l => l.id === activeList.id);
+        if (!stillThere) {
+          setActiveList(null);
+        }
+      }
+    } catch (err) {
+      console.error('Error loading custom lists:', err);
+    }
+  };
+
+  const setActiveListAndLoadMembers = async (list: ListRow | null) => {
+    if (!list) {
+      setActiveList(null);
+      return;
+    }
+    setActiveList(list);
+  };
+
+  useEffect(() => {
+    loadLists();
+  }, []);
 
   const loadStudents = async () => {
     if (selectedGrade === null) return;
@@ -391,6 +431,64 @@ const ClassLists: React.FC<ClassListsProps> = ({ onViewStudentAccount }) => {
           </div>
         </div>
 
+        {/* Custom Lists */}
+        <div
+          style={{
+            padding: '12px 16px',
+            background: 'var(--secondary)',
+            borderRadius: 10,
+            border: '1px solid var(--border)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span
+              className="text-display"
+              style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-secondary)' }}
+            >
+              Custom Lists
+            </span>
+            {activeList ? (
+              <>
+                <span className="chip chip-active text-display" style={{ padding: '4px 10px', fontSize: 12 }}>
+                  {formatListChip(activeList.name, null)}
+                </span>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setActiveListAndLoadMembers(null)}
+                  style={{ padding: '2px 10px', fontSize: 12, border: '1px solid var(--border)', background: 'transparent' }}
+                >
+                  Clear
+                </button>
+              </>
+            ) : (
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                No list selected
+              </span>
+            )}
+            <span style={{ flex: 1 }} />
+            <select
+              aria-label="Apply a saved list"
+              value=""
+              onChange={async e => {
+                const v = e.target.value;
+                e.target.value = '';
+                if (v === '__manage__') { setShowManageListsModal(true); return; }
+                if (v === '') return;
+                const list = listsAvailable.find(l => String(l.id) === v);
+                if (list) await setActiveListAndLoadMembers(list);
+              }}
+              style={{ padding: '4px 10px', fontSize: 12, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-primary)' }}
+            >
+              <option value="">Apply list…</option>
+              <option value="__manage__">Manage lists…</option>
+              {listsAvailable.map(l => (
+                <option key={l.id} value={l.id}>{l.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div
           style={{
             display: 'flex',
@@ -424,6 +522,13 @@ const ClassLists: React.FC<ClassListsProps> = ({ onViewStudentAccount }) => {
           preSelectedClassSection={selectedSection || undefined}
         />
       )}
+
+      <ManageListsModal
+        open={showManageListsModal}
+        onClose={() => setShowManageListsModal(false)}
+        onListsChanged={loadLists}
+        allStudents={[]}
+      />
     </>
   );
 };
