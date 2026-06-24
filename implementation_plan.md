@@ -340,6 +340,58 @@ This plan is structured into three priorities based on technical complexity and 
 - Open Fee Structure Manager → confirm fee amounts display correctly in the currency configured.
 - `SELECT COUNT(*) FROM student_fees WHERE student_id = <known_student>;` matches expected debits.
 
+### Task 9: Year-End Rollover ✅ DONE
+*(High complexity — student progression, fee copy, data preservation, audit trail)*
+
+**Objective:** At the end of each academic year, promote students to the next grade, graduate final-year students, and create a new academic year with a clean fee structure — while preserving all historical data.
+
+**High-Level Steps:**
+1. Add a "Year Rollover" tab to SettingsModal (admin only).
+2. Build a 4-step wizard: Configure → Preview & Exceptions → Confirm → Result.
+3. Implement `src/lib/fees/rollover.ts` with `previewRollover()` and `executeRollover()`.
+4. Inside a single transaction: create new year, copy fees/sections/terms, promote students, graduate final grade, log event.
+5. Support repeaters (admin marks individual students to stay in same grade).
+6. Ensure brought-forward debt from previous year appears on new statements.
+7. Preserve all old-year data — never delete or modify historical records.
+
+**Key Files:**
+* `src/lib/fees/rollover.ts` (new — core rollover engine)
+* `src/components/RolloverWizard.tsx` (new — UI component)
+* `src/components/SettingsModal.tsx` (add Rollover tab)
+* `docs/fee-logic.md` (add rollover section)
+
+**Verification:** Use 14 test students across 7 grades. Confirm 12 promote, 2 graduate, old data preserved, new year is current. Test repeater scenario and duplicate-year rejection.
+
+**Status (2026-06-24):** Shipped on `main`:
+
+- `src/lib/fees/rollover.ts` — pure rollover engine:
+  - `previewRollover(db, options)` → dry run returning `RolloverPreview` with full action list.
+  - `executeRollover(db, options)` → single `BEGIN/COMMIT/ROLLBACK` transaction.
+  - `getBroughtForwardDebts(db, studentId, currentYearId)` → checks unpaid balances in previous years.
+  - Auto-detects final grade (highest `sort_order`), supports admin override.
+  - Supports repeaters (students who stay in same grade).
+  - Copies fee structure, terms, and class sections for promoted grades only.
+  - Graduates final-grade students (`is_active = 0`).
+  - Full audit logging.
+
+- `src/components/RolloverWizard.tsx` — 4-step wizard UI:
+  - Step 1 (Configure): Year label, copy options, final grade override.
+  - Step 2 (Preview): Summary stats, student lists (promoted/graduated/repeaters), click to toggle repeater.
+  - Step 3 (Confirm): Warning, full summary, execute button.
+  - Step 4 (Result): Success/failure with details, next steps guidance.
+
+- `src/components/SettingsModal.tsx` — added "Year Rollover" tab (admin only) with rollover icon.
+
+- `docs/fee-logic.md` — added Year-End Rollover section.
+
+- `scratch/verify-task9.mjs` — 30 assertions covering: preview dry-run, full execution, year state verification, student promotions, graduate inactivation, data preservation, brought-forward debt, repeater scenario, duplicate-year rejection. All green.
+
+**Manual / Electron-only checks still required before push:**
+- Open Settings → Year Rollover tab → configure a test year → preview → verify student counts.
+- Execute a rollover on a test DB → confirm students promoted correctly.
+- Check old year statements still accessible.
+- `SELECT action FROM activity_log WHERE action = 'year_rollover' ORDER BY logged_at DESC LIMIT 5;` returns the rollover audit rows.
+
 ---
 
 ## Phase 4: Strategic Inferred Features (Post-MVP)

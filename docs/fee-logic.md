@@ -267,3 +267,58 @@ These scenarios MUST be covered by unit tests on `computeBalance()`:
 | `src/components/PaymentManager.tsx` | Payment UI — uses `computeBalance` for statements |
 | `src/components/FeeStructureManager.tsx` | Fee structure CRUD — defines the price list |
 | `docs/fee-logic.md` | This document |
+
+---
+
+## 9. Year-End Rollover
+
+### 9.1 Overview
+
+At the end of each academic year, the admin triggers a rollover to create the new year. This:
+
+- Promotes active students to the next grade (Grade N → Grade N+1)
+- Graduates final-grade students (sets `is_active = 0`)
+- Creates a new academic year record
+- Copies fee structure, terms, and class sections for promoted grades
+- Preserves all historical data (payments, debits, enrollments, audit logs)
+- Supports repeaters (individual students who stay in the same grade)
+
+### 9.2 Rollover Flow
+
+1. Admin opens Settings → Year Rollover tab
+2. Configures: new year label, copy options, final grade
+3. Preview: sees exactly what will happen (promotions, graduations, repeaters)
+4. Confirm: executes inside a single transaction
+5. Result: success/failure with full summary
+
+### 9.3 What Happens to Each Entity
+
+| Entity | What Happens |
+|--------|-------------|
+| `academic_years` | New row created with `is_current = 1`; old year set to `is_current = 0` |
+| `terms` | Copied for new year with `start_date = NULL`, `end_date = NULL` |
+| `class_sections` | Copied for grades 1–6 (not final grade) |
+| `fee_structure` | Copied for grades 1–6 (not final grade) |
+| `students` (active, non-final) | New enrollment in next grade |
+| `students` (active, final grade) | `is_active = 0` (graduated) |
+| `students` (inactive) | Not affected — not rolled over |
+| `student_year_enrollment` (old year) | Preserved unchanged |
+| `student_fees` (old year) | Preserved unchanged |
+| `payments` (old year) | Preserved unchanged |
+| `activity_log` | New entry logged: "Rolled over from X to Y: N promoted, M graduated, K repeating" |
+| `custom_lists` | Not affected (student-scoped, not year-scoped) |
+
+### 9.4 Brought-Forward Debt
+
+If a student has an unpaid balance from the previous year, the new year's statement shows a "Brought forward from YYYY" line. This is computed by `getBroughtForwardDebts(studentId, currentYearId)` which checks all previous years for unpaid balances.
+
+### 9.5 Repeaters
+
+In the Preview step, the admin can click any promoted student to move them to the "Repeaters" list. Repeaters are re-enrolled in the same grade instead of being promoted.
+
+### 9.6 Safety
+
+- **Transaction**: The entire rollover is a single `BEGIN/COMMIT/ROLLBACK` transaction.
+- **Idempotent**: Cannot roll over to a year that already exists (UNIQUE constraint on label).
+- **Recoverable**: If it fails, the old year is untouched. A backup is recommended before proceeding.
+- **Irreversible but non-destructive**: You can't undo a rollover, but no data is lost.

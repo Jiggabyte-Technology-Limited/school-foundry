@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import bcryptjs from 'bcryptjs';
 import { db } from '../lib/db-client';
 import { useToast } from './Toast';
+import RolloverWizard from './RolloverWizard';
 import {
   DEFAULT_NEW_USER,
   hasUnsavedSettingsChanges,
@@ -55,7 +56,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
   const [schoolFeesTerms, setSchoolFeesTerms] = useState('');
   const [enableSubgrades, setEnableSubgrades] = useState(false);
-  const [activeTab, setActiveTab] = useState<'school' | 'users' | 'profile' | 'license' | 'danger'>(
+  const [activeTab, setActiveTab] = useState<'school' | 'users' | 'profile' | 'license' | 'danger' | 'rollover'>(
     user.role === 'admin' ? 'school' : 'profile'
   );
   const [schoolTab, setSchoolTab] = useState<'profile' | 'branding' | 'policies'>('profile');
@@ -705,6 +706,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 strokeWidth="2"
               >
                 <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+              </svg>
+            ),
+          },
+          {
+            id: 'rollover' as const,
+            label: 'Year Rollover',
+            icon: (
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M17 1l4 4-4 4" />
+                <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                <path d="M7 23l-4-4 4-4" />
+                <path d="M21 13v2a4 4 0 0 1-4 4H3" />
               </svg>
             ),
           },
@@ -2515,6 +2535,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Year Rollover Tab */}
+            {activeTab === 'rollover' && isAdmin && <RolloverWizard onClose={onClose} />}
           </div>
         </div>
       </div>
