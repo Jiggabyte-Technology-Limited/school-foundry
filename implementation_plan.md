@@ -286,7 +286,7 @@ This plan is structured into three priorities based on technical complexity and 
 - `SELECT action FROM activity_log WHERE action = 'import_completed' ORDER BY logged_at DESC LIMIT 5;` returns the import audit rows.
 - Import a file with a deliberately bad row (e.g. missing guardian name) → confirm the error appears in the preview and the commit is blocked.
 
-### Task 8: Solidify Fee Logic + `docs/fee-logic.md` Improvement Plan ⬜ PENDING
+### Task 8: Solidify Fee Logic + `docs/fee-logic.md` Improvement Plan ✅ DONE
 *(High complexity — domain modelling + docs)*
 
 **Objective:** Eliminate ambiguity around "what is owed, when, and how discounts apply". Document the rules in `docs/fee-logic.md` so the next developer (or AI assistant) can extend the system safely.
@@ -307,6 +307,38 @@ This plan is structured into three priorities based on technical complexity and 
 *   `docs/fee-logic.md` (new)
 
 **Verification:** Run unit tests on `computeBalance` across fixture scenarios (paid, owing, partial, refunded, written-off). Read `docs/fee-logic.md` and confirm every rule from stakeholder conversations in Phase 2 is documented.
+
+**Status (2026-06-24):** Shipped on `main`:
+
+- `src/lib/fees/balance.ts` — pure balance computation engine:
+  - `computeBalance(studentId, yearId)` → full `BalanceResult` with fees, payments, discounts, overdue breakdown.
+  - `computeOverdueAmount(fees, payments)` — FIFO payment application, earliest fees paid first.
+  - `computeBalanceForGrade(yearId, gradeId, termId)` — grade-level projections for fee-structure planning.
+  - Dependency-injected fetchers for testability (default fetchers wire to the app's SQLite DB).
+- `src/lib/fees/discounts.ts` — discount rule engine with precedence:
+  1. Bursary (fixed amount)
+  2. Staff Ward (50%)
+  3. Sibling (10% per sibling, max 30%)
+  4. Early Payment (5% if paid within 14 days of debit)
+  5. Custom (admin override)
+  - Total discount capped at fees total. `validateDiscount()` for input validation.
+- `src/lib/fees/reminders.ts` — stub for Phase 4 SMS/email reminder integration.
+- `docs/fee-logic.md` — comprehensive domain model covering:
+  - Data model (fee_structure, student_fees, payments, payment_receipts)
+  - Balance formula + FIFO payment application
+  - Overdue determination (fees past due after FIFO)
+  - Proration rules (mid-term enrollment)
+  - All discount rules with precedence
+  - Auto-debit flow
+  - Edge cases: transfers, refunds, write-offs, inactive students, same-amount-all-periods
+  - Extension points: reminders, discount persistence, payment plans, fee adjustments
+  - Test scenarios (13 cases)
+- `scratch/verify-task8.mjs` — 24 assertions covering: balance math, FIFO, voided payments, overpayment cap, all 5 discount types, discount capping, DB integration round-trip. All green.
+
+**Manual / Electron-only checks still required before push:**
+- Open Payment Manager → view a student statement → confirm balance matches expected (fees - payments).
+- Open Fee Structure Manager → confirm fee amounts display correctly in the currency configured.
+- `SELECT COUNT(*) FROM student_fees WHERE student_id = <known_student>;` matches expected debits.
 
 ---
 
