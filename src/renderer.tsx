@@ -70,6 +70,7 @@ import BackupManager from './components/BackupManager';
 import SettingsModal from './components/SettingsModal';
 import ClassLists from './components/ClassLists';
 import UserGuide from './components/UserGuide';
+import ImportWizard from './components/ImportWizard';
 import PageErrorBoundary from './components/PageErrorBoundary';
 
 const pageTitles: Record<string, string> = {
@@ -296,6 +297,7 @@ function AppInner() {
                         )}
                         {view === 'logs' && <ActivityLog />}
                         {view === 'backup' && <BackupManager />}
+                        {view === 'import' && <ImportWizard />}
                       </div>
                     </PageTransition>
                   </PageErrorBoundary>

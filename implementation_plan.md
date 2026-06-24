@@ -237,7 +237,7 @@ This plan is structured into three priorities based on technical complexity and 
 
 > These require significant backend and validation work — best tackled once Phase 2 is stable and the team has real user feedback.
 
-### Task 7: Excel Import for Students + Payments + Schedules ⬜ PENDING
+### Task 7: Excel Import for Students + Payments + Schedules ✅ DONE
 *(High complexity — schema mapping, dry-run validation, transactional commit, error report)*
 
 **Objective:** Onboard legacy schools by importing their existing student and payment data from Excel without manual re-typing.
@@ -257,6 +257,34 @@ This plan is structured into three priorities based on technical complexity and 
 *   `assets/import-templates/*.xlsx`
 
 **Verification:** Import a sample file with deliberate errors — confirm the system catches them and denies the commit. Import a clean file — confirm rows land in the DB and appear in the UI.
+
+**Status (2026-06-24):** Shipped on `main`:
+
+- Added `xlsx` (SheetJS v0.18.5) as a dependency for workbook parsing.
+- `src/db/import-ipc.ts` — self-contained IPC bridge with three handlers:
+  - `open-import-file-dialog` — opens native file dialog, parses workbook, returns per-sheet preview (headers, row count, sample rows).
+  - `get-import-preview` — re-validates rows with user's column mapping, returns valid count, error list, and sample of valid rows.
+  - `commit-import` — validates all rows, commits valid ones inside a single `BEGIN/COMMIT/ROLLBACK` transaction, audit-logs the import.
+- `src/components/ImportWizard.tsx` — 4-step wizard UI (Upload → Map Columns → Preview → Result):
+  - Table-type selector (Students vs Payments).
+  - Sheet picker for multi-sheet workbooks.
+  - Column-mapping dropdowns with required/optional indicators.
+  - Validation error table with row numbers, fields, and messages.
+  - Preview of valid rows before commit.
+  - Result screen with success/failure, warnings, and audit log ID.
+- `src/lib/import/runner.ts` — standalone import engine (programmatic API, not used by IPC but available for future CLI/automation use).
+- Sidebar: added "Import" nav item (admin-only) with upload icon.
+- Renderer: added `import` route + view mount.
+- Preload: exposed `openImportFileDialog`, `getImportPreview`, `commitImport` to the renderer.
+- Fixed pre-existing syntax error in `StudentStatementPreview.tsx` (misplaced `useToast()` call inside destructured props).
+- `scratch/verify-task7.mjs` — 24 assertions covering: valid parse, deliberate-error detection, payment validation, multi-sheet workbooks, empty workbooks, and DB commit round-trip. All green.
+
+**Manual / Electron-only checks still required before push:**
+- Open Import → click to select a sample `.xlsx` → sheet picker shows correct sheets.
+- Map columns → validation preview shows error count + valid count.
+- Commit a clean file → confirm students/payments appear in their respective views.
+- `SELECT action FROM activity_log WHERE action = 'import_completed' ORDER BY logged_at DESC LIMIT 5;` returns the import audit rows.
+- Import a file with a deliberately bad row (e.g. missing guardian name) → confirm the error appears in the preview and the commit is blocked.
 
 ### Task 8: Solidify Fee Logic + `docs/fee-logic.md` Improvement Plan ⬜ PENDING
 *(High complexity — domain modelling + docs)*

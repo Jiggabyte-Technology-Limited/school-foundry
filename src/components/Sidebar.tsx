@@ -26,6 +26,7 @@ const allNavItems: NavItem[] = [
   { id: 'payments', label: 'Payments', icon: 'credit-card', roles: ['admin', 'user'] },
   { id: 'fees', label: 'School Fees', icon: 'dollar', roles: ['admin'] },
   { id: 'logs', label: 'Logs', icon: 'list', roles: ['admin'] },
+  { id: 'import', label: 'Import', icon: 'upload', roles: ['admin'] },
   { id: 'backup', label: 'Backup', icon: 'database', roles: ['admin'] },
 ];
 
@@ -83,6 +84,13 @@ const iconPaths: Record<string, JSX.Element> = {
       <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15Z" />
       <path d="M8 6h8" />
       <path d="M8 10h8" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
     </>
   ),
 };

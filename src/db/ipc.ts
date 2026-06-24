@@ -9,6 +9,7 @@ import {
   getResetAppTargets,
 } from '../lib/app-maintenance.mjs';
 import { buildWorkbookBytes } from '../lib/xlsx-export.mjs';
+import { registerImportHandlers } from './import-ipc';
 import { pathToFileURL } from 'url';
 
 let userGuideWindow: BrowserWindow | null = null;
@@ -606,4 +607,6 @@ export function setupIpcHandlers() {
       return { success: false, error: String(err) };
     }
   });
+
+  registerImportHandlers();
 }

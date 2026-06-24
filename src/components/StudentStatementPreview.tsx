@@ -51,7 +51,7 @@ const StudentStatementPreview: React.FC<StudentStatementPreviewProps> = ({
   onRecordPayment,
   onRetry,
   activeListName,
-
+}) => {
   const { showToast } = useToast();
   const [printStatus, setPrintStatus] = React.useState<
     'idle' | 'generating' | 'opening' | 'ready' | 'error'

@@ -57,6 +57,22 @@ contextBridge.exposeInMainWorld('api', {
   }) => ipcRenderer.invoke('export-xlsx-report', options),
   getGuideMediaLibrary: () => ipcRenderer.invoke('get-guide-media-library'),
 
+  // Import APIs
+  openImportFileDialog: () => ipcRenderer.invoke('open-import-file-dialog'),
+  getImportPreview: (options: {
+    filePath: string;
+    sheetName: string;
+    columnMapping: Record<string, string>;
+    tableType: 'students' | 'payments';
+  }) => ipcRenderer.invoke('get-import-preview', options),
+  commitImport: (options: {
+    filePath: string;
+    sheetName: string;
+    columnMapping: Record<string, string>;
+    tableType: 'students' | 'payments';
+    dryRun?: boolean;
+  }) => ipcRenderer.invoke('commit-import', options),
+
   // License APIs
   getMachineId: () => ipcRenderer.invoke('get-machine-id'),
   activateLicense: (licenseKey: string) => ipcRenderer.invoke('activate-license', licenseKey),
