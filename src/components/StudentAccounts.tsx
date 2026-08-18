@@ -274,7 +274,6 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
   // Load initial data on mount
   useEffect(() => {
     loadInitialData();
-    loadLists();
 
     // Safety timeout - ensure loading stops after 10 seconds
     const timeout = setTimeout(() => {

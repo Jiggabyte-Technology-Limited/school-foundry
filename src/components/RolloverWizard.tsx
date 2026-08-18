@@ -153,7 +153,7 @@ const RolloverWizard: React.FC<RolloverWizardProps> = ({ onClose }) => {
             flex: 1,
             padding: '8px 14px',
             borderRadius: 8,
-            background: step === s ? 'var(--color-accent-teal)' : 'var(--color-surface-secondary)',
+            background: step === s ? 'var(--color-accent)' : 'var(--color-surface-secondary)',
             color: step === s ? '#fff' : 'var(--color-text-secondary)',
             fontSize: 12,
             fontWeight: 600,
@@ -256,11 +256,12 @@ const RolloverWizard: React.FC<RolloverWizardProps> = ({ onClose }) => {
 
           {/* Summary box */}
           <div style={{
-            background: 'var(--color-surface-secondary)',
+            background: 'rgba(249, 115, 22, 0.06)',
             borderRadius: 12,
             padding: 16,
             fontSize: 13,
             lineHeight: 1.6,
+            border: '1px solid rgba(249, 115, 22, 0.15)',
           }}>
             <strong>What this does:</strong>
             <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
@@ -299,7 +300,7 @@ const RolloverWizard: React.FC<RolloverWizardProps> = ({ onClose }) => {
                 padding: '10px 24px',
                 borderRadius: 8,
                 border: 'none',
-                background: 'var(--color-accent-teal)',
+                background: 'var(--color-accent)',
                 color: '#fff',
                 cursor: isProcessing || !newYearLabel.trim() ? 'not-allowed' : 'pointer',
                 fontSize: 14,
@@ -319,7 +320,7 @@ const RolloverWizard: React.FC<RolloverWizardProps> = ({ onClose }) => {
           {/* Summary stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
             {[
-              { label: 'Promote', value: preview.promotedCount, color: 'var(--color-accent-teal)' },
+              { label: 'Promote', value: preview.promotedCount, color: 'var(--color-accent)' },
               { label: 'Graduate', value: preview.graduatedCount, color: 'var(--color-accent-amber)' },
               { label: 'Repeat', value: preview.repeaterCount, color: 'var(--color-text-secondary)' },
               { label: 'With Debt', value: preview.studentsWithDebt, color: '#dc2626' },
@@ -452,7 +453,7 @@ const RolloverWizard: React.FC<RolloverWizardProps> = ({ onClose }) => {
                 padding: '10px 24px',
                 borderRadius: 8,
                 border: 'none',
-                background: 'var(--color-accent-teal)',
+                background: 'var(--color-accent)',
                 color: '#fff',
                 cursor: 'pointer',
                 fontSize: 14,
@@ -469,8 +470,8 @@ const RolloverWizard: React.FC<RolloverWizardProps> = ({ onClose }) => {
       {step === 'confirm' && preview && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 560, margin: '0 auto' }}>
           <div style={{
-            background: '#fffbeb',
-            border: '1px solid #fde68a',
+            background: '#fff7ed',
+            border: '1px solid #fed7aa',
             borderRadius: 12,
             padding: 20,
             textAlign: 'center',
@@ -610,7 +611,7 @@ const RolloverWizard: React.FC<RolloverWizardProps> = ({ onClose }) => {
               padding: '10px 24px',
               borderRadius: 8,
               border: 'none',
-              background: 'var(--color-accent-teal)',
+              background: 'var(--color-accent)',
               color: '#fff',
               cursor: 'pointer',
               fontSize: 14,

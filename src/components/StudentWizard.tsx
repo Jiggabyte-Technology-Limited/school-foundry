@@ -119,17 +119,25 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
 
   // Form data
   const [form, setForm] = useState({
-    full_name: '',
+    first_name: '',
+    surname: '',
     date_of_birth: '',
     gender: '',
-    guardian_name: '',
+    guardian_first_name: '',
+    guardian_surname: '',
     guardian_contact: '',
-    guardian_name_2: '',
+    guardian_first_name_2: '',
+    guardian_surname_2: '',
     guardian_contact_2: '',
     guardian_email: '',
     grade_id: preSelectedGrade ? String(preSelectedGrade) : '',
     class_section_id: preSelectedClassSection ? String(preSelectedClassSection) : '',
   });
+
+  // Derived: full_name for backwards compat
+  const full_name = `${form.first_name} ${form.surname}`.trim();
+  const guardian_name = `${form.guardian_first_name} ${form.guardian_surname}`.trim();
+  const guardian_name_2 = `${form.guardian_first_name_2} ${form.guardian_surname_2}`.trim();
 
   useEffect(() => {
     loadData();
@@ -196,14 +204,14 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
 
     switch (currentStep) {
       case 'details':
-        if (!form.full_name.trim()) {
-          setError('Please enter the student name');
+        if (!form.first_name.trim() || !form.surname.trim()) {
+          setError('Please enter the student name and surname');
           return false;
         }
         break;
       case 'guardian':
-        if (!form.guardian_name.trim()) {
-          setError('Please enter the primary guardian name');
+        if (!form.guardian_first_name.trim() || !form.guardian_surname.trim()) {
+          setError('Please enter the primary guardian name and surname');
           return false;
         }
         if (!form.guardian_contact.trim()) {
@@ -251,17 +259,25 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
       // Add new student
       const result = await db.run(
         `
-        INSERT INTO students (student_number, full_name, date_of_birth, gender, guardian_name, guardian_contact, guardian_name_2, guardian_contact_2, guardian_email)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO students (student_number, full_name, first_name, surname, date_of_birth, gender,
+          guardian_name, guardian_first_name, guardian_surname, guardian_contact,
+          guardian_name_2, guardian_first_name_2, guardian_surname_2, guardian_contact_2, guardian_email)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
         [
           studentNumber,
-          form.full_name,
+          full_name,
+          form.first_name,
+          form.surname,
           form.date_of_birth || null,
           form.gender || null,
-          form.guardian_name,
+          guardian_name,
+          form.guardian_first_name,
+          form.guardian_surname,
           form.guardian_contact,
-          form.guardian_name_2 || null,
+          guardian_name_2 || null,
+          form.guardian_first_name_2 || null,
+          form.guardian_surname_2 || null,
           form.guardian_contact_2 || null,
           form.guardian_email || null,
         ]
@@ -313,11 +329,11 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
           'student_added',
           'students',
           result.lastInsertRowid || result.lastID,
-          `Added new student: ${form.full_name}`,
+          `Added new student: ${full_name}`,
         ]
       );
 
-      showToast('success', 'Student Added', `${form.full_name} has been successfully enrolled.`);
+      showToast('success', 'Student Added', `${full_name} has been successfully enrolled.`);
       onSuccess();
     } catch (err: any) {
       console.error(err);
@@ -350,17 +366,30 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
             </p>
 
             <div className="wizard-form">
-              <div className="wizard-field">
-                <label>
-                  Full Name <span className="required">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={form.full_name}
-                  onChange={e => setForm({ ...form, full_name: e.target.value })}
-                  placeholder="Enter student's full name"
-                  autoFocus
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div className="wizard-field">
+                  <label>
+                    Name(s) <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={form.first_name}
+                    onChange={e => setForm({ ...form, first_name: e.target.value })}
+                    placeholder="First name(s)"
+                    autoFocus
+                  />
+                </div>
+                <div className="wizard-field">
+                  <label>
+                    Surname <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={form.surname}
+                    onChange={e => setForm({ ...form, surname: e.target.value })}
+                    placeholder="Surname"
+                  />
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -415,17 +444,27 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                 <h4 style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--color-accent-teal)' }}>
                   Primary Guardian
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
                   <div className="wizard-field">
                     <label>
-                      Name <span className="required">*</span>
+                      Name(s) <span className="required">*</span>
                     </label>
                     <input
                       type="text"
-                      value={form.guardian_name}
-                      onChange={e => setForm({ ...form, guardian_name: e.target.value })}
-                      placeholder="Guardian's full name"
-                      autoFocus
+                      value={form.guardian_first_name}
+                      onChange={e => setForm({ ...form, guardian_first_name: e.target.value })}
+                      placeholder="First name(s)"
+                    />
+                  </div>
+                  <div className="wizard-field">
+                    <label>
+                      Surname <span className="required">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={form.guardian_surname}
+                      onChange={e => setForm({ ...form, guardian_surname: e.target.value })}
+                      placeholder="Surname"
                     />
                   </div>
                   <div className="wizard-field">
@@ -458,14 +497,23 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                 >
                   Secondary Guardian (Optional)
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
                   <div className="wizard-field">
-                    <label>Name</label>
+                    <label>Name(s)</label>
                     <input
                       type="text"
-                      value={form.guardian_name_2}
-                      onChange={e => setForm({ ...form, guardian_name_2: e.target.value })}
-                      placeholder="Secondary guardian name"
+                      value={form.guardian_first_name_2}
+                      onChange={e => setForm({ ...form, guardian_first_name_2: e.target.value })}
+                      placeholder="First name(s)"
+                    />
+                  </div>
+                  <div className="wizard-field">
+                    <label>Surname</label>
+                    <input
+                      type="text"
+                      value={form.guardian_surname_2}
+                      onChange={e => setForm({ ...form, guardian_surname_2: e.target.value })}
+                      placeholder="Surname"
                     />
                   </div>
                   <div className="wizard-field">
@@ -665,7 +713,7 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                     <span style={{ fontSize: 12, color: 'var(--color-sage-placeholder)' }}>
                       Name
                     </span>
-                    <p style={{ margin: '4px 0 0', fontWeight: 600 }}>{form.full_name}</p>
+                    <p style={{ margin: '4px 0 0', fontWeight: 600 }}>{full_name}</p>
                   </div>
                   {form.date_of_birth && (
                     <div>
@@ -709,8 +757,8 @@ const StudentWizard: React.FC<StudentWizardProps> = ({
                       Guardian(s)
                     </span>
                     <p style={{ margin: '4px 0 0', fontWeight: 600 }}>
-                      {form.guardian_name}
-                      {form.guardian_name_2 && `, ${form.guardian_name_2}`}
+                      {guardian_name}
+                      {guardian_name_2 && `, ${guardian_name_2}`}
                     </p>
                     <p style={{ margin: '2px 0 0', fontSize: 13 }}>
                       {form.guardian_contact}

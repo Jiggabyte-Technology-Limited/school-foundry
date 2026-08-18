@@ -132,9 +132,27 @@ export function registerImportHandlers() {
                 // Insert student
                 const studentNumber = row.student_number || `STU${new Date().getFullYear()}${Math.floor(1000 + Math.random() * 9000)}`;
                 db.run(
-                  `INSERT INTO students (student_number, full_name, date_of_birth, gender, guardian_name, guardian_contact, guardian_name_2, guardian_contact_2, guardian_email)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                  [studentNumber, row.full_name, row.date_of_birth || null, row.gender || null, row.guardian_name, row.guardian_contact, row.guardian_name_2 || null, row.guardian_contact_2 || null, row.guardian_email || null],
+                  `INSERT INTO students (student_number, full_name, first_name, surname, date_of_birth, gender,
+                    guardian_name, guardian_first_name, guardian_surname, guardian_contact,
+                    guardian_name_2, guardian_first_name_2, guardian_surname_2, guardian_contact_2, guardian_email)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [
+                    studentNumber,
+                    row.full_name,
+                    row.first_name || row.full_name?.split(' ')[0] || '',
+                    row.surname || row.full_name?.split(' ').slice(1).join(' ') || '',
+                    row.date_of_birth || null,
+                    row.gender || null,
+                    row.guardian_name,
+                    row.guardian_first_name || row.guardian_name?.split(' ')[0] || '',
+                    row.guardian_surname || row.guardian_name?.split(' ').slice(1).join(' ') || '',
+                    row.guardian_contact,
+                    row.guardian_name_2 || null,
+                    row.guardian_first_name_2 || row.guardian_name_2?.split(' ')[0] || null,
+                    row.guardian_surname_2 || row.guardian_name_2?.split(' ').slice(1).join(' ') || null,
+                    row.guardian_contact_2 || null,
+                    row.guardian_email || null,
+                  ],
                   function(this: any, err: Error | null) {
                     if (err) throw new Error(`Student insert failed: ${err.message}`);
                     const studentId = this.lastID;
@@ -378,3 +396,35 @@ function validateField(dbField: string, rawValue: any): { value: any; error?: st
       return { value: str || null };
   }
 }
+
+// ── Template download (main process saves to disk) ──
+ipcMain.handle('save-import-template', async (_event, options: {
+  fileName: string;
+  headers: string[];
+  sheetName: string;
+}) => {
+  try {
+    const { dialog } = require('electron');
+    const result = await dialog.showSaveDialog({
+      defaultPath: options.fileName,
+      filters: [{ name: 'Excel Workbook', extensions: ['xlsx'] }],
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, canceled: true };
+    }
+
+    const XLSX = require('xlsx');
+    const ws = XLSX.utils.json_to_sheet([options.headers]);
+    ws['!cols'] = options.headers.map((h: string) => ({ wch: Math.max(h.length + 2, 14) }));
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, options.sheetName);
+    XLSX.writeFile(wb, result.filePath);
+
+    return { success: true, filePath: result.filePath };
+  } catch (err) {
+    console.error('[IPC] save-import-template error:', err);
+    return { success: false, error: String(err) };
+  }
+});

@@ -25,18 +25,26 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
   const [grades, setGrades] = useState<{ id: number; label: string }[]>([]);
 
   const [form, setForm] = useState({
-    full_name: '',
+    first_name: '',
+    surname: '',
     date_of_birth: '',
     gender: '',
-    guardian_name: '',
+    guardian_first_name: '',
+    guardian_surname: '',
     guardian_contact: '',
-    guardian_name_2: '',
+    guardian_first_name_2: '',
+    guardian_surname_2: '',
     guardian_contact_2: '',
     guardian_email: '',
     grade_id: '',
     class_section_id: '',
     notes: '',
   });
+
+  // Derived backwards-compat fields
+  const full_name = `${form.first_name} ${form.surname}`.trim();
+  const guardian_name = `${form.guardian_first_name} ${form.guardian_surname}`.trim();
+  const guardian_name_2 = `${form.guardian_first_name_2} ${form.guardian_surname_2}`.trim();
   const [classSections, setClassSections] = useState<{ id: number; grade_id: number; label: string }[]>([]);
   const [newSectionLabel, setNewSectionLabel] = useState('');
   const [enableSubgrades, setEnableSubgrades] = useState(false);
@@ -72,13 +80,19 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
       ]);
 
       if (student) {
+        // Use first_name/surname if available, otherwise split full_name
+        const fn = student.first_name || '';
+        const sn = student.surname || '';
         setForm({
-          full_name: student.full_name || '',
+          first_name: fn || (student.full_name ? student.full_name.split(' ')[0] : ''),
+          surname: sn || (student.full_name ? student.full_name.split(' ').slice(1).join(' ') : ''),
           date_of_birth: student.date_of_birth || '',
           gender: student.gender || '',
-          guardian_name: student.guardian_name || '',
+          guardian_first_name: student.guardian_first_name || (student.guardian_name ? student.guardian_name.split(' ')[0] : ''),
+          guardian_surname: student.guardian_surname || (student.guardian_name ? student.guardian_name.split(' ').slice(1).join(' ') : ''),
           guardian_contact: student.guardian_contact || '',
-          guardian_name_2: student.guardian_name_2 || '',
+          guardian_first_name_2: student.guardian_first_name_2 || (student.guardian_name_2 ? student.guardian_name_2.split(' ')[0] : ''),
+          guardian_surname_2: student.guardian_surname_2 || (student.guardian_name_2 ? student.guardian_name_2.split(' ').slice(1).join(' ') : ''),
           guardian_contact_2: student.guardian_contact_2 || '',
           guardian_email: student.guardian_email || '',
           grade_id: enrollment ? String(enrollment.grade_id) : '',
@@ -118,7 +132,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.full_name || !form.guardian_name || !form.guardian_contact) {
+    if (!form.first_name || !form.surname || !form.guardian_first_name || !form.guardian_surname || !form.guardian_contact) {
       setError('Please fill in all required fields');
       return;
     }
@@ -135,19 +149,26 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
       await db.run(
         `
         UPDATE students SET
-          full_name = ?, date_of_birth = ?, gender = ?,
-          guardian_name = ?, guardian_contact = ?,
-          guardian_name_2 = ?, guardian_contact_2 = ?,
+          full_name = ?, first_name = ?, surname = ?,
+          date_of_birth = ?, gender = ?,
+          guardian_name = ?, guardian_first_name = ?, guardian_surname = ?, guardian_contact = ?,
+          guardian_name_2 = ?, guardian_first_name_2 = ?, guardian_surname_2 = ?, guardian_contact_2 = ?,
           guardian_email = ?, notes = ?, updated_at = datetime('now')
         WHERE id = ?
       `,
         [
-          form.full_name,
+          full_name,
+          form.first_name,
+          form.surname,
           form.date_of_birth || null,
           form.gender || null,
-          form.guardian_name,
+          guardian_name,
+          form.guardian_first_name,
+          form.guardian_surname,
           form.guardian_contact,
-          form.guardian_name_2 || null,
+          guardian_name_2 || null,
+          form.guardian_first_name_2 || null,
+          form.guardian_surname_2 || null,
           form.guardian_contact_2 || null,
           form.guardian_email || null,
           form.notes || null,
@@ -186,11 +207,11 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
           'student_updated',
           'students',
           studentId,
-          `Updated student details for: ${form.full_name}`,
+          `Updated student details for: ${full_name}`,
         ]
       );
 
-      showToast('success', 'Learner Updated', `${form.full_name}'s details have been updated.`);
+      showToast('success', 'Learner Updated', `${full_name}'s details have been updated.`);
       onSuccess();
     } catch (err: any) {
       console.error(err);
@@ -259,17 +280,31 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
                 Personal Information
               </h3>
 
-              <div className="wizard-field">
-                <label>
-                  Full Name <span className="required">*</span>
-                </label>
-                <input
-                  type="text"
-                  className="input-default"
-                  value={form.full_name}
-                  onChange={e => setForm({ ...form, full_name: e.target.value })}
-                  placeholder="Enter learner's full name"
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div className="wizard-field">
+                  <label>
+                    Name(s) <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="input-default"
+                    value={form.first_name}
+                    onChange={e => setForm({ ...form, first_name: e.target.value })}
+                    placeholder="First name(s)"
+                  />
+                </div>
+                <div className="wizard-field">
+                  <label>
+                    Surname <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="input-default"
+                    value={form.surname}
+                    onChange={e => setForm({ ...form, surname: e.target.value })}
+                    placeholder="Surname"
+                  />
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
@@ -366,16 +401,29 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
                   marginBottom: '16px',
                 }}
               >
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
                   <div className="wizard-field">
                     <label>
-                      Primary Guardian Name <span className="required">*</span>
+                      Guardian Name(s) <span className="required">*</span>
                     </label>
                     <input
                       type="text"
                       className="input-default"
-                      value={form.guardian_name}
-                      onChange={e => setForm({ ...form, guardian_name: e.target.value })}
+                      value={form.guardian_first_name}
+                      onChange={e => setForm({ ...form, guardian_first_name: e.target.value })}
+                      placeholder="First name(s)"
+                    />
+                  </div>
+                  <div className="wizard-field">
+                    <label>
+                      Guardian Surname <span className="required">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="input-default"
+                      value={form.guardian_surname}
+                      onChange={e => setForm({ ...form, guardian_surname: e.target.value })}
+                      placeholder="Surname"
                     />
                   </div>
                   <div className="wizard-field">
@@ -400,14 +448,25 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
                   marginBottom: '16px',
                 }}
               >
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
                   <div className="wizard-field">
-                    <label>Secondary Guardian Name</label>
+                    <label>Secondary Guardian Name(s)</label>
                     <input
                       type="text"
                       className="input-default"
-                      value={form.guardian_name_2}
-                      onChange={e => setForm({ ...form, guardian_name_2: e.target.value })}
+                      value={form.guardian_first_name_2}
+                      onChange={e => setForm({ ...form, guardian_first_name_2: e.target.value })}
+                      placeholder="First name(s)"
+                    />
+                  </div>
+                  <div className="wizard-field">
+                    <label>Secondary Guardian Surname</label>
+                    <input
+                      type="text"
+                      className="input-default"
+                      value={form.guardian_surname_2}
+                      onChange={e => setForm({ ...form, guardian_surname_2: e.target.value })}
+                      placeholder="Surname"
                     />
                   </div>
                   <div className="wizard-field">

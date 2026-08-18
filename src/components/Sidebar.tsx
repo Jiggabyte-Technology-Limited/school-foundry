@@ -26,7 +26,6 @@ const allNavItems: NavItem[] = [
   { id: 'payments', label: 'Payments', icon: 'credit-card', roles: ['admin', 'user'] },
   { id: 'fees', label: 'School Fees', icon: 'dollar', roles: ['admin'] },
   { id: 'logs', label: 'Logs', icon: 'list', roles: ['admin'] },
-  { id: 'import', label: 'Import', icon: 'upload', roles: ['admin'] },
   { id: 'backup', label: 'Backup', icon: 'database', roles: ['admin'] },
 ];
 

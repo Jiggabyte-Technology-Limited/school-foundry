@@ -245,193 +245,13 @@ const ClassLists: React.FC<ClassListsProps> = ({ onViewStudentAccount }) => {
       <div
         className="page-content"
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) 210mm',
+          display: 'flex',
+          flexDirection: 'column',
           gap: '24px',
           background: 'var(--background)',
-          alignItems: 'start',
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <div className="flex-between" style={{ gap: '16px', alignItems: 'center' }}>
-            <h2 style={{ margin: 0, fontSize: '28px', fontWeight: 600 }} className="text-display">
-              Class Lists
-            </h2>
-            <button className="btn btn-primary" onClick={() => setShowWizard(true)}>
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              Add Learner
-            </button>
-          </div>
-
-          <div className="card-surface" style={{ padding: '24px', position: 'sticky', top: '24px' }}>
-            <div className="flex-between mb-4">
-              <div className="metric-label" style={{ margin: 0 }}>
-                Filter by Grade/Form
-              </div>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  color: '#374151',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={showInactive}
-                  onChange={event => setShowInactive(event.target.checked)}
-                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                />
-                Inactive
-              </label>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {grades.map(grade => {
-                const isGradeSelected = selectedGrade === grade.id;
-                const gradeSections = classSections.filter(
-                  section => section.grade_id === grade.id
-                );
-                const isAllLearnersSelected = isGradeSelected && selectedSection === null;
-
-                return (
-                  <div
-                    key={grade.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      setSelectedGrade(grade.id);
-                      setSelectedSection(null);
-                    }}
-                    onKeyDown={event => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        setSelectedGrade(grade.id);
-                        setSelectedSection(null);
-                      }
-                    }}
-                    style={{
-                      border: isGradeSelected
-                        ? '1px solid var(--primary)'
-                        : '1px solid var(--border)',
-                      borderRadius: '8px',
-                      background: isGradeSelected ? 'var(--primary-light)' : 'var(--surface)',
-                      overflow: 'hidden',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <div
-                      style={{
-                        padding: '12px 14px 10px 14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '12px',
-                      }}
-                    >
-                      <div
-                        style={{
-                          color: isGradeSelected ? 'var(--primary)' : 'var(--text-primary)',
-                          fontWeight: isGradeSelected ? 700 : 600,
-                          fontSize: '15px',
-                        }}
-                      >
-                        {grade.label}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          color: isGradeSelected ? 'var(--primary)' : 'var(--text-secondary)',
-                          background: isGradeSelected ? 'white' : 'var(--secondary)',
-                          border: '1px solid var(--border)',
-                          borderRadius: '999px',
-                          padding: '4px 10px',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {gradeCounts[grade.id] ?? 0} learners
-                      </div>
-                    </div>
-
-                    {enableSubgrades && (
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: '8px',
-                          padding: '0 14px 14px 14px',
-                        }}
-                      >
-                        <button
-                          type="button"
-                          onClick={event => {
-                            event.stopPropagation();
-                            setSelectedGrade(grade.id);
-                            setSelectedSection(null);
-                          }}
-                          className={`chip text-display ${
-                            isAllLearnersSelected ? 'chip-active' : ''
-                          }`}
-                          style={{
-                            border: 'none',
-                            cursor: 'pointer',
-                            pointerEvents: 'auto',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          All Learners
-                        </button>
-
-                        {gradeSections.map(section => {
-                          const isSectionSelected =
-                            isGradeSelected && selectedSection === section.id;
-
-                          return (
-                            <button
-                              key={section.id}
-                              type="button"
-                              onClick={event => {
-                                event.stopPropagation();
-                                setSelectedGrade(grade.id);
-                                setSelectedSection(section.id);
-                              }}
-                              className={`chip text-display ${isSectionSelected ? 'chip-active' : ''}`}
-                              style={{
-                                border: 'none',
-                                cursor: 'pointer',
-                                pointerEvents: 'auto',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {section.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Custom Lists */}
+        {/* Custom Lists — full width at top */}
         <div
           style={{
             padding: '12px 16px',
@@ -450,7 +270,7 @@ const ClassLists: React.FC<ClassListsProps> = ({ onViewStudentAccount }) => {
             {activeList ? (
               <>
                 <span className="chip chip-active text-display" style={{ padding: '4px 10px', fontSize: 12 }}>
-                  {formatListChip(activeList.name, null)}
+                  {formatListChip(activeList.name, 0)}
                 </span>
                 <button
                   type="button"
@@ -489,25 +309,213 @@ const ClassLists: React.FC<ClassListsProps> = ({ onViewStudentAccount }) => {
           </div>
         </div>
 
+        {/* Two columns below: grade selector + preview */}
         <div
           style={{
-            display: 'flex',
-            flexDirection: 'column',
-            minHeight: 'calc(100vh - 120px)',
-            alignItems: 'flex-end',
-            minWidth: 0,
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) 210mm',
+            gap: '24px',
+            alignItems: 'start',
           }}
         >
-          <ClassListPrintPreview
-            title={classListTitle}
-            academicYear={academicYear}
-            generatedAt={generatedAt}
-            schoolName={schoolName}
-            schoolLogo={schoolLogo}
-            schoolContact={schoolContact}
-            students={students}
-            onSelectStudent={onViewStudentAccount}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div className="flex-between" style={{ gap: '16px', alignItems: 'center' }}>
+              <h2 style={{ margin: 0, fontSize: '28px', fontWeight: 600 }} className="text-display">
+                Class Lists
+              </h2>
+              <button className="btn btn-primary" onClick={() => setShowWizard(true)}>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                Add Learner
+              </button>
+            </div>
+
+            <div className="card-surface" style={{ padding: '24px', position: 'sticky', top: '24px' }}>
+              <div className="flex-between mb-4">
+                <div className="metric-label" style={{ margin: 0 }}>
+                  Filter by Grade/Form
+                </div>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    color: '#374151',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={showInactive}
+                    onChange={event => setShowInactive(event.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  Inactive
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {grades.map(grade => {
+                  const isGradeSelected = selectedGrade === grade.id;
+                  const gradeSections = classSections.filter(
+                    section => section.grade_id === grade.id
+                  );
+                  const isAllLearnersSelected = isGradeSelected && selectedSection === null;
+
+                  return (
+                    <div
+                      key={grade.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        setSelectedGrade(grade.id);
+                        setSelectedSection(null);
+                      }}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedGrade(grade.id);
+                          setSelectedSection(null);
+                        }
+                      }}
+                      style={{
+                        border: isGradeSelected
+                          ? '1px solid var(--primary)'
+                          : '1px solid var(--border)',
+                        borderRadius: '8px',
+                        background: isGradeSelected ? 'var(--primary-light)' : 'var(--surface)',
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding: '12px 14px 10px 14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '12px',
+                        }}
+                      >
+                        <div
+                          style={{
+                            color: isGradeSelected ? 'var(--primary)' : 'var(--text-primary)',
+                            fontWeight: isGradeSelected ? 700 : 600,
+                            fontSize: '15px',
+                          }}
+                        >
+                          {grade.label}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            color: isGradeSelected ? 'var(--primary)' : 'var(--text-secondary)',
+                            background: isGradeSelected ? 'white' : 'var(--secondary)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '999px',
+                            padding: '4px 10px',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {gradeCounts[grade.id] ?? 0} learners
+                        </div>
+                      </div>
+
+                      {enableSubgrades && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '8px',
+                            padding: '0 14px 14px 14px',
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={event => {
+                              event.stopPropagation();
+                              setSelectedGrade(grade.id);
+                              setSelectedSection(null);
+                            }}
+                            className={`chip text-display ${
+                              isAllLearnersSelected ? 'chip-active' : ''
+                            }`}
+                            style={{
+                              border: 'none',
+                              cursor: 'pointer',
+                              pointerEvents: 'auto',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            All Learners
+                          </button>
+
+                          {gradeSections.map(section => {
+                            const isSectionSelected =
+                              isGradeSelected && selectedSection === section.id;
+
+                            return (
+                              <button
+                                key={section.id}
+                                type="button"
+                                onClick={event => {
+                                  event.stopPropagation();
+                                  setSelectedGrade(grade.id);
+                                  setSelectedSection(section.id);
+                                }}
+                                className={`chip text-display ${isSectionSelected ? 'chip-active' : ''}`}
+                                style={{
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  pointerEvents: 'auto',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {section.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Preview */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              minWidth: 0,
+            }}
+          >
+            <ClassListPrintPreview
+              title={classListTitle}
+              academicYear={academicYear}
+              generatedAt={generatedAt}
+              schoolName={schoolName}
+              schoolLogo={schoolLogo}
+              schoolContact={schoolContact}
+              students={students}
+              onSelectStudent={onViewStudentAccount}
+            />
+          </div>
         </div>
       </div>
 

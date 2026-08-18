@@ -1,2 +1,3 @@
-# Project: SchoolFoundry
-@~/.gemini/projects/school-db.md
+# Compatibility shim
+@./PROJECT-OS.md
+

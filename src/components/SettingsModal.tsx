@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import bcryptjs from 'bcryptjs';
 import { db } from '../lib/db-client';
 import { useToast } from './Toast';
@@ -56,7 +56,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
   const [schoolFeesTerms, setSchoolFeesTerms] = useState('');
   const [enableSubgrades, setEnableSubgrades] = useState(false);
-  const [activeTab, setActiveTab] = useState<'school' | 'users' | 'profile' | 'license' | 'danger' | 'rollover'>(
+  const [activeTab, setActiveTab] = useState<'school' | 'users' | 'profile' | 'license' | 'danger' | 'rollover' | 'upload'>(
     user.role === 'admin' ? 'school' : 'profile'
   );
   const [schoolTab, setSchoolTab] = useState<'profile' | 'branding' | 'policies'>('profile');
@@ -725,6 +725,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <path d="M3 11V9a4 4 0 0 1 4-4h14" />
                 <path d="M7 23l-4-4 4-4" />
                 <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+              </svg>
+            ),
+          },
+          {
+            id: 'upload' as const,
+            label: 'Upload Data',
+            icon: (
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
             ),
           },
@@ -2538,9 +2556,500 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* Year Rollover Tab */}
             {activeTab === 'rollover' && isAdmin && <RolloverWizard onClose={onClose} />}
+
+            {/* Upload Data Tab */}
+            {activeTab === 'upload' && isAdmin && (
+              <UploadDataTab />
+            )}
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+// ── Upload Data Tab Component ──
+
+const STUDENT_FIELDS = [
+  { key: 'first_name', label: 'Name(s)', required: true },
+  { key: 'surname', label: 'Surname', required: true },
+  { key: 'student_number', label: 'Student Number', required: false },
+  { key: 'date_of_birth', label: 'Date of Birth', required: false },
+  { key: 'gender', label: 'Gender', required: false },
+  { key: 'guardian_first_name', label: 'Guardian Name(s)', required: true },
+  { key: 'guardian_surname', label: 'Guardian Surname', required: true },
+  { key: 'guardian_contact', label: 'Guardian Contact', required: true },
+  { key: 'guardian_first_name_2', label: 'Guardian Name(s) 2', required: false },
+  { key: 'guardian_surname_2', label: 'Guardian Surname 2', required: false },
+  { key: 'guardian_contact_2', label: 'Guardian Contact 2', required: false },
+  { key: 'guardian_email', label: 'Guardian Email', required: false },
+  { key: 'grade_label', label: 'Grade', required: false },
+];
+
+const PAYMENT_FIELDS = [
+  { key: 'student_number', label: 'Student Number', required: false },
+  { key: 'full_name', label: 'Student Name', required: false },
+  { key: 'amount_paid_cents', label: 'Amount Paid (cents)', required: true },
+  { key: 'payment_date', label: 'Payment Date', required: true },
+  { key: 'receipt_number', label: 'Receipt Number', required: true },
+  { key: 'payment_method', label: 'Payment Method', required: false },
+];
+
+type UploadDataTabProps = {};
+
+const UploadDataTab: React.FC<UploadDataTabProps> = () => {
+  const { showToast } = useToast();
+  const [subTab, setSubTab] = useState<'students' | 'payments'>('students');
+  const [step, setStep] = useState<'upload' | 'preview' | 'result'>('upload');
+  const [parsed, setParsed] = useState<any>(null);
+  const [previewData, setPreviewData] = useState<any[]>([]);
+  const [previewPage, setPreviewPage] = useState(0);
+  const [importResult, setImportResult] = useState<any>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  const [selectedSheet, setSelectedSheet] = useState('');
+  const [filePath, setFilePath] = useState('');
+
+  const fields = subTab === 'students' ? STUDENT_FIELDS : PAYMENT_FIELDS;
+  const rowsPerPage = 4;
+
+  const totalPages = Math.ceil(previewData.length / rowsPerPage);
+  const pageRows = previewData.slice(previewPage * rowsPerPage, (previewPage + 1) * rowsPerPage);
+
+  const handleOpenFile = useCallback(async () => {
+    setIsProcessing(true);
+    try {
+      const result = await (window as any).api.openImportFileDialog();
+      if (result.canceled) { setIsProcessing(false); return; }
+      if (!result.success) {
+        showToast('error', 'Import Failed', result.error || 'Could not open file');
+        setIsProcessing(false);
+        return;
+      }
+      setFilePath(result.filePath);
+      setParsed(result.parsed);
+      const firstSheet = result.parsed.sheets[0]?.sheetName || '';
+      setSelectedSheet(firstSheet);
+      const initialMapping: Record<string, string> = {};
+      result.parsed.sheets[0]?.headers.forEach((h: string) => { initialMapping[h] = ''; });
+      setColumnMapping(initialMapping);
+      setStep('upload');
+    } catch (err: any) {
+      showToast('error', 'Import Failed', err.message || 'Unexpected error');
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [showToast]);
+
+  const handleBuildTemplate = useCallback(async () => {
+    const headers = fields.map(f => f.label);
+    const result = await (window as any).api.saveImportTemplate({
+      fileName: `SchoolFoundry_${subTab}_template.xlsx`,
+      headers,
+      sheetName: subTab === 'students' ? 'Students' : 'Payments',
+    });
+    if (result.success) {
+      showToast('success', 'Template Downloaded', `Saved to ${result.filePath}`);
+    } else if (!result.canceled) {
+      showToast('error', 'Download Failed', result.error || 'Could not save template');
+    }
+  }, [subTab, fields, showToast]);
+
+  const handleValidateAndPreview = useCallback(async () => {
+    if (!selectedSheet) {
+      showToast('error', 'Validation Error', 'Please select a sheet');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const result = await (window as any).api.getImportPreview({
+        filePath,
+        sheetName: selectedSheet,
+        columnMapping,
+        tableType: subTab,
+      });
+      if (!result.success) {
+        showToast('error', 'Validation Failed', result.error);
+        setIsProcessing(false);
+        return;
+      }
+      setPreviewData(result.sampleRows || []);
+      setPreviewPage(0);
+      setStep('preview');
+    } catch (err: any) {
+      showToast('error', 'Validation Failed', err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [filePath, selectedSheet, columnMapping, subTab, showToast]);
+
+  const handleCommit = useCallback(async () => {
+    setIsProcessing(true);
+    try {
+      const result = await (window as any).api.commitImport({
+        filePath,
+        sheetName: selectedSheet,
+        columnMapping,
+        tableType: subTab,
+      });
+      setImportResult(result);
+      setStep('result');
+      if (result.success) {
+        showToast('success', 'Import Complete', `${result.importedRows} ${subTab} imported successfully`);
+      } else {
+        showToast('error', 'Import Failed', result.error || 'Import could not be completed');
+      }
+    } catch (err: any) {
+      showToast('error', 'Import Failed', err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [filePath, selectedSheet, columnMapping, subTab, showToast]);
+
+  const handleReset = () => {
+    setStep('upload');
+    setParsed(null);
+    setFilePath('');
+    setSelectedSheet('');
+    setColumnMapping({});
+    setPreviewData([]);
+    setPreviewPage(0);
+    setImportResult(null);
+  };
+
+  const handleSheetChange = (sheetName: string) => {
+    setSelectedSheet(sheetName);
+    const sheet = parsed?.sheets.find((s: any) => s.sheetName === sheetName);
+    if (sheet) {
+      const newMapping: Record<string, string> = {};
+      sheet.headers.forEach((h: string) => { newMapping[h] = columnMapping[h] || ''; });
+      setColumnMapping(newMapping);
+    }
+  };
+
+  const handleMappingChange = (excelHeader: string, dbField: string) => {
+    setColumnMapping(prev => ({ ...prev, [excelHeader]: dbField }));
+  };
+
+  const parsedSheet = parsed?.sheets?.find((s: any) => s.sheetName === selectedSheet);
+  const headers = parsedSheet?.headers || [];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div>
+        <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 8px 0' }}>
+          Upload Data
+        </h3>
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
+          Import student or payment records from Excel. Upload a file, preview, then commit.
+        </p>
+      </div>
+
+      {/* Sub-tabs: Students / Payments */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        {(['students', 'payments'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => { setSubTab(t); handleReset(); }}
+            className={`chip text-display ${subTab === t ? 'chip-active' : ''}`}
+            style={{ border: 'none', cursor: 'pointer', padding: '8px 16px', fontSize: 14 }}
+          >
+            {t === 'students' ? 'Students' : 'Payments'}
+          </button>
+        ))}
+      </div>
+
+      {/* Step indicator */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        {(['upload', 'preview', 'result'] as const).map((s, i) => (
+          <div key={s} style={{
+            flex: 1,
+            padding: '10px 16px',
+            borderRadius: 8,
+            background: step === s ? 'var(--primary)' : 'var(--secondary)',
+            color: step === s ? '#fff' : 'var(--text-secondary)',
+            fontSize: 13,
+            fontWeight: 600,
+            textAlign: 'center',
+          }}>
+            {i + 1}. {s === 'upload' ? 'Upload' : s === 'preview' ? 'Preview' : 'Done'}
+          </div>
+        ))}
+      </div>
+
+      {/* Step: Upload */}
+      {step === 'upload' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div
+            onClick={handleOpenFile}
+            style={{
+              border: '2px dashed var(--border)',
+              borderRadius: 16,
+              padding: '48px 32px',
+              cursor: isProcessing ? 'wait' : 'pointer',
+              background: 'var(--secondary)',
+              textAlign: 'center',
+              transition: 'border-color 0.2s',
+            }}
+          >
+            <div style={{ fontSize: 40, marginBottom: 12 }}>📊</div>
+            <p style={{ fontSize: 16, fontWeight: 600, margin: '0 0 8px' }}>
+              {isProcessing ? 'Opening file...' : 'Click to select Excel file'}
+            </p>
+            <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: 13 }}>
+              Supports .xlsx and .xls formats
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>or</span>
+            <button
+              onClick={handleBuildTemplate}
+              style={{
+                padding: '8px 18px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                background: 'transparent',
+                color: 'var(--primary)',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Download {subTab === 'students' ? 'Student' : 'Payment'} Template
+            </button>
+          </div>
+
+          {/* File selected → show column mapping */}
+          {parsed && parsedSheet && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ padding: '12px 16px', background: 'var(--secondary)', borderRadius: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
+                File: <strong style={{ color: 'var(--text-primary)' }}>{parsed.fileName}</strong> — {parsedSheet.rowCount} rows
+              </div>
+
+              {parsed.sheets.length > 1 && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Select Sheet</label>
+                  <select
+                    value={selectedSheet}
+                    onChange={e => handleSheetChange(e.target.value)}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'var(--surface)',
+                      color: 'var(--text-primary)',
+                      fontSize: 14,
+                      minWidth: 200,
+                    }}
+                  >
+                    {parsed.sheets.map((s: any) => (
+                      <option key={s.sheetName} value={s.sheetName}>{s.sheetName} ({s.rowCount} rows)</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Column mapping */}
+              <div style={{ background: 'var(--secondary)', borderRadius: 12, padding: 20 }}>
+                <p style={{ fontSize: 14, fontWeight: 600, margin: '0 0 16px' }}>
+                  Map Excel columns to database fields
+                </p>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>Excel Column</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>→ Database Field</th>
+                      <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>Required</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {headers.map((header: string) => (
+                      <tr key={header} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '8px 12px', fontSize: 13, fontFamily: 'monospace' }}>{header}</td>
+                        <td style={{ padding: '8px 12px' }}>
+                          <select
+                            value={columnMapping[header] || ''}
+                            onChange={e => handleMappingChange(header, e.target.value)}
+                            style={{
+                              padding: '6px 10px',
+                              borderRadius: 6,
+                              border: '1px solid var(--border)',
+                              background: 'var(--surface)',
+                              color: 'var(--text-primary)',
+                              fontSize: 13,
+                              width: '100%',
+                              maxWidth: 260,
+                            }}
+                          >
+                            <option value="">— Skip this column —</option>
+                            {fields.map(f => (
+                              <option key={f.key} value={f.key}>{f.label}{f.required ? ' *' : ''}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td style={{ padding: '8px 12px', fontSize: 12 }}>
+                          {fields.find(f => f.key === columnMapping[header])?.required ? (
+                            <span style={{ color: '#d97706' }}>Required</span>
+                          ) : (
+                            <span style={{ color: 'var(--text-secondary)' }}>Optional</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <button
+                onClick={handleValidateAndPreview}
+                disabled={isProcessing}
+                className="btn btn-primary"
+                style={{ padding: '10px 20px', fontSize: 14, fontWeight: 600, alignSelf: 'flex-start' }}
+              >
+                {isProcessing ? 'Validating...' : 'Validate & Preview'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step: Preview */}
+      {step === 'preview' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ padding: '12px 16px', background: 'var(--secondary)', borderRadius: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
+            Previewing <strong style={{ color: 'var(--text-primary)' }}>{previewData.length}</strong> rows (showing page {previewPage + 1} of {totalPages || 1})
+          </div>
+
+          {/* Paginated table */}
+          <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 10 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: 'var(--secondary)' }}>
+                  {headers.map((h: string) => (
+                    <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, whiteSpace: 'nowrap', borderBottom: '1px solid var(--border)' }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((row: any, i: number) => (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                    {headers.map((h: string) => (
+                      <td key={h} style={{ padding: '8px 12px', whiteSpace: 'nowrap', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {String(row[h] ?? '')}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+              <button
+                onClick={() => setPreviewPage(p => Math.max(0, p - 1))}
+                disabled={previewPage === 0}
+                className="btn"
+                style={{ padding: '6px 14px', fontSize: 13, opacity: previewPage === 0 ? 0.4 : 1 }}
+              >
+                ← Prev
+              </button>
+              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                Page {previewPage + 1} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPreviewPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={previewPage >= totalPages - 1}
+                className="btn"
+                style={{ padding: '6px 14px', fontSize: 13, opacity: previewPage >= totalPages - 1 ? 0.4 : 1 }}
+              >
+                Next →
+              </button>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button
+              onClick={handleReset}
+              className="btn"
+              style={{ padding: '10px 20px', fontSize: 14, fontWeight: 600 }}
+            >
+              Start Over
+            </button>
+            <button
+              onClick={handleCommit}
+              disabled={isProcessing || previewData.length === 0}
+              className="btn btn-primary"
+              style={{ padding: '10px 20px', fontSize: 14, fontWeight: 600, opacity: previewData.length === 0 ? 0.5 : 1 }}
+            >
+              {isProcessing ? 'Importing...' : `Import ${previewData.length} ${subTab}`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step: Result */}
+      {step === 'result' && importResult && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{
+            padding: '16px 20px',
+            borderRadius: 12,
+            border: importResult.success ? '1px solid #bbf7d0' : '1px solid #fecaca',
+            backgroundColor: importResult.success ? '#f0fdf4' : '#fef2f2',
+            color: importResult.success ? '#166534' : '#991b1b',
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
+              {importResult.success ? '✓ Import Complete' : '✗ Import Failed'}
+            </div>
+            <div style={{ fontSize: 14 }}>
+              {importResult.success
+                ? `${importResult.importedRows} ${subTab} imported. ${importResult.skippedRows || 0} skipped.`
+                : importResult.error || 'Import could not be completed.'}
+            </div>
+          </div>
+
+          {importResult.errors?.length > 0 && (
+            <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ padding: '10px 16px', background: 'var(--secondary)', fontSize: 13, fontWeight: 600 }}>
+                Errors ({importResult.errors.length})
+              </div>
+              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                {importResult.errors.slice(0, 10).map((e: any, i: number) => (
+                  <div key={i} style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+                    Row {e.row}: {e.field} — {e.message}
+                  </div>
+                ))}
+                {importResult.errors.length > 10 && (
+                  <div style={{ padding: '8px 16px', fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                    ...and {importResult.errors.length - 10} more errors
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={handleReset}
+            className="btn"
+            style={{ padding: '10px 20px', fontSize: 14, fontWeight: 600, alignSelf: 'flex-start' }}
+          >
+            Import More Data
+          </button>
+        </div>
+      )}
     </div>
   );
 };

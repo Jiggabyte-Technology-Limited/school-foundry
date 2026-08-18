@@ -72,6 +72,11 @@ contextBridge.exposeInMainWorld('api', {
     tableType: 'students' | 'payments';
     dryRun?: boolean;
   }) => ipcRenderer.invoke('commit-import', options),
+  saveImportTemplate: (options: {
+    fileName: string;
+    headers: string[];
+    sheetName: string;
+  }) => ipcRenderer.invoke('save-import-template', options),
 
   // License APIs
   getMachineId: () => ipcRenderer.invoke('get-machine-id'),

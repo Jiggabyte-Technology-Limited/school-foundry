@@ -80,12 +80,18 @@ CREATE TABLE IF NOT EXISTS grades (
 CREATE TABLE IF NOT EXISTS students (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   student_number   TEXT    NOT NULL UNIQUE,
-  full_name        TEXT    NOT NULL,
+  full_name        TEXT    NOT NULL,          -- backwards-compat: first_name || ' ' || surname
+  first_name       TEXT,                       -- populated by migration 2.2
+  surname          TEXT,                       -- populated by migration 2.2
   date_of_birth    TEXT,
   gender           TEXT,
-  guardian_name    TEXT NOT NULL,
+  guardian_name    TEXT NOT NULL,              -- backwards-compat
+  guardian_first_name TEXT,                    -- populated by migration 2.2
+  guardian_surname    TEXT,                    -- populated by migration 2.2
   guardian_contact TEXT NOT NULL,
-  guardian_name_2  TEXT,
+  guardian_name_2  TEXT,                       -- backwards-compat
+  guardian_first_name_2 TEXT,                  -- populated by migration 2.2
+  guardian_surname_2    TEXT,                  -- populated by migration 2.2
   guardian_contact_2 TEXT,
   guardian_email   TEXT,
   date_enrolled    TEXT    NOT NULL DEFAULT (datetime('now')),

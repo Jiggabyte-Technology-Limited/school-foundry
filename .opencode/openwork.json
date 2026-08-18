@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "workspace": {
+    "name": "school-foundry-offline",
+    "createdAt": 1781676114121,
+    "preset": "starter"
+  },
+  "authorizedRoots": [
+    "C:\\Users\\sewar\\repos\\school-foundry-offline"
+  ],
+  "reload": null
+}

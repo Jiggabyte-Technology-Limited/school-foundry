@@ -633,6 +633,90 @@ const migrations: MigrationStep[] = [
       );
     },
   },
+  {
+    version: '2.2',
+    description: 'Split full_name into first_name + surname for students and guardians',
+    run: async db => {
+      // -- Student name split --
+      try {
+        await runSql(db, `ALTER TABLE students ADD COLUMN first_name TEXT;`);
+        console.log('[Migrations] Added first_name to students.');
+      } catch (e) {
+        console.warn('[Migrations] students.first_name already exists:', e);
+      }
+      try {
+        await runSql(db, `ALTER TABLE students ADD COLUMN surname TEXT;`);
+        console.log('[Migrations] Added surname to students.');
+      } catch (e) {
+        console.warn('[Migrations] students.surname already exists:', e);
+      }
+
+      // Backfill: take first word as first_name, rest as surname
+      await runSql(db, `
+        UPDATE students
+        SET first_name = TRIM(SUBSTR(full_name, 1, INSTR(full_name, ' ') - 1)),
+            surname    = TRIM(SUBSTR(full_name, INSTR(full_name, ' ') + 1))
+        WHERE first_name IS NULL AND full_name IS NOT NULL AND INSTR(full_name, ' ') > 0
+      `);
+      // Edge case: single-word names → put in first_name, surname empty
+      await runSql(db, `
+        UPDATE students
+        SET first_name = TRIM(full_name),
+            surname    = ''
+        WHERE first_name IS NULL AND full_name IS NOT NULL
+      `);
+
+      // -- Guardian 1 name split --
+      try {
+        await runSql(db, `ALTER TABLE students ADD COLUMN guardian_first_name TEXT;`);
+      } catch (e) { /* exists */ }
+      try {
+        await runSql(db, `ALTER TABLE students ADD COLUMN guardian_surname TEXT;`);
+      } catch (e) { /* exists */ }
+
+      await runSql(db, `
+        UPDATE students
+        SET guardian_first_name = TRIM(SUBSTR(guardian_name, 1, INSTR(guardian_name, ' ') - 1)),
+            guardian_surname    = TRIM(SUBSTR(guardian_name, INSTR(guardian_name, ' ') + 1))
+        WHERE guardian_first_name IS NULL AND guardian_name IS NOT NULL AND INSTR(guardian_name, ' ') > 0
+      `);
+      await runSql(db, `
+        UPDATE students
+        SET guardian_first_name = TRIM(guardian_name),
+            guardian_surname    = ''
+        WHERE guardian_first_name IS NULL AND guardian_name IS NOT NULL
+      `);
+
+      // -- Guardian 2 name split --
+      try {
+        await runSql(db, `ALTER TABLE students ADD COLUMN guardian_first_name_2 TEXT;`);
+      } catch (e) { /* exists */ }
+      try {
+        await runSql(db, `ALTER TABLE students ADD COLUMN guardian_surname_2 TEXT;`);
+      } catch (e) { /* exists */ }
+
+      await runSql(db, `
+        UPDATE students
+        SET guardian_first_name_2 = TRIM(SUBSTR(guardian_name_2, 1, INSTR(guardian_name_2, ' ') - 1)),
+            guardian_surname_2    = TRIM(SUBSTR(guardian_name_2, INSTR(guardian_name_2, ' ') + 1))
+        WHERE guardian_first_name_2 IS NULL AND guardian_name_2 IS NOT NULL AND INSTR(guardian_name_2, ' ') > 0
+      `);
+      await runSql(db, `
+        UPDATE students
+        SET guardian_first_name_2 = TRIM(guardian_name_2),
+            guardian_surname_2    = ''
+        WHERE guardian_first_name_2 IS NULL AND guardian_name_2 IS NOT NULL
+      `);
+
+      // Indexes
+      await runSql(db, `CREATE INDEX IF NOT EXISTS idx_students_surname ON students(surname COLLATE NOCASE);`);
+
+      await runSql(
+        db,
+        `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '2.2', datetime('now'));`
+      );
+    },
+  },
 ];
 
 export async function runMigrations(db: sqlite3.Database): Promise<void> {
