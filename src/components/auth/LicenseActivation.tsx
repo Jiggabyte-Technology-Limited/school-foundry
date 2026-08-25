@@ -43,7 +43,7 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
             console.error('Failed to generate QR code:', err);
           }
         } else {
-          setError('Failed to generate Machine ID. Please ensure you are running on Windows.');
+          setError('Failed to generate Machine ID. Please ensure you are running on Windows/Linux/macOS.');
         }
       } catch (err) {
         console.error('Failed to get machine ID:', err);
@@ -84,11 +84,11 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
       if (result.valid) {
         const msg = result.expiresAt
           ? `License activated successfully! Valid until ${result.expiresAt}.`
-          : 'License activated successfully! (Perpetual license)';
+          : 'License activated successfully! (Open DPG / Perpetual License)';
         setSuccess(msg);
         setTimeout(() => {
           onActivated();
-        }, 1500);
+        }, 1200);
       } else {
         setError(result.error || 'License activation failed. Please check your license key.');
         setLicenseKey('');
@@ -96,6 +96,28 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
     } catch (err) {
       console.error('Activation error:', err);
       setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleQuickDpgUnlock = async () => {
+    setLicenseKey('DPGA-OPEN-SOURCE-COMMUNITY');
+    setLoading(true);
+    setError('');
+    try {
+      const result: LicenseResult = await window.api.activateLicense('DPGA-OPEN-SOURCE-COMMUNITY');
+      if (result.valid) {
+        setSuccess('🌟 Open Source Digital Public Good (DPG) Edition Activated!');
+        setTimeout(() => {
+          onActivated();
+        }, 1200);
+      } else {
+        setError('Failed to activate open source edition.');
+      }
+    } catch (err) {
+      console.error('DPG activation error:', err);
+      setError('An unexpected error occurred.');
     } finally {
       setLoading(false);
     }
@@ -176,7 +198,7 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                 />
                 <h2
                   style={{
-                    fontSize: '36px',
+                    fontSize: '34px',
                     fontWeight: 800,
                     margin: 0,
                     color: 'var(--text-primary)',
@@ -185,25 +207,26 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                 >
                   System Activation
                 </h2>
-                <p style={{ color: 'var(--text-secondary)', marginTop: '16px', fontSize: '16px', lineHeight: 1.5 }}>
-                  Welcome to <span style={{ fontWeight: 700 }}>School</span>Foundry. To start using the platform, please activate your license.
-                  Send the Machine ID (or take a photo of the QR code) to our support team to receive your license key.
+                <p style={{ color: 'var(--text-secondary)', marginTop: '14px', fontSize: '15px', lineHeight: 1.5 }}>
+                  Welcome to <span style={{ fontWeight: 700 }}>School</span>Foundry. Choose to activate with an institutional license key or unlock the free community Digital Public Good edition.
                 </p>
               </div>
 
               {/* License Key Form */}
               <form onSubmit={handleActivate} style={{ marginTop: '24px' }}>
-                <div style={{ marginBottom: '24px' }}>
+                <div style={{ marginBottom: '20px' }}>
                   <label
                     style={{
                       display: 'block',
-                      fontSize: '14px',
+                      fontSize: '13px',
                       fontWeight: 600,
-                      marginBottom: '12px',
+                      marginBottom: '8px',
                       color: 'var(--text-primary)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
                     }}
                   >
-                    ENTER LICENSE KEY
+                    Enter Institutional License Key
                   </label>
                   <input
                     type="text"
@@ -218,13 +241,12 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                     }}
                     placeholder="XXXX-XXXX-XXXX-XXXX"
                     disabled={loading}
-                    required
                     style={{
                       width: '100%',
-                      padding: '16px',
-                      borderRadius: '12px',
+                      padding: '14px',
+                      borderRadius: '10px',
                       border: '2px solid var(--border)',
-                      fontSize: '18px',
+                      fontSize: '17px',
                       letterSpacing: '1px',
                       textAlign: 'center',
                       fontFamily: 'var(--font-mono)',
@@ -239,7 +261,7 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                 </div>
 
                 {error && (
-                  <div style={{ color: '#dc2626', marginBottom: '16px', fontWeight: 500 }}>
+                  <div style={{ color: '#dc2626', marginBottom: '16px', fontWeight: 500, fontSize: '14px' }}>
                     {error}
                   </div>
                 )}
@@ -249,9 +271,9 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                     style={{
                       color: '#059669',
                       backgroundColor: '#d1fae5',
-                      padding: '16px',
+                      padding: '14px',
                       borderRadius: '8px',
-                      fontSize: '15px',
+                      fontSize: '14px',
                       fontWeight: 600,
                       border: '1px solid #10b981',
                       marginBottom: '16px',
@@ -266,12 +288,12 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                   disabled={loading || !licenseKey.trim() || loadingMachineId}
                   style={{
                     width: '100%',
-                    padding: '18px',
-                    borderRadius: '12px',
+                    padding: '16px',
+                    borderRadius: '10px',
                     border: 'none',
                     background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
                     color: 'white',
-                    fontSize: '18px',
+                    fontSize: '16px',
                     fontWeight: 700,
                     cursor: loading ? 'not-allowed' : 'pointer',
                     opacity: loading ? 0.7 : 1,
@@ -280,7 +302,7 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '12px',
+                    gap: '10px',
                   }}
                   onMouseOver={e =>
                     !loading && (e.currentTarget.style.transform = 'translateY(-2px)')
@@ -295,8 +317,8 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                   ) : (
                     <>
                       <svg
-                        width="20"
-                        height="20"
+                        width="18"
+                        height="18"
                         fill="none"
                         stroke="currentColor"
                         strokeWidth="2"
@@ -304,10 +326,34 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <span>Activate License</span>
+                      <span>Activate License Key</span>
                     </>
                   )}
                 </button>
+
+                <div style={{ marginTop: '16px', textAlign: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={handleQuickDpgUnlock}
+                    disabled={loading}
+                    style={{
+                      background: 'rgba(249, 115, 22, 0.06)',
+                      border: '1px dashed rgba(249, 115, 22, 0.5)',
+                      borderRadius: '8px',
+                      color: 'var(--text-primary)',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      padding: '10px 14px',
+                      width: '100%',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseOver={e => (e.currentTarget.style.borderColor = 'var(--primary)')}
+                    onMouseOut={e => (e.currentTarget.style.borderColor = 'rgba(249, 115, 22, 0.5)')}
+                  >
+                    🌐 Unlock Free Community Edition (Digital Public Good)
+                  </button>
+                </div>
               </form>
             </div>
           </div>
@@ -326,7 +372,7 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
               style={{
                 backgroundColor: '#FFFFFF',
                 borderRadius: '24px',
-                padding: '40px',
+                padding: '36px',
                 boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)',
                 border: '1px solid var(--border)',
                 width: '100%',
@@ -334,27 +380,27 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                 textAlign: 'center'
               }}
             >
-              <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-                Your Machine ID
+              <h3 style={{ fontSize: '19px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                Hardware Fingerprint (Machine ID)
               </h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '32px' }}>
-                Please take a clear photo of this QR code or copy the text ID and send it to our support team.
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '24px', lineHeight: 1.4 }}>
+                For managed institutional deployments, send this Machine ID to generate an offline cryptographic activation key.
               </p>
 
               {loadingMachineId ? (
                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px' }}>
                     <div className="animate-spin w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full mb-4" />
-                    <span style={{ color: 'var(--text-secondary)' }}>Generating hardware fingerprint...</span>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Generating hardware fingerprint...</span>
                  </div>
               ) : (
                 <>
                   {qrCodeDataUrl && (
-                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '32px' }}>
-                      <div style={{ padding: '16px', backgroundColor: '#FFFFFF', borderRadius: '16px', border: '2px solid var(--border)', display: 'inline-block' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
+                      <div style={{ padding: '12px', backgroundColor: '#FFFFFF', borderRadius: '14px', border: '2px solid var(--border)', display: 'inline-block' }}>
                         <img 
                           src={qrCodeDataUrl} 
                           alt="Machine ID QR Code" 
-                          style={{ width: '280px', height: '280px', display: 'block' }} 
+                          style={{ width: '240px', height: '240px', display: 'block' }} 
                         />
                       </div>
                     </div>
@@ -363,16 +409,16 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                   <div 
                     style={{ 
                       backgroundColor: 'var(--background)', 
-                      padding: '20px', 
-                      borderRadius: '12px',
-                      border: '2px solid var(--border)',
-                      position: 'relative'
+                      padding: '16px', 
+                      borderRadius: '10px', 
+                      border: '2px solid var(--border)', 
+                      position: 'relative' 
                     }}
                   >
                     <code 
                       style={{ 
                         display: 'block',
-                        fontSize: '18px', 
+                        fontSize: '17px', 
                         fontWeight: 600,
                         fontFamily: 'var(--font-mono)', 
                         color: 'var(--text-primary)',
@@ -388,11 +434,11 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                       onClick={copyMachineId}
                       disabled={!machineId}
                       style={{
-                        marginTop: '16px',
+                        marginTop: '12px',
                         width: '100%',
-                        padding: '14px 16px',
+                        padding: '12px 14px',
                         backgroundColor: '#FFFFFF',
-                        border: '2px solid var(--border)',
+                        border: '1px solid var(--border)',
                         borderRadius: '8px',
                         color: 'var(--text-primary)',
                         fontWeight: 600,
@@ -402,14 +448,20 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
                         justifyContent: 'center',
                         gap: '8px',
                         transition: 'all 0.2s',
-                        fontSize: '15px'
+                        fontSize: '14px'
                       }}
-                      onMouseOver={e => (e.currentTarget.style.borderColor = 'var(--primary)', e.currentTarget.style.color = 'var(--primary)')}
-                      onMouseOut={e => (e.currentTarget.style.borderColor = 'var(--border)', e.currentTarget.style.color = 'var(--text-primary)')}
+                      onMouseOver={e => {
+                        e.currentTarget.style.borderColor = 'var(--primary)';
+                        e.currentTarget.style.color = 'var(--primary)';
+                      }}
+                      onMouseOut={e => {
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.color = 'var(--text-primary)';
+                      }}
                     >
                       <svg
-                        width="18"
-                        height="18"
+                        width="16"
+                        height="16"
                         fill="none"
                         stroke="currentColor"
                         strokeWidth="2"
@@ -431,7 +483,7 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
       <div
         style={{
           position: 'absolute',
-          bottom: '24px',
+          bottom: '20px',
           left: 0,
           right: 0,
           textAlign: 'center',
@@ -448,10 +500,9 @@ export function LicenseActivation({ onActivated }: LicenseActivationProps) {
           }}
         >
           <span style={{ fontWeight: 700 }}>School</span>
-          <span style={{ fontWeight: 400 }}>Foundry</span> | &copy; Jiggabyte Technology Limited
+          <span style={{ fontWeight: 400 }}>Foundry</span> | Open Source Digital Public Good | &copy; Jiggabyte Technology Limited (Zambia)
         </span>
       </div>
     </div>
   );
 }
-

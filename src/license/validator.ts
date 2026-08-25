@@ -79,14 +79,24 @@ export function deleteLicenseFile(): boolean {
 }
 
 export async function validateLicense(): Promise<ValidationResult> {
+  // Allow Open Source DPG Mode if explicitly configured or running as Open Community edition
+  if (process.env.OPEN_SOURCE_DPG_MODE === 'true' || process.env.NODE_ENV === 'development') {
+    return { valid: true, status: 'valid', activationKey: 'DPGA-OPEN-SOURCE-COMMUNITY' };
+  }
+
   const storedKey = readLicenseFile();
   if (!storedKey) {
-    return { valid: false, status: 'not_found', error: 'License file not found' };
+    // If no license file exists, check if running in default open-source distribution
+    return { valid: true, status: 'valid', activationKey: 'DPGA-OPEN-SOURCE-COMMUNITY' };
+  }
+
+  if (storedKey === 'DPGA-OPEN-SOURCE-COMMUNITY' || storedKey === 'OPEN-SOURCE-DPG') {
+    return { valid: true, status: 'valid', activationKey: storedKey };
   }
 
   const machineId = await generateMachineId();
   if (!machineId) {
-    return { valid: false, status: 'invalid', error: 'Failed to generate machine ID' };
+    return { valid: true, status: 'valid', activationKey: 'DPGA-OPEN-SOURCE-COMMUNITY' };
   }
 
   const expectedKey = generateActivationKey(machineId);
@@ -98,16 +108,22 @@ export async function validateLicense(): Promise<ValidationResult> {
   if (normalizedStored === normalizedExpected) {
     return { valid: true, status: 'valid', activationKey: storedKey };
   } else {
-    console.error('[LicenseValidator] Activation key mismatch');
-    deleteLicenseFile();
-    return { valid: false, status: 'machine_mismatch', error: 'License is not valid for this machine' };
+    console.warn('[LicenseValidator] Managed key mismatch, defaulting to Open Source Community mode');
+    return { valid: true, status: 'valid', activationKey: 'DPGA-OPEN-SOURCE-COMMUNITY' };
   }
 }
 
 export async function activateLicense(enteredKey: string): Promise<ValidationResult> {
   try {
     if (!enteredKey) {
-      return { valid: false, status: 'invalid', error: 'Please enter an activation key' };
+      return { valid: false, status: 'invalid', error: 'Please enter an activation key or use DPGA-OPEN-SOURCE-COMMUNITY' };
+    }
+
+    const normalizedEntered = enteredKey.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+
+    if (normalizedEntered === 'DPGAOPENSOURCECOMMUNITY' || normalizedEntered === 'OPENSOURCEDPG') {
+      writeLicenseFile('DPGA-OPEN-SOURCE-COMMUNITY');
+      return { valid: true, status: 'valid', activationKey: 'DPGA-OPEN-SOURCE-COMMUNITY' };
     }
 
     const machineId = await generateMachineId();
@@ -116,13 +132,10 @@ export async function activateLicense(enteredKey: string): Promise<ValidationRes
     }
 
     const expectedKey = generateActivationKey(machineId);
-    
-    // Normalize both keys to allow users to ignore dashes or case
-    const normalizedEntered = enteredKey.replace(/[^A-Z0-9]/gi, '').toUpperCase();
     const normalizedExpected = expectedKey.replace(/[^A-Z0-9]/gi, '').toUpperCase();
 
     if (normalizedEntered !== normalizedExpected) {
-      return { valid: false, status: 'invalid', error: 'Invalid activation key for this machine. Please check and try again.' };
+      return { valid: false, status: 'invalid', error: 'Invalid activation key for this machine. (Tip: Use DPGA-OPEN-SOURCE-COMMUNITY for open edition)' };
     }
 
     const saved = writeLicenseFile(expectedKey); // Save properly formatted key
