@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>School Foundry — UNICEF Venture Fund 2-Minute Director's Shotlist (Seedance 2.0)</title>
+<style>
+  :root {
+    --bg: #0c0d0e;
+    --panel: #151719;
+    --panel-2: #1c1f23;
+    --border: #282c33;
+    --text: #f0f2f5;
+    --text-dim: #9aa1ad;
+    --accent: #f97316;
+    --accent-glow: rgba(249, 115, 22, 0.15);
+    --done: #22c55e;
+    --blue-tag: #0284c7;
+    --purple-tag: #9333ea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    line-height: 1.5;
+    padding: 32px 24px 100px;
+  }
+  .container { max-width: 1040px; margin: 0 auto; }
+  
+  header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+    margin-bottom: 28px;
+  }
+  .badge {
+    display: inline-block;
+    background: var(--accent-glow);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  h1 {
+    font-size: 30px;
+    font-weight: 700;
+    margin: 0 0 8px;
+    letter-spacing: -0.02em;
+    color: #ffffff;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 15px;
+    margin: 0;
+  }
+  
+  .assets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .asset-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .asset-card h4 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .asset-card p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .asset-tag {
+    font-family: monospace;
+    background: var(--panel-2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #38bdf8;
+  }
+
+  details.style-prefix {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 32px;
+  }
+  details.style-prefix summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--accent);
+    user-select: none;
+    font-size: 15px;
+  }
+  details.style-prefix pre {
+    margin: 14px 0 0;
+    padding: 16px;
+    background: var(--panel-2);
+    border-radius: 6px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    white-space: pre-wrap;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .scene {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    transition: border-color 0.2s;
+  }
+  .scene:hover {
+    border-color: #3f4450;
+  }
+  .scene-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px;
+  }
+  .scene-left {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .scene-header input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    margin-top: 3px;
+    accent-color: var(--done);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .scene-num {
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0 0 4px;
+  }
+  .scene-desc {
+    color: var(--text-dim);
+    font-size: 14px;
+    margin: 0;
+  }
+  .scene-type-tag {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 4px 10px;
+    border-radius: 20px;
+    flex-shrink: 0;
+  }
+  .tag-ai { background: rgba(147, 51, 234, 0.2); color: #c084fc; border: 1px solid rgba(147, 51, 234, 0.4); }
+  .tag-screen { background: rgba(2, 132, 199, 0.2); color: #38bdf8; border: 1px solid rgba(2, 132, 199, 0.4); }
+
+  .prompt-container {
+    position: relative;
+    margin-top: 14px;
+  }
+  .prompt-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .prompt-time {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: monospace;
+  }
+  pre.prompt-block {
+    margin: 0;
+    padding: 18px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    white-space: pre-wrap;
+    color: #e2e8f0;
+    line-height: 1.6;
+    overflow-x: auto;
+  }
+  .copy-btn {
+    position: absolute;
+    top: 36px;
+    right: 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .copy-btn:hover {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+  }
+  
+  .directive-box {
+    background: rgba(2, 132, 199, 0.08);
+    border: 1px dashed rgba(2, 132, 199, 0.4);
+    border-radius: 8px;
+    padding: 16px;
+    font-size: 13.5px;
+    color: #cbd5e1;
+    margin-top: 12px;
+  }
+  .directive-box strong { color: #38bdf8; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="badge">Seedance 2.0 • Director's Master Shotlist</div>
+    <h1>School Foundry — UNICEF Pitch Video</h1>
+    <p class="subtitle">120-Second Documentary & Prototype Film • Minimalist Human-Centric Aesthetic • 15s Clip Cadence</p>
+  </header>
+
+  <!-- STAGE 1 ASSETS ROSTER -->
+  <h3 style="font-size: 16px; margin-bottom: 12px; color: #ffffff;">Stage 1: Locked Asset References</h3>
+  <div class="assets-grid">
+    <div class="asset-card">
+      <h4><span class="asset-tag">@uncle_teacher</span> The ICT Teacher</h4>
+      <p>Dedicated Zambian ICT teacher in late 30s, smart grey/blue collared shirt, dignified, focused.</p>
+    </div>
+    <div class="asset-card">
+      <h4><span class="asset-tag">@student_chanda</span> The Learner</h4>
+      <p>Young Zambian schoolgirl (10-12 yrs) in neat deep-blue/white school uniform, attentive and bright.</p>
+    </div>
+    <div class="asset-card">
+      <h4><span class="asset-tag">@school_office</span> The Administration Room</h4>
+      <p>Modest brick school office in Zambia, natural morning light, wooden desks, paper ledgers.</p>
+    </div>
+    <div class="asset-card">
+      <h4><span class="asset-tag">@school_courtyard</span> The School Grounds</h4>
+      <p>Warm red earth courtyard, brick classrooms, jacaranda trees, students gathered in sunlight.</p>
+    </div>
+    <div class="asset-card">
+      <h4><span class="asset-tag">@receipt_books</span> Worn Paper Ledgers</h4>
+      <p>Heavy, fraying handwritten paper receipt books, stamped entries, curling yellowed pages.</p>
+    </div>
+    <div class="asset-card">
+      <h4><span class="asset-tag">@laptop_offline</span> Offline Station</h4>
+      <p>Standard commodity laptop on desk, no network cables, clean screen in natural daylight.</p>
+    </div>
+  </div>
+
+  <!-- GLOBAL STYLE PREFIX -->
+  <details class="style-prefix" open>
+    <summary>Global Style Prefix (Applies to all Seedance Prompts)</summary>
+    <pre id="global-style-prefix">Style: 8K IMAX Documentary. Photorealistic — no 3D render, no game engine, no CGI artifacts.
+Lighting: Natural light only — soft morning sunlight through windows, gentle atmospheric haze (10% density). No artificial lightning, no harsh neon.
+Color: 60:30:10 — warm ochre earth / slate charcoal / subtle orange accent.
+Camera: Physical cinema prime lens (35mm / 50mm). 180° shutter motion blur.
+Skin: Pore-level realism — authentic African skin tones, natural skin texture, capillary warmth, living catchlights in eyes.
+Acting: Human-centric documentary — micro-pauses before reactions, precise eye-lines, natural breathing movement.
+Physics: Real mass and gravity — paper has weight and contact shadows, natural human gestures.
+Continuity: Characters, props, and environment identical across every cut. Zero identity drift.
+Technical: 24fps smooth motion, 16:9 widescreen, no jitter.
+Audio: Diegetic natural environmental sound only (paper rustle, footsteps, distant schoolyard chatter). No music, no subtitles.</pre>
+  </details>
+
+  <!-- SCENES LIST -->
+
+  <!-- SCENE 1 -->
+  <div class="scene" id="scene-1">
+    <div class="scene-header">
+      <div class="scene-left">
+        <input type="checkbox" id="check-1" onchange="toggleScene(1)">
+        <div>
+          <div class="scene-num">Scene 1: The Weight of Paper Ledgers</div>
+          <p class="scene-desc">Macro tactile reveal of crumbling paper ledgers and administrative friction in a Zambian school.</p>
+        </div>
+      </div>
+      <span class="scene-type-tag tag-ai">Higgsfield AI (15s)</span>
+    </div>
+    <div class="prompt-container">
+      <div class="prompt-label">
+        <span>Prompt 1a · Seedance 2.0 Format</span>
+        <span class="prompt-time">0:00 – 0:15 (15 seconds)</span>
+      </div>
+      <button class="copy-btn" onclick="copyPrompt('prompt-1a')">📋 Copy Prompt</button>
+      <pre class="prompt-block" id="prompt-1a">Style: 8K IMAX Documentary. Photorealistic — no 3D render, no game engine, no CGI artifacts.
+Lighting: Natural light only — soft morning sunlight through windows, gentle atmospheric haze (10% density). No artificial lightning.
+Color: 60:30:10 — warm ochre earth / slate charcoal / subtle orange accent.
+Camera: Physical cinema prime lens (35mm / 50mm). 180° shutter motion blur.
+Skin: Pore-level realism — authentic African skin tones, natural skin texture, living catchlights in eyes.
+Acting: Human-centric documentary — micro-pauses, precise eye-lines, natural breathing movement.
+Physics: Real mass and gravity — paper has weight and contact shadows.
+Continuity: Characters, props, and environment identical across cuts. Zero identity drift.
+Technical: 24fps smooth motion, 16:9 widescreen.
+Audio: Diegetic paper rustling and distant schoolyard morning chatter only.
+
+Characters:
+HERO_TEACHER (@uncle_teacher) — Dedicated Zambian male ICT teacher, late 30s, smart grey button-down collared shirt, thoughtful and dignified expression.
+
+Props:
+PAPER_LEDGERS (@receipt_books) — Thick stacks of worn, handwritten receipt books and paper folders with stamped red ink entries.
+
+Scene:
+A modest school administration room (@school_office) in Lusaka, morning. Morning sunbeams illuminate floating dust motes. A large wooden desk is covered in towers of paper receipt books.
+
+CUT 1 — Extreme macro close-up on wooden desk, 50mm lens, slow static hold:
+Hero Teacher's weathered hands slowly turn the brittle, yellowed pages of a thick receipt ledger (@receipt_books). The paper rustles softly as his finger traces down handwritten payment columns. Dust motes drift through warm sunbeams.
+
+CUT 2 — Medium bust shot, 35mm, slow dolly-in:
+Hero Teacher (@uncle_teacher) looks up from the stack, exhaling softly with tired concentration, rubbing his temple for a micro-beat before looking across the room toward the open doorway.
+
+CUT 3 — Over-shoulder looking toward doorway, 50mm, shallow focus:
+Framed past Hero Teacher's shoulder, a young Zambian schoolgirl (@student_chanda) in a neat blue-and-white uniform stands quietly by the classroom door, waiting patiently with her notebook in hand.</pre>
+    </div>
+  </div>
+
+  <!-- SCENE 2 -->
+  <div class="scene" id="scene-2">
+    <div class="scene-header">
+      <div class="scene-left">
+        <input type="checkbox" id="check-2" onchange="toggleScene(2)">
+        <div>
+          <div class="scene-num">Scene 2: The Blackout & The Insight</div>
+          <p class="scene-desc">Grid power cuts off; establishing why cloud solutions fail and offline data sovereignty is mandatory.</p>
+        </div>
+      </div>
+      <span class="scene-type-tag tag-ai">Higgsfield AI (15s)</span>
+    </div>
+    <div class="prompt-container">
+      <div class="prompt-label">
+        <span>Prompt 2a · Seedance 2.0 Format</span>
+        <span class="prompt-time">0:15 – 0:30 (15 seconds)</span>
+      </div>
+      <button class="copy-btn" onclick="copyPrompt('prompt-2a')">📋 Copy Prompt</button>
+      <pre class="prompt-block" id="prompt-2a">Style: 8K IMAX Documentary. Photorealistic — no 3D render, no game engine, no CGI artifacts.
+Lighting: Natural light only — transitioning as ambient room light dims slightly during a load-shedding power cut, warm window light remains constant.
+Color: 60:30:10 — warm ochre earth / slate charcoal / subtle orange accent.
+Camera: Physical cinema prime lens (35mm / 50mm). 180° shutter motion blur.
+Skin: Pore-level realism — authentic African skin tones, natural skin texture.
+Acting: Human-centric documentary — micro-pauses, calm resilience.
+Continuity: Characters, props, and environment identical across cuts.
+
+Characters:
+HERO_TEACHER (@uncle_teacher) — Zambian male teacher, late 30s, smart grey button-down shirt.
+
+Props:
+OFFLINE_LAPTOP (@laptop_offline) — Standard black business laptop on desk, running on battery power.
+
+Scene:
+The school office (@school_office), morning. An electrical load-shedding blackout occurs.
+
+CUT 1 — Tight close-up on wall switch and desk fan, 35mm:
+The overhead light and desktop fan click to a halt as power cuts out. Quiet ambient room tone settles.
+
+CUT 2 — Medium profile shot of Hero Teacher, 50mm:
+Hero Teacher (@uncle_teacher) doesn't panic; he calmly turns toward his laptop (@laptop_offline) running smoothly on battery power by the window. His fingers rest steadily on the keyboard, confident and ready.
+
+CUT 3 — Macro over-shoulder tracking shot toward laptop screen, 35mm slow push:
+Camera slowly pushes in over his shoulder toward the laptop screen glowing crisply with the clean, high-contrast School Foundry dashboard interface.</pre>
+    </div>
+  </div>
+
+  <!-- SCENE 3 -->
+  <div class="scene" id="scene-3">
+    <div class="scene-header">
+      <div class="scene-left">
+        <input type="checkbox" id="check-3" onchange="toggleScene(3)">
+        <div>
+          <div class="scene-num">Scene 3: Real Product Demo — Instant Payment & Verifiable Receipt</div>
+          <p class="scene-desc">Live prototype capture: 30-second payment recording, integer-cent arithmetic, and instant receipting.</p>
+        </div>
+      </div>
+      <span class="scene-type-tag tag-screen">Real Prototype Screencast (30s)</span>
+    </div>
+    <div class="directive-box">
+      <strong>🎥 Real Prototype Screencast Directives (30 Seconds Total / 0:30 – 1:00):</strong><br>
+      • <strong>Step 1 (0:30–0:40):</strong> Screen shows computer WiFi explicitly in Airplane Mode. Launch School Foundry in under 1 second.<br>
+      • <strong>Step 2 (0:40–0:50):</strong> Navigate to <em>Payment Wizard</em>. Type student name <code>Chanda Mulenga (Grade 9)</code>, enter fee payment <code>500.00 ZMW</code>.<br>
+      • <strong>Step 3 (0:50–1:00):</strong> Click <strong>Process Payment</strong> -> Instant PDF/thermal receipt pops up with unique cryptographic verification code and remaining balance automatically calculated.
+    </div>
+  </div>
+
+  <!-- SCENE 4 -->
+  <div class="scene" id="scene-4">
+    <div class="scene-header">
+      <div class="scene-left">
+        <input type="checkbox" id="check-4" onchange="toggleScene(4)">
+        <div>
+          <div class="scene-num">Scene 4: Real Product Demo — Local Audit Trail & Child Protection</div>
+          <p class="scene-desc">Live prototype capture: Immutable on-device audit log and OVC/subsidized learner safeguard flag.</p>
+        </div>
+      </div>
+      <span class="scene-type-tag tag-screen">Real Prototype Screencast (15s)</span>
+    </div>
+    <div class="directive-box">
+      <strong>🎥 Real Prototype Screencast Directives (15 Seconds / 1:00 – 1:15):</strong><br>
+      • <strong>Step 1:</strong> Navigate to <em>Activity Log</em>. Show immutable cryptographic timestamp entry for the transaction.<br>
+      • <strong>Step 2:</strong> Open <em>Student Accounts</em>. Show learner flagged with <strong>"Government Subsidy / OVC Active"</strong>, demonstrating automated protection from punitive exam lockouts.
+    </div>
+  </div>
+
+  <!-- SCENE 5 -->
+  <div class="scene" id="scene-5">
+    <div class="scene-header">
+      <div class="scene-left">
+        <input type="checkbox" id="check-5" onchange="toggleScene(5)">
+        <div>
+          <div class="scene-num">Scene 5: Educator Relief & Learning Continuity</div>
+          <p class="scene-desc">Zambian educators experiencing immediate relief; student receives verified receipt and joins class.</p>
+        </div>
+      </div>
+      <span class="scene-type-tag tag-ai">Higgsfield AI (15s)</span>
+    </div>
+    <div class="prompt-container">
+      <div class="prompt-label">
+        <span>Prompt 5a · Seedance 2.0 Format</span>
+        <span class="prompt-time">1:15 – 1:30 (15 seconds)</span>
+      </div>
+      <button class="copy-btn" onclick="copyPrompt('prompt-5a')">📋 Copy Prompt</button>
+      <pre class="prompt-block" id="prompt-5a">Style: 8K IMAX Documentary. Photorealistic — no 3D render, no game engine, no CGI artifacts.
+Lighting: Natural light only — warm golden morning light streaming through windows and doorway.
+Color: 60:30:10 — warm ochre earth / slate charcoal / subtle orange accent.
+Camera: Physical cinema prime lens (35mm / 50mm). 180° shutter motion blur.
+Skin: Pore-level realism — authentic African skin tones, warm smiles, catchlights in eyes.
+Acting: Dignified, joyful, authentic relief.
+
+Characters:
+HERO_TEACHER (@uncle_teacher) — Zambian male teacher, late 30s, smart grey button-down shirt.
+STUDENT_CHANDA (@student_chanda) — Zambian schoolgirl, 11 yrs old, blue-and-white uniform, smiling warmly.
+
+Scene:
+The school office doorway leading to the sunny courtyard (@school_courtyard).
+
+CUT 1 — Medium two-shot, 50mm lens:
+Hero Teacher (@uncle_teacher) hands a crisp, printed payment receipt to Student Chanda (@student_chanda). He gives her an encouraging nod with a warm, proud smile.
+
+CUT 2 — Close-up on Student Chanda, 50mm:
+Student Chanda takes the receipt, tucks it into her notebook, and beams with relieved joy.
+
+CUT 3 — Wide tracking shot moving out to courtyard, 35mm:
+Student Chanda walks briskly through the sunlit red-earth courtyard (@school_courtyard) to rejoin her classmates entering the classroom, surrounded by green jacaranda trees in morning sunlight.</pre>
+    </div>
+  </div>
+
+  <!-- SCENE 6 -->
+  <div class="scene" id="scene-6">
+    <div class="scene-header">
+      <div class="scene-left">
+        <input type="checkbox" id="check-6" onchange="toggleScene(6)">
+        <div>
+          <div class="scene-num">Scene 6: Open Source DPG & 30-School Pilot Milestone</div>
+          <p class="scene-desc">Showcasing the MIT-licensed DPG repository and the 30-school field pilot milestone across Zambia.</p>
+        </div>
+      </div>
+      <span class="scene-type-tag tag-ai">Higgsfield AI + Screen (15s)</span>
+    </div>
+    <div class="prompt-container">
+      <div class="prompt-label">
+        <span>Prompt 6a · Seedance 2.0 Format</span>
+        <span class="prompt-time">1:30 – 1:45 (15 seconds)</span>
+      </div>
+      <button class="copy-btn" onclick="copyPrompt('prompt-6a')">📋 Copy Prompt</button>
+      <pre class="prompt-block" id="prompt-6a">Style: 8K IMAX Documentary. Photorealistic — no 3D render, no game engine.
+Lighting: Warm golden hour late afternoon light.
+Camera: Large format cinema camera on a slow rising jib / drone movement.
+Composition: Wide landscape composition.
+
+Scene:
+A beautiful, expansive aerial perspective of a community primary school in rural Zambia (@school_courtyard).
+
+CUT 1 — High-angle cinematic crane shot, 24mm wide lens:
+The camera gently rises above the brick school buildings and red-earth playfields as students gather happily in the golden sunlight.
+
+CUT 2 — Smooth forward dolly over classrooms:
+Students in blue uniforms look up with bright smiles and wave toward the camera, full of energy and hope.
+
+CUT 3 — Landscape hold with subtle horizon depth:
+The vast, beautiful Zambian landscape stretches to the horizon under a warm amber sky, capturing resilience, scale, and dignity.</pre>
+    </div>
+  </div>
+
+  <!-- SCENE 7 -->
+  <div class="scene" id="scene-7">
+    <div class="scene-header">
+      <div class="scene-left">
+        <input type="checkbox" id="check-7" onchange="toggleScene(7)">
+        <div>
+          <div class="scene-num">Scene 7: The Closing Vision & Title Card</div>
+          <p class="scene-desc">Children engaged in learning inside a bright classroom, resolving into the official project title card.</p>
+        </div>
+      </div>
+      <span class="scene-type-tag tag-ai">Higgsfield AI + Title (15s)</span>
+    </div>
+    <div class="prompt-container">
+      <div class="prompt-label">
+        <span>Prompt 7a · Seedance 2.0 Format</span>
+        <span class="prompt-time">1:45 – 2:00 (15 seconds)</span>
+      </div>
+      <button class="copy-btn" onclick="copyPrompt('prompt-7a')">📋 Copy Prompt</button>
+      <pre class="prompt-block" id="prompt-7a">Style: 8K IMAX Documentary. Photorealistic — no 3D render, no game engine.
+Lighting: Bright natural daylight streaming through open classroom windows.
+Color: 60:30:10 — warm ochre earth / slate charcoal / subtle orange accent.
+Camera: 35mm cinema prime, eye-level.
+
+Scene:
+Inside a lively, engaged African classroom in Zambia.
+
+CUT 1 — Medium tracking shot across classroom desks, 35mm:
+A dozen focused Zambian students sit at wooden desks, notebooks open, pencils writing eagerly.
+
+CUT 2 — Close-up on multiple children raising hands:
+Several smiling learners raise their hands high with enthusiasm to participate in the lesson. Catchlights sparkle in their eyes.
+
+CUT 3 — Slow fade to clean black card:
+Fade smoothly to clean closing title card:
+"School Foundry"
+An Open-Source Digital Public Good for Last-Mile Education
+github.com/sewardrichard/school-foundry-offline
+Jiggabyte Technology Limited (Zambia)</pre>
+    </div>
+  </div>
+</div>
+
+<script>
+  function copyPrompt(id) {
+    const text = document.getElementById(id).innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = event.target;
+      const originalText = btn.innerText;
+      btn.innerText = '✅ Copied!';
+      setTimeout(() => { btn.innerText = originalText; }, 2000);
+    });
+  }
+
+  function toggleScene(num) {
+    const checkbox = document.getElementById('check-' + num);
+    localStorage.setItem('sf-shotlist-scene-' + num, checkbox.checked);
+  }
+
+  // Load saved checkbox states
+  window.addEventListener('DOMContentLoaded', () => {
+    for (let i = 1; i <= 7; i++) {
+      const saved = localStorage.getItem('sf-shotlist-scene-' + i);
+      const el = document.getElementById('check-' + i);
+      if (el && saved !== null) {
+        el.checked = (saved === 'true');
+      }
+    }
+  });
+</script>
+
+</body>
+</html>
