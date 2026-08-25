@@ -3,28 +3,32 @@
 > **Project:** School Foundry (Offline Desktop DPG Edition)  
 > **Entity:** Jiggabyte Technology Limited (Lusaka, Zambia)  
 > **Target Duration:** Exactly 120 Seconds (2:00) | 265 Spoken Words  
-> **Visual Style:** Minimalist Human-Centric Documentary Realism (Higgsfield AI Context + Real Product Screencasts)  
-> **Target Evaluator Reaction:** *"I understand the human problem, I've seen the real prototype working offline, I understand why it matters for children in Africa, and this 30-school pilot must be funded."*
+> **Visual Style:** Minimalist Human-Centric Documentary Realism (Higgsfield AI Context + Real Prototype Screencasts & Hardware B-roll)  
+> **Target Evaluator Reaction:** *"I understand the human problem, I've seen the real prototype working offline with physical receipt printing, I understand why it matters for children in Africa, and this 30-school pilot must be funded."*
 
 ---
 
 ## 🎯 The Pitch Thesis
 
-- **Emotional Hook:** An ICT teacher in Zambia (the founder's uncle) drowning in physical towers of paper receipt books, losing hours of teaching time while students miss class and exams because paper receipts cannot be found in the pile.
+- **Emotional Hook:** An ICT teacher in Zambia (the founder's aunt) drowning in physical towers of paper receipt books, losing hours of teaching time while students miss class and exams because paper receipts cannot be found in the pile.
 - **Intellectual Hook:** Cloud SaaS fails where power grids black out and internet costs soar. True digital inclusion requires **local-first, zero-cloud data sovereignty**.
-- **Product Hook:** A high-integrity desktop application powered by SQLite with integer-cent math, cryptographic audit logs, and instant offline receipting.
+- **Product Hook:** A high-integrity desktop application powered by SQLite with integer-cent math, cryptographic audit logs, and instant offline thermal/PDF receipting.
+- **Hardware Integration:** Pairs with plug-and-play USB thermal printers to issue tamper-proof receipts on-premise without toner or internet.
 - **Evidence Hook:** Real-world testing and direct co-design with Zambian educators who validated the workflow and guided feature additions.
 - **Open Source Hook:** Fully open-source under the MIT License as an official Digital Public Good (DPG).
 - **The Ask ($100k):** Deploying, validating, and measuring educational continuity and administrative time saved across a structured **30-School Field Pilot in Zambia**.
 
 ---
 
-## 🎨 Visual Direction & Character Consistency
+## 🎨 Locked Asset References
 
-- **Cinematic Language:** Warm natural daylight, shallow depth of field, documentary texture (1080p, 24fps), tactile macro close-ups (hands, paper texture, keyboard keys, focused eyes).
-- **Primary Character (The Educator):** Mr. Banda — a dedicated Zambian ICT teacher in his late 30s, wearing a smart collared shirt, thoughtful and dignified.
-- **Secondary Characters (The Learners):** Focused Zambian primary/secondary students in neat school uniforms (deep blue & white).
-- **Color Palette:** Warm ochre/amber (`#F97316`), slate grey (`#1E293B`), clean white, natural sunlit tones.
+- 👩‍🏫 **`@aunt_teacher`**: 38yo Zambian Female ICT Teacher in Emerald/Teal Blouse (`docs/assets/characters/aunt_teacher/locked_aunt_teacher.png`)
+- 👧 **`@student_chanda`**: 12yo Zambian Junior Secondary Student in Forest-Green Sweater (`docs/assets/characters/student_chanda/locked_student_chanda.png`)
+- 🏢 **`@school_office`**: Crisp 4K Balanced Oak Desk & Admin Office with Sunlight (`docs/assets/locations/school_office/locked_school_office.png`)
+- 🌳 **`@school_courtyard`**: Rural Campus Overview with Pitch Roofs & Red Earth Grounds (`docs/assets/locations/school_courtyard/locked_school_courtyard.png`)
+- 📚 **`@receipt_books`**: Worn, Traditional Handwritten Receipt Books with Stamps (`docs/assets/props/receipt_books/locked_receipt_books.png`)
+- 💻 **`@laptop_offline`**: Offline Business Laptop on Clean Studio Backdrop (`docs/assets/props/laptop_offline/locked_laptop_offline.png`)
+- 🖨️ **`@thermal_printer`**: Compact USB Thermal Receipt Printer & Paper Rolls (`docs/assets/props/printer_and_hardware/thermal-printer-stock.png`)
 
 ---
 
@@ -35,12 +39,12 @@
 │ Shot │ Timecode    │ Duration │ Footage Type         │ Scene Focus                                            │
 ├──────┼─────────────┼──────────┼──────────────────────┼────────────────────────────────────────────────────────┤
 │ 01   │ 0:00–0:10   │ 10s      │ Higgsfield AI        │ Macro close-up: Fraying paper receipt books & hands    │
-│ 02   │ 0:10–0:22   │ 12s      │ Higgsfield AI        │ ICT Teacher at desk; student waiting outside classroom│
+│ 02   │ 0:10–0:22   │ 12s      │ Higgsfield AI        │ Aunt Teacher at desk; student waiting outside doorway  │
 │ 03   │ 0:22–0:32   │ 10s      │ Higgsfield AI / Real │ The Insight: Power blackouts & the offline imperative  │
 │ 04   │ 0:32–0:42   │ 10s      │ Real Screencast      │ Product Reveal: Instant offline launch & Student Search│
-│ 05   │ 0:42–0:56   │ 14s      │ Real Screencast      │ Payment Wizard: 30-second payment & instant PDF receipt│
+│ 05   │ 0:42–0:56   │ 14s      │ Screencast + Hardware│ 30s Payment Flow -> Thermal POS printer spits receipt  │
 │ 06   │ 0:56–1:10   │ 14s      │ Real Screencast      │ Local Audit Trail & Child Subsidy (OVC) Protection     │
-│ 07   │ 1:10–1:22   │ 12s      │ Higgsfield AI        │ Testing with Zambian educators & genuine relief        │
+│ 07   │ 1:10–1:22   │ 12s      │ Higgsfield AI        │ Teacher handing physical receipt to smiling student    │
 │ 08   │ 1:22–1:35   │ 13s      │ Real Screencast/Web  │ Open Source DPG Repository & DPGA Standard Badges      │
 │ 09   │ 1:35–1:48   │ 13s      │ Higgsfield AI + Map  │ The Funding Milestone: 30-School Field Pilot in Zambia │
 │ 10   │ 1:48–2:00   │ 12s      │ Higgsfield + Title   │ Call to Action: Safeguarding education for every child │
@@ -52,41 +56,29 @@
 ## 📝 Detailed Shot Specifications & Voiceover
 
 ### [SHOT 01] The Weight of Paper
-- **Timecode:** 0:00 – 0:10 (10s) | **Footage:** Higgsfield AI Video
-- **Visual:** Extreme macro shot. A teacher’s weather-worn hands flipping through a thick, crumbling stack of handwritten paper receipt books on a wooden desk. Sunbeams illuminate dust motes.
+- **Timecode:** 0:00 – 0:10 (10s) | **Footage:** Higgsfield AI Video (`Prompt 1a`)
+- **Visual:** Extreme macro shot. A teacher’s hands flipping through a thick, crumbling stack of handwritten paper receipt books (`@receipt_books`) on a wooden school desk (`@school_office`). Sunbeams illuminate dust motes.
 - **Audio/SFX:** Soft paper rustling, distant schoolyard ambient chatter. Warm, understated piano intro begins.
 - **Voiceover:**
   > *"Across Sub-Saharan Africa, school administration is buried under towers of physical receipt books and paper ledgers."*
-- **Higgsfield Prompt:**
-  ```text
-  Cinematic documentary macro close-up of an African teacher's hands flipping through worn, handwritten paper receipt books on a wooden school desk, warm natural sunlight, dust motes in sunbeams, shallow depth of field, 35mm film aesthetic, photorealistic, 4k resolution, quiet dignified atmosphere.
-  ```
 
 ---
 
 ### [SHOT 02] The Human Cost on Children
-- **Timecode:** 0:10 – 0:22 (12s) | **Footage:** Higgsfield AI Video
-- **Visual:** Cut to an ICT teacher looking stressed, searching through a tall stack of files. Cut to a close-up of a young Zambian student standing in the hallway looking toward the classroom doorway, waiting for payment clearance.
+- **Timecode:** 0:10 – 0:22 (12s) | **Footage:** Higgsfield AI Video (`Prompt 2a`)
+- **Visual:** Cut to Aunt Teacher (`@aunt_teacher`) looking stressed, searching through a tall stack of paper files. Cut to a close-up of young student Chanda (`@student_chanda`) standing in the hallway looking toward the classroom doorway, waiting for payment clearance.
 - **Audio/SFX:** Ticking clock, subtle ambient tension.
 - **Voiceover:**
-  > *"When my uncle, an ICT teacher in Zambia, showed me the chaos of fee collection, I saw the real cost: students missing class time and locked out of exams simply because a paper receipt couldn't be found in the pile."*
-- **Higgsfield Prompt:**
-  ```text
-  Documentary cinematic shot, a dedicated African male ICT teacher in a smart shirt at a modest desk with stacks of files, looking focused and concerned. Subtle camera pan to a young Zambian schoolgirl in a neat blue and white uniform standing quietly by the classroom door, natural daylight, photorealistic, authentic emotion.
-  ```
+  > *"When my aunt, an ICT teacher in Zambia, showed me the chaos of fee collection, I saw the real cost: students missing class time and locked out of exams simply because a paper receipt couldn't be found in the pile."*
 
 ---
 
 ### [SHOT 03] The Offline Reality
 - **Timecode:** 0:22 – 0:32 (10s) | **Footage:** Higgsfield AI Video + Graphic
-- **Visual:** Quick cut: A power switch clicks off during a blackout, a laptop battery light blinks, and an on-screen caption appears: *Over 65% of primary schools in Sub-Saharan Africa lack electricity (UNESCO UIS).*
+- **Visual:** A power switch clicks off during a blackout, a laptop battery light blinks, and an on-screen caption appears: *Over 65% of primary schools in Sub-Saharan Africa lack electricity (UNESCO UIS).*
 - **Audio/SFX:** Subtle power-down hum, music shifts to a purposeful, rhythmic pulse.
 - **Voiceover:**
   > *"Cloud software fails where power cuts and data costs are daily realities. We realized schools don't need another cloud portal—they need local-first data sovereignty."*
-- **Higgsfield Prompt:**
-  ```text
-  Cinematic close-up of a desk in a classroom during an electrical load-shedding blackout, warm ambient window light, an open laptop running on battery power, minimalist composition, quiet resilience, documentary film grade.
-  ```
 
 ---
 
@@ -99,12 +91,14 @@
 
 ---
 
-### [SHOT 05] The 30-Second Payment Flow & Instant Receipt
-- **Timecode:** 0:42 – 0:56 (14s) | **Footage:** REAL SCREEN RECORDING (School Foundry)
-- **Visual:** Cursor searches for a learner (`"Chanda Mulenga"`), enters payment amount in integer cents, clicks **"Process Payment"** $\rightarrow$ Instant professional PDF/thermal receipt is rendered with a cryptographic verification hash.
-- **Audio/SFX:** Rapid subtle keystrokes, receipt print audio cue.
+### [SHOT 05] 30-Second Payment Flow & Instant Thermal Receipt
+- **Timecode:** 0:42 – 0:56 (14s) | **Footage:** Screencast + Real Hardware B-Roll (`@thermal_printer`)
+- **Visual:**
+  1. *On Screen:* Cursor searches for student (`"Chanda Mulenga"`), enters payment of 500 Kwacha, clicks **"Process Payment"**.
+  2. *Cut to Desk B-Roll:* Macro close-up of the compact USB thermal receipt printer (`@thermal_printer`) instantly spitting out a crisp receipt with cryptographic verification code and remaining balance.
+- **Audio/SFX:** Rapid keystrokes $\rightarrow$ crisp mechanical receipt feed sound.
 - **Voiceover:**
-  > *"In three clicks, bursars record fees, eliminate double-entry errors with integer-cent math, and issue instant, cryptographically verifiable receipts."*
+  > *"In three clicks, bursars record fees, eliminate double-entry errors with integer-cent math, and issue instant, cryptographically verifiable physical receipts."*
 
 ---
 
@@ -117,16 +111,12 @@
 
 ---
 
-### [SHOT 07] Educator Validation & Relief
-- **Timecode:** 1:10 – 1:22 (12s) | **Footage:** Higgsfield AI Video
-- **Visual:** Medium close-up of the Zambian ICT teacher smiling warmly in his office, looking at his clean laptop screen with zero clutter, and handing a verified receipt to a student who smiles and heads into class.
+### [SHOT 07] Educator Relief & Handing Physical Receipt
+- **Timecode:** 1:10 – 1:22 (12s) | **Footage:** Higgsfield AI Video (`Prompt 5a`)
+- **Visual:** Aunt Teacher (`@aunt_teacher`) smiling warmly in her sunlit office (`@school_office`), handing the printed thermal receipt to Student Chanda (`@student_chanda`), who smiles and heads confidently into class.
 - **Audio/SFX:** Warm, uplifting acoustic guitar and strings.
 - **Voiceover:**
   > *"When tested with teachers in Zambia, their feedback was immediate: administrative reconciliation that once took days now takes minutes—giving teachers back their time to teach."*
-- **Higgsfield Prompt:**
-  ```text
-  Cinematic documentary medium shot, an African male teacher smiling warmly in a bright school office, handing a printed receipt to a young Zambian student who happily turns to join her classmates in the sunny courtyard, warm natural morning lighting, shallow depth of field, heartfelt and dignified, 4k.
-  ```
 
 ---
 
@@ -140,15 +130,11 @@
 ---
 
 ### [SHOT 09] The Milestone Ask — 30-School Pilot in Zambia
-- **Timecode:** 1:35 – 1:48 (13s) | **Footage:** Higgsfield AI Video + Stylized Map of Zambia
-- **Visual:** A vibrant shot of a rural Zambian school campus, overlaid with a clean graphic showing a 30-school pilot cluster across Lusaka and Copperbelt provinces.
+- **Timecode:** 1:35 – 1:48 (13s) | **Footage:** Higgsfield AI Video (`@school_courtyard`) + Stylized Map of Zambia
+- **Visual:** High-angle camera moving over the rural Zambian school campus (`@school_courtyard`), overlaid with a clean graphic showing a 30-school pilot cluster across Lusaka and Copperbelt provinces.
 - **Audio/SFX:** Powerful, inspiring musical crescendo.
 - **Voiceover:**
   > *"With support from the UNICEF Venture Fund, we will deploy and validate School Foundry across a structured 30-school pilot in Zambia, directly protecting over 18,000 learners from administrative exclusion."*
-- **Higgsfield Prompt:**
-  ```text
-  Cinematic drone shot slowly flying over a beautiful, vibrant primary school in rural Zambia, red earth courtyard, lush green trees, brick classrooms with corrugated roofs, students walking in groups, golden hour sunset light, cinematic documentary aesthetic.
-  ```
 
 ---
 
@@ -162,25 +148,3 @@
 - **Audio/SFX:** Uplifting final musical resolve, clear ambient student laughter.
 - **Voiceover:**
   > *"Join us in building resilient, open-source technology for every classroom. School Foundry: keeping schools open, and every child learning."*
-- **Higgsfield Prompt:**
-  ```text
-  Cinematic slow-motion shot inside an African classroom, smiling Zambian school children raising their hands with excitement and joy, beautiful natural daylight streaming through open windows, photorealistic, inspiring and full of hope, 35mm film look.
-  ```
-
----
-
-## 🛠️ Screen Recording & Prototype Capture Directives
-
-When recording the actual **School Foundry** prototype (Shots 04, 05, 06):
-1. **Screen Resolution:** Record in 1920x1080 at 60fps with 100% OS scaling.
-2. **Network State:** Turn off WiFi to demonstrate the offline banner/status indicator.
-3. **Data Polish:** Use authentic Zambian sample student names (`Chanda Mulenga`, `Mwape Tembo`, `Kondwani Phiri`) and Kwacha currency (`ZMW`).
-4. **Mouse Movement:** Smooth, linear cursor paths with 0.5-second pauses before clicking.
-
----
-
-## 📚 Empirical Citations & References
-
-1. **UNESCO Institute for Statistics (UIS)**: *Global Education Monitoring (GEM) Infrastructure Dataset* — 65% of primary schools in Sub-Saharan Africa lack electricity.
-2. **UNICEF & ITU Giga Initiative**: *Global School Connectivity Baseline Report* — Over 80% of rural schools in Sub-Saharan Africa lack pedagogical internet.
-3. **ISASA & IDinsight Studies**: Manual paper ledgers contribute to 10%–20% operational revenue leakage and severe administrative friction.
