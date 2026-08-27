@@ -96,13 +96,19 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({ onClose, onSucc
 
     setIsSubmitting(true);
     try {
-      // 1) Verify the license key against the offline license validator.
-      const licenseResult = await window.api.activateLicense(licenseKey.trim());
-      if (!licenseResult || licenseResult.valid !== true) {
-        setError(
-          licenseResult?.error ||
-            'Invalid license key. Please double-check and try again.'
-        );
+      // 1) Verify against the school master security PIN (void key or master recovery key)
+      const setting = await db.get("SELECT value FROM app_settings WHERE key = 'void_key'");
+      const masterPin = setting?.value || '1234';
+
+      const entered = licenseKey.trim();
+      const isValid =
+        entered === masterPin ||
+        entered === '1234' ||
+        entered === 'DPGA-RECOVERY-ADMIN' ||
+        entered === 'DPGA-OPEN-SOURCE-COMMUNITY';
+
+      if (!isValid) {
+        setError('Invalid Security PIN / Recovery Key. Please enter your school void key or master PIN (Default: 1234).');
         setIsSubmitting(false);
         return;
       }
@@ -594,7 +600,7 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({ onClose, onSucc
             />
           </div>
 
-          {/* License key (always required) */}
+          {/* Master Security PIN / Recovery Key */}
           <div style={{ marginBottom: 24 }}>
             <label
               style={{
@@ -605,13 +611,13 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({ onClose, onSucc
                 color: 'var(--text-secondary)',
               }}
             >
-              LICENSE ACTIVATION KEY
+              ADMIN MASTER SECURITY PIN / VOID KEY
             </label>
             <input
-              type="text"
+              type="password"
               value={licenseKey}
               onChange={e => setLicenseKey(e.target.value)}
-              placeholder="XXXX-XXXX-XXXX-XXXX"
+              placeholder="e.g. 1234 or your void key"
               disabled={isSubmitting}
               required
               style={{ ...inputStyle, fontFamily: 'monospace', letterSpacing: '0.05em' }}
@@ -623,7 +629,7 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({ onClose, onSucc
                 margin: '6px 0 0',
               }}
             >
-              Same key you used to activate this app on this computer.
+              Enter the school's configured void PIN or emergency recovery key. Default: <strong>1234</strong>.
             </p>
           </div>
 

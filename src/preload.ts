@@ -78,9 +78,16 @@ contextBridge.exposeInMainWorld('api', {
     sheetName: string;
   }) => ipcRenderer.invoke('save-import-template', options),
 
-  // License APIs
-  getMachineId: () => ipcRenderer.invoke('get-machine-id'),
-  activateLicense: (licenseKey: string) => ipcRenderer.invoke('activate-license', licenseKey),
-  getLicenseStatus: () => ipcRenderer.invoke('get-license-status'),
-  deactivateLicense: () => ipcRenderer.invoke('deactivate-license'),
+  // Sync & Multi-Device Peer APIs
+  syncGetIdentity: () => ipcRenderer.invoke('sync-get-identity'),
+  syncUpdateDeviceName: (name: string) => ipcRenderer.invoke('sync-update-device-name', name),
+  syncGetPeers: () => ipcRenderer.invoke('sync-get-peers'),
+  syncWithPeer: (peerIp: string, peerPort: number) => ipcRenderer.invoke('sync-with-peer', peerIp, peerPort),
+  syncAllPeers: () => ipcRenderer.invoke('sync-all-peers'),
+  onPeersUpdated: (callback: (peers: any[]) => void) => {
+    const handler = (_event: any, peers: any[]) => callback(peers);
+    ipcRenderer.on('sync-peers-updated', handler);
+    return () => ipcRenderer.removeListener('sync-peers-updated', handler);
+  },
 });
+

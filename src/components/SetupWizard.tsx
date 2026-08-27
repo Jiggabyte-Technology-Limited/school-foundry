@@ -2,6 +2,12 @@ import React, { useState } from 'react';
 import bcryptjs from 'bcryptjs';
 import { db } from '../lib/db-client';
 import {
+  getCurrencies,
+  getCurrencySymbol,
+  loadCurrency,
+  setCurrency,
+} from '../lib/currency';
+import {
   SUGGESTED_GRADES,
   toggleGrade as toggleGradePure,
   applyCustomGrade,
@@ -57,6 +63,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
   const [schoolEmail, setSchoolEmail] = useState('');
   const [schoolWebsite, setSchoolWebsite] = useState('');
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
+  const [currencyCode, setCurrencyCode] = useState('USD');
   const [adminFullName, setAdminFullName] = useState('');
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
@@ -69,9 +76,14 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
   const [customGradeInput, setCustomGradeInput] = useState('');
   const [gradeFees, setGradeFees] = useState<GradeFee[]>([]);
 
-  // Initialize periods on mount
+  // Initialize periods and currency on mount
   React.useEffect(() => {
     setPeriods(generatePeriods('terms'));
+    loadCurrency()
+      .then(curr => {
+        if (curr) setCurrencyCode(curr);
+      })
+      .catch(console.error);
   }, []);
 
   const currentStepIndex = STEPS.findIndex(s => s.id === currentStep);
@@ -258,7 +270,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
     setError('');
 
     try {
-      // 1. Save school info
+      // 1. Save school info and currency
       await db.run('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', [
         'school_name',
         schoolName,
@@ -289,6 +301,10 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
           schoolLogo,
         ]);
 
+      if (currencyCode) {
+        await setCurrency(currencyCode);
+      }
+
       // 2. Create admin user
       const passwordHash = await bcryptjs.hash(adminPassword, 10);
       await db.run(
@@ -296,22 +312,23 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
         [adminFullName, adminUsername, passwordHash, 'admin']
       );
 
-      // 3. Create academic year
-      const yearResult = await db.run('INSERT OR IGNORE INTO academic_years (label) VALUES (?)', [
+      // 3. Create academic year and mark current
+      await db.run('INSERT OR IGNORE INTO academic_years (label, is_current) VALUES (?, 1)', [
         academicYear,
       ]);
-      // If year already exists (IGNORE), we would need to query it. But setup runs on fresh DB. 
-      // If it fails, we fall back. Let's just keep INSERT for the rest, except maybe users:
-      
-      // Wait, just the app_settings are usually populated or causing uniqueness conflicts if a user hit 'Complete Setup' and it failed midway (e.g. at user creation).
-      // Let's also use INSERT OR IGNORE for the initial user.
-      const yearId = yearResult.lastInsertRowid || (await db.get('SELECT id FROM academic_years WHERE label = ?', [academicYear])).id;
+      const yearRow = await db.get('SELECT id FROM academic_years WHERE label = ?', [academicYear]);
+      const yearId = yearRow?.id;
+      if (!yearId) {
+        throw new Error('Failed to create academic year.');
+      }
+      await db.run('UPDATE academic_years SET is_current = 1 WHERE id = ?', [yearId]);
 
-      // 4. Create terms with dates and period type
+      // 4. Create terms with dates and period type (normalize 'terms' to 'term' for DB CHECK constraint)
+      const normalizedPeriodType = periodType === 'terms' ? 'term' : periodType;
       for (const p of periods) {
         await db.run(
-          'INSERT OR IGNORE INTO terms (year_id, label, term_number, period_type, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)',
-          [yearId, p.label, p.term_number, periodType, p.start_date || null, p.end_date || null]
+          'INSERT OR REPLACE INTO terms (year_id, label, term_number, period_type, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)',
+          [yearId, p.label, p.term_number, normalizedPeriodType, p.start_date || null, p.end_date || null]
         );
       }
 
@@ -320,11 +337,22 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
         yearId,
       ]);
 
-      // 6. Create grades and fee structure
+      // 6. Create grades and track IDs reliably
       const gradeIds: Record<string, number> = {};
       for (let i = 0; i < selectedGrades.length; i++) {
-        const gradeResult = await db.run('INSERT OR IGNORE INTO grades (label) VALUES (?)', [selectedGrades[i]]);
-        gradeIds[selectedGrades[i]] = gradeResult.lastInsertRowid || (await db.get('SELECT id FROM grades WHERE label = ?', [selectedGrades[i]])).id;
+        const gradeLabel = selectedGrades[i];
+        await db.run('INSERT OR IGNORE INTO grades (label, sort_order, is_active) VALUES (?, ?, 1)', [
+          gradeLabel,
+          (i + 1) * 10,
+        ]);
+        const gradeRow = await db.get('SELECT id FROM grades WHERE label = ?', [gradeLabel]);
+        if (gradeRow) {
+          gradeIds[gradeLabel] = gradeRow.id;
+          await db.run('UPDATE grades SET sort_order = ?, is_active = 1 WHERE id = ?', [
+            (i + 1) * 10,
+            gradeRow.id,
+          ]);
+        }
       }
 
       // Audit-log: who picked which grades during setup.
@@ -340,15 +368,17 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
       // 7. Create fee structure
       for (const grade of selectedGrades) {
         const gradeId = gradeIds[grade];
+        if (!gradeId) continue;
         const gradeFee = gradeFees.find(f => f.grade === grade);
 
         for (const term of termList) {
           const feeAmount = Math.round(
             parseFloat(gradeFee?.amounts?.[term.term_number] || '0') * 100
           );
+          const sameAmount = gradeFee?.copyToAll ? 1 : 0;
           await db.run(
-            'INSERT INTO fee_structure (year_id, term_id, grade_id, fee_type, amount_cents, same_amount_all_periods) VALUES (?, ?, ?, ?, ?, ?)',
-            [yearId, term.id, gradeId, 'tuition', feeAmount, 0]
+            'INSERT OR REPLACE INTO fee_structure (year_id, term_id, grade_id, fee_type, amount_cents, same_amount_all_periods) VALUES (?, ?, ?, ?, ?, ?)',
+            [yearId, term.id, gradeId, 'tuition', feeAmount, sameAmount]
           );
         }
       }
@@ -739,6 +769,30 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                   onChange={e => setSchoolWebsite(e.target.value)}
                   placeholder="e.g., https://www.school.edu (optional)"
                 />
+              </div>
+              <div className="wizard-field">
+                <label className="text-display">Operating Currency</label>
+                <select
+                  className="text-display"
+                  value={currencyCode}
+                  onChange={e => setCurrencyCode(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    backgroundColor: 'var(--surface)',
+                    color: 'var(--text-primary)',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {getCurrencies().map(c => (
+                    <option key={c.code} value={c.code}>
+                      {c.name} ({c.symbol} - {c.code})
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
@@ -1331,7 +1385,7 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                                   <span
                                     style={{ fontSize: '10px', color: 'var(--text-secondary)' }}
                                   >
-                                    $
+                                    {getCurrencies().find(c => c.code === currencyCode)?.symbol || '$'}
                                   </span>
                                   <input
                                     className="text-display"
@@ -1385,7 +1439,8 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                                 color: 'var(--primary)',
                               }}
                             >
-                              ${total.toFixed(2)}
+                              {getCurrencies().find(c => c.code === currencyCode)?.symbol || '$'}
+                              {total.toFixed(2)}
                             </td>
                           </tr>
                         );

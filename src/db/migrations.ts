@@ -791,6 +791,124 @@ const migrations: MigrationStep[] = [
       );
     },
   },
+  {
+    version: '2.4',
+    description: 'Ensure terms period_type consistency, active academic year current flag, and fee structure integrity',
+    run: async db => {
+      // 1. Update any 'terms' or null to 'term' in terms table
+      try {
+        await runSql(db, `UPDATE terms SET period_type = 'term' WHERE period_type = 'terms' OR period_type IS NULL;`);
+      } catch (e) { /* ignore */ }
+
+      // 2. Ensure at least one academic year has is_current = 1 if academic years exist
+      try {
+        const currentYear = await getScalar(db, `SELECT id FROM academic_years WHERE is_current = 1 LIMIT 1`);
+        if (!currentYear) {
+          await runSql(db, `UPDATE academic_years SET is_current = 1 WHERE id = (SELECT id FROM academic_years ORDER BY label DESC LIMIT 1);`);
+        }
+      } catch (e) { /* ignore */ }
+
+      // 3. Ensure fee_structure has sane default for same_amount_all_periods
+      try {
+        await runSql(db, `UPDATE fee_structure SET same_amount_all_periods = 1 WHERE same_amount_all_periods IS NULL;`);
+      } catch (e) { /* ignore */ }
+
+      await runSql(
+        db,
+        `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '2.4', datetime('now'));`
+      );
+    },
+  },
+  {
+    version: '3.0',
+    description: 'Add sync UUID columns, indexes, and sync_deltas log for multi-device local network concurrency',
+    run: async db => {
+      const syncTables = [
+        'students',
+        'payments',
+        'fee_structure',
+        'academic_years',
+        'terms',
+        'grades',
+        'class_sections',
+        'student_year_enrollment',
+        'student_subsidies',
+        'activity_log',
+      ];
+
+      // 1. Add sync_uuid column to all entity tables
+      for (const table of syncTables) {
+        try {
+          await runSql(db, `ALTER TABLE ${table} ADD COLUMN sync_uuid TEXT;`);
+        } catch (e) {
+          /* Column already exists */
+        }
+        // Backfill existing rows with generated random hex UUIDs
+        try {
+          await runSql(db, `UPDATE ${table} SET sync_uuid = lower(hex(randomblob(16))) WHERE sync_uuid IS NULL;`);
+        } catch (e) {
+          /* ignore */
+        }
+      }
+
+      // 2. Add unique indexes on sync_uuid
+      const indexTables = [
+        'students',
+        'payments',
+        'fee_structure',
+        'academic_years',
+        'terms',
+        'grades',
+        'class_sections',
+        'student_year_enrollment',
+        'student_subsidies',
+      ];
+      for (const table of indexTables) {
+        try {
+          await runSql(db, `CREATE UNIQUE INDEX IF NOT EXISTS idx_${table}_sync_uuid ON ${table}(sync_uuid);`);
+        } catch (e) {
+          /* ignore */
+        }
+      }
+
+      // 3. Create sync_deltas table for offline change-data-capture
+      await runSql(
+        db,
+        `CREATE TABLE IF NOT EXISTS sync_deltas (
+          id             INTEGER PRIMARY KEY AUTOINCREMENT,
+          sync_uuid      TEXT    NOT NULL UNIQUE,
+          entity_type    TEXT    NOT NULL,
+          entity_uuid    TEXT    NOT NULL,
+          operation      TEXT    NOT NULL CHECK(operation IN ('INSERT', 'UPDATE', 'DELETE', 'VOID')),
+          payload_json   TEXT    NOT NULL,
+          origin_node_id TEXT    NOT NULL,
+          created_at     TEXT    NOT NULL DEFAULT (datetime('now', 'utc'))
+        );`
+      );
+
+      await runSql(db, `CREATE INDEX IF NOT EXISTS idx_sync_deltas_created_at ON sync_deltas(created_at);`);
+      await runSql(db, `CREATE INDEX IF NOT EXISTS idx_sync_deltas_entity ON sync_deltas(entity_type, entity_uuid);`);
+
+      // 4. Create sync_nodes table
+      await runSql(
+        db,
+        `CREATE TABLE IF NOT EXISTS sync_nodes (
+          node_id        TEXT PRIMARY KEY,
+          device_name    TEXT,
+          school_name    TEXT,
+          ip_address     TEXT,
+          port           INTEGER,
+          last_seen_at   TEXT,
+          last_synced_at TEXT
+        );`
+      );
+
+      await runSql(
+        db,
+        `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '3.0', datetime('now'));`
+      );
+    },
+  },
 ];
 
 export async function runMigrations(db: sqlite3.Database): Promise<void> {

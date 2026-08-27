@@ -82,7 +82,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ isSetup = true }) => {
                 borderRadius: '9999px',
                 backgroundColor: 'var(--surface)',
                 border: '1px solid var(--border)',
-                color: 'var(--primary)',
+                color: '#059669',
                 marginBottom: '24px',
                 fontSize: '13px',
                 fontFamily: 'monospace',
@@ -94,11 +94,11 @@ export const Welcome: React.FC<WelcomeProps> = ({ isSetup = true }) => {
                   width: '8px',
                   height: '8px',
                   borderRadius: '50%',
-                  backgroundColor: 'var(--primary)',
+                  backgroundColor: '#10b981',
                   animation: 'pulse 2s infinite',
                 }}
               ></span>
-              Built for African Schools
+              Digital Public Good • MIT Open Source
             </div>
 
             <h2
@@ -149,8 +149,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ isSetup = true }) => {
                 lineHeight: 1.6,
               }}
             >
-              Replace your receipt books and filing cabinets with a simple desktop system. Pull up
-              any learner's full school fees history in seconds and record a payment.
+              An open-source, offline-first school management ecosystem. Record fees, print verified receipts, and synchronize across hotspot laptops without internet.
             </p>
 
             <div style={{ display: 'flex', gap: '16px' }}>
@@ -220,11 +219,9 @@ export const Welcome: React.FC<WelcomeProps> = ({ isSetup = true }) => {
           }}
         >
           <span style={{ fontWeight: 700 }}>School</span>
-          <span style={{ fontWeight: 400 }}>Foundry</span> | v1.2.0 | Build 2026 | &copy; Jiggabyte Technology Limited
+          <span style={{ fontWeight: 400 }}>Foundry</span> | Digital Public Good Edition | MIT Open Source
         </span>
       </div>
     </div>
   );
 };
-
-

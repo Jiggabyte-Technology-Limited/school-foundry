@@ -1,10 +1,10 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { initializeDatabase } from './db/init';
 import { setupIpcHandlers } from './db/ipc';
 import { checkAndDebitFees } from './lib/auto-debit';
-import { setupLicenseIpcHandlers } from './license/ipc';
+import { setupSyncIpcHandlers } from './sync/sync-ipc';
 
 const GUIDE_SECTION_IDS = [
   'app-tour',
@@ -39,6 +39,8 @@ function getAppIconPath() {
   return path.join(process.cwd(), 'public', 'img', 'schoolfoundry-icon.ico');
 }
 
+let isQuitting = false;
+
 function createWindow() {
   const isDev = !app.isPackaged;
   const preloadPath = path.join(__dirname, 'preload.js');
@@ -60,6 +62,64 @@ function createWindow() {
 
   win.maximize();
 
+  win.on('close', async e => {
+    if (isQuitting) return;
+
+    e.preventDefault();
+
+    const choice = dialog.showMessageBoxSync(win, {
+      type: 'question',
+      buttons: ['💾 Save USB Backup & Exit', 'Exit Without Backup', 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      title: 'School Foundry — Data Protection Backup',
+      message: 'Protect Your School Database Before Exiting',
+      detail:
+        'Keeping regular offline backups on a USB flash drive ensures your school records are safe against hardware theft or drive failure.\n\nWould you like to save a backup to a USB drive now?',
+    });
+
+    if (choice === 2) {
+      // User cancelled exit
+      return;
+    }
+
+    if (choice === 0) {
+      // Save USB backup
+      const now = new Date();
+      const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+      const defaultFilename = `SchoolFoundry_USB_Backup_${timestamp}.db`;
+      const saveResult = await dialog.showSaveDialog(win, {
+        title: 'Save School Foundry Backup to USB / External Storage',
+        defaultPath: defaultFilename,
+        filters: [{ name: 'SQLite Database', extensions: ['db'] }],
+      });
+
+      if (!saveResult.canceled && saveResult.filePath) {
+        try {
+          const dbPath = path.join(app.getPath('userData'), 'feesfoundry.db');
+          if (fs.existsSync(dbPath)) {
+            fs.copyFileSync(dbPath, saveResult.filePath);
+            dialog.showMessageBoxSync(win, {
+              type: 'info',
+              buttons: ['OK'],
+              title: 'Backup Successful',
+              message: 'Backup Saved Successfully!',
+              detail: `Your database has been safely saved to:\n${saveResult.filePath}`,
+            });
+          }
+        } catch (err) {
+          console.error('[Main] USB Backup error on exit:', err);
+        }
+      }
+    }
+
+    isQuitting = true;
+    win.destroy();
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+
   if (isDev) {
     win.loadURL('http://localhost:5173');
   } else {
@@ -74,7 +134,7 @@ async function startApp() {
   await initializeDatabase();
   ensureGuideMediaFolders();
   setupIpcHandlers();
-  setupLicenseIpcHandlers();
+  setupSyncIpcHandlers();
   createWindow();
 
   // Check for and apply fees for periods that have started (run on startup)
@@ -89,3 +149,4 @@ app.whenReady().then(startApp);
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+

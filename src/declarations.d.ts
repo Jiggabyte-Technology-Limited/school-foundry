@@ -74,13 +74,28 @@ export interface OpenFileResult {
   error?: string;
 }
 
-export interface LicenseStatusResult {
-  valid: boolean;
-  status: string;
+export interface DiscoveredPeer {
+  nodeId: string;
+  deviceName: string;
+  schoolName: string;
+  ipAddress: string;
+  syncPort: number;
+  lastSeen: number;
+  status: 'online' | 'stale';
+}
+
+export interface NodeIdentityInfo {
+  nodeId: string;
+  deviceName: string;
+  receiptPrefix: string;
+  schoolName: string;
+}
+
+export interface SyncOperationResult {
+  success: boolean;
+  localApplied: number;
+  remoteApplied: number;
   error?: string;
-  expiresAt?: string;
-  daysRemaining?: number;
-  activationKey?: string;
 }
 
 export interface XlsxWorkbookData {
@@ -148,11 +163,13 @@ export interface WindowApi {
     sheetName: string;
   }) => Promise<any>;
 
-  // License APIs
-  getMachineId: () => Promise<string | null>;
-  activateLicense: (licenseKey: string) => Promise<LicenseStatusResult>;
-  getLicenseStatus: () => Promise<LicenseStatusResult>;
-  deactivateLicense: () => Promise<boolean>;
+  // Sync & Multi-Device Peer APIs
+  syncGetIdentity: () => Promise<{ success: boolean; identity?: NodeIdentityInfo; syncPort?: number; error?: string }>;
+  syncUpdateDeviceName: (name: string) => Promise<{ success: boolean; error?: string }>;
+  syncGetPeers: () => Promise<{ success: boolean; peers: DiscoveredPeer[]; error?: string }>;
+  syncWithPeer: (peerIp: string, peerPort: number) => Promise<SyncOperationResult>;
+  syncAllPeers: () => Promise<{ success: boolean; results: Array<{ peer: DiscoveredPeer; result: SyncOperationResult }> }>;
+  onPeersUpdated: (callback: (peers: DiscoveredPeer[]) => void) => () => void;
 }
 
 declare global {

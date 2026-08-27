@@ -108,7 +108,7 @@ const FeeStructureManager: React.FC = () => {
       emailSetting,
       feesTermsSetting,
     ] = await Promise.all([
-      db.all('SELECT * FROM academic_years ORDER BY label DESC'),
+      db.all('SELECT * FROM academic_years ORDER BY is_current DESC, label DESC'),
       db.all('SELECT * FROM grades ORDER BY sort_order, label'),
       db.get("SELECT value FROM app_settings WHERE key = 'school_name'"),
       db.get("SELECT value FROM app_settings WHERE key = 'school_logo'"),
@@ -118,7 +118,14 @@ const FeeStructureManager: React.FC = () => {
     ]);
     setYears(yearList);
     setGrades(gradeList);
-    if (yearList.length > 0 && !selectedYear) setSelectedYear(yearList[0].id);
+
+    const activeYearId = selectedYear || (yearList.length > 0 ? yearList[0].id : null);
+    if (activeYearId && !selectedYear) {
+      setSelectedYear(activeYearId);
+    }
+    if (activeYearId) {
+      await loadYearData(activeYearId, gradeList);
+    }
 
     // Set school settings
     setSchoolName(nameSetting?.value || 'School Management');
@@ -134,7 +141,8 @@ const FeeStructureManager: React.FC = () => {
     setLoading(false);
   };
 
-  const loadYearData = async (yearId: number) => {
+  const loadYearData = async (yearId: number, gradeList?: Grade[]) => {
+    const activeGrades = gradeList || grades;
     const [termList, feeList] = await Promise.all([
       db.all('SELECT * FROM terms WHERE year_id = ? ORDER BY term_number', [yearId]),
       db.all('SELECT * FROM fee_structure WHERE year_id = ?', [yearId]),
@@ -144,11 +152,12 @@ const FeeStructureManager: React.FC = () => {
     // Build Matrix
     const newMatrix: Record<number, Record<number, MatrixCell>> = {};
     const newSameAmount: Record<number, boolean> = {};
-    grades.forEach(g => {
+    activeGrades.forEach(g => {
       newMatrix[g.id] = {};
       const gradeFees = feeList.filter(f => f.grade_id === g.id);
-      // Default to true (Copy to All checked by default)
-      const sameAmount = true;
+      // Default to true (Copy to All checked by default) unless specified
+      const hasSpecificSameAmount = gradeFees.some(f => (f as any).same_amount_all_periods === 0);
+      const sameAmount = !hasSpecificSameAmount;
       newSameAmount[g.id] = sameAmount;
       termList.forEach(t => {
         const existingFee = feeList.find(f => f.grade_id === g.id && f.term_id === t.id);

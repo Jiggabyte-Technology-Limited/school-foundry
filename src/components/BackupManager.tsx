@@ -2,10 +2,13 @@ import React, { useState } from 'react';
 import { db } from '../lib/db-client';
 import { useAuth } from '../lib/auth-context';
 
+import { MonthlyReconciliationLedger } from './MonthlyReconciliationLedger';
+
 const BackupManager: React.FC = () => {
   const { user, canBackup } = useAuth();
-  const [loading, setLoading] = useState<'backup' | 'restore' | null>(null);
+  const [loading, setLoading] = useState<'backup' | 'restore' | 'usb' | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [activeView, setActiveView] = useState<'backups' | 'monthly_ledger'>('backups');
 
   const handleBackup = async () => {
     setLoading('backup');
@@ -15,7 +18,7 @@ const BackupManager: React.FC = () => {
       if (success) {
         setMessage({
           type: 'success',
-          text: 'Backup created successfully! The file has been saved to your documents folder.',
+          text: 'Backup created successfully! The file has been saved to your selected folder.',
         });
         await db.run(
           'INSERT INTO activity_log (user_id, username, action, entity, details) VALUES (?, ?, ?, ?, ?)',
@@ -74,9 +77,36 @@ const BackupManager: React.FC = () => {
     );
   }
 
+  if (activeView === 'monthly_ledger') {
+    return <MonthlyReconciliationLedger onClose={() => setActiveView('backups')} />;
+  }
+
   return (
     <div>
-      <h2 className="mb-4">Backup & Restore</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Data Protection & Disaster Recovery</h2>
+          <p style={{ margin: '4px 0 0 0', color: 'var(--text-secondary)', fontSize: '14px' }}>
+            Ensure your school records are safeguarded against drive failure, theft, and power loss.
+          </p>
+        </div>
+
+        <button
+          onClick={() => setActiveView('monthly_ledger')}
+          style={{
+            padding: '10px 18px',
+            backgroundColor: '#dc2626',
+            color: 'white',
+            borderRadius: '8px',
+            fontWeight: 700,
+            border: 'none',
+            cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(220, 38, 38, 0.3)',
+          }}
+        >
+          🖨️ View & Print Monthly Paper Ledger
+        </button>
+      </div>
 
       {message && (
         <div
@@ -86,8 +116,34 @@ const BackupManager: React.FC = () => {
         </div>
       )}
 
+      {/* Disaster Recovery Warning Banner */}
+      <div
+        style={{
+          backgroundColor: 'rgba(245, 158, 11, 0.1)',
+          border: '1px solid rgba(245, 158, 11, 0.3)',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          marginBottom: '24px',
+          display: 'flex',
+          gap: '16px',
+          alignItems: 'center',
+        }}
+      >
+        <div style={{ fontSize: '28px' }}>🛡️</div>
+        <div>
+          <div style={{ fontWeight: 800, color: '#d97706', fontSize: '15px' }}>
+            Recommended Offline Disaster Recovery Protocol
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+            1. <strong>Weekly USB Backup:</strong> Save a copy of your database to an external flash drive kept in a safe place.
+            <br />
+            2. <strong>Monthly Hard-Copy Print:</strong> Print the Monthly Disaster Recovery Ledger and store it in your school strongbox.
+          </div>
+        </div>
+      </div>
+
       <div className="backup-grid">
-        {/* Backup Section */}
+        {/* USB / Standard Backup Section */}
         <div className="card">
           <div className="backup-icon">
             <svg
@@ -103,22 +159,55 @@ const BackupManager: React.FC = () => {
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
           </div>
-          <h3>Create Backup</h3>
+          <h3>Create Flash Drive Backup</h3>
           <p className="backup-description">
-            Export your entire database to a secure backup file. This includes all learners,
-            payments, fee structures, and settings.
+            Export your entire database to a USB flash drive or external disk. Contains all students, payments, fee structures, and audit logs.
           </p>
           <ul className="backup-list">
-            <li>Backup file is saved to your documents folder</li>
             <li>File format: SQLite database (.db)</li>
-            <li>Recommended: Create weekly backups</li>
+            <li>Prompts for USB drive location</li>
+            <li>Safe against computer hardware crashes</li>
           </ul>
           <button
             className="btn btn-primary w-full"
             onClick={handleBackup}
             disabled={loading !== null}
           >
-            {loading === 'backup' ? 'Creating Backup...' : 'Create Backup'}
+            {loading === 'backup' ? 'Exporting Backup...' : '💾 Export Backup to USB / Folder'}
+          </button>
+        </div>
+
+        {/* Physical Paper Archive Section */}
+        <div className="card">
+          <div className="backup-icon" style={{ color: '#059669' }}>
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <polyline points="6 9 6 2 18 2 18 9" />
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+              <rect x="6" y="14" width="12" height="8" />
+            </svg>
+          </div>
+          <h3>Physical Paper Ledger</h3>
+          <p className="backup-description">
+            Generate an immutable, cryptographically checksummed monthly paper ledger for physical filing in the school safe.
+          </p>
+          <ul className="backup-list">
+            <li>A4 & thermal printer ready</li>
+            <li>Itemized payments with receipt IDs</li>
+            <li>Bursar & Headteacher sign-off blocks</li>
+          </ul>
+          <button
+            className="btn w-full"
+            style={{ backgroundColor: '#059669', color: 'white' }}
+            onClick={() => setActiveView('monthly_ledger')}
+          >
+            📄 Open Monthly Paper Ledger
           </button>
         </div>
 
@@ -140,12 +229,11 @@ const BackupManager: React.FC = () => {
           </div>
           <h3>Restore from Backup</h3>
           <p className="backup-description">
-            Import a previously created backup file. This will replace all current data with the
-            data from the backup.
+            Import a previously created backup file (.db) to restore all school records.
           </p>
           <ul className="backup-list">
-            <li>Select a .db backup file when prompted</li>
-            <li>All current data will be overwritten</li>
+            <li>Select a .db backup file from USB</li>
+            <li>Replaces existing database on this laptop</li>
             <li>Application restart required after restore</li>
           </ul>
           <button
@@ -153,7 +241,7 @@ const BackupManager: React.FC = () => {
             onClick={handleRestore}
             disabled={loading !== null}
           >
-            {loading === 'restore' ? 'Restoring...' : 'Restore from Backup'}
+            {loading === 'restore' ? 'Restoring...' : 'Restore Database from Backup'}
           </button>
         </div>
       </div>

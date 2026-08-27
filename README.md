@@ -3,7 +3,7 @@
 > **An Open-Source, Offline-First Digital Public Good (DPG) for Last-Mile Educational Continuity & School Administration**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Digital Public Goods Standard](https://img.shields.io/badge/DPGA-Aligned-00a4f1.svg)](docs/DPGA_STANDARD_ALIGNMENT.md)
+[![Digital Public Goods Standard](https://img.shields.io/badge/DPGA-Aligned-00a4f1.svg)](docs/dpg-compliance/DPGA_STANDARD_ALIGNMENT.md)
 [![SDG 4: Quality Education](https://img.shields.io/badge/SDG-4%20Quality%20Education-E5243B.svg)](https://sdgs.un.org/goals/goal4)
 [![SDG 10: Reduced Inequalities](https://img.shields.io/badge/SDG-10%20Reduced%20Inequalities-DD1367.svg)](https://sdgs.un.org/goals/goal10)
 [![Offline First](https://img.shields.io/badge/Architecture-Offline--First%20SQLite-10B981.svg)](#architecture)
@@ -36,10 +36,15 @@ In these off-grid, low-connectivity environments:
 - **Integer-Cent Arithmetic Engine**: All monetary values are calculated and stored in integer cents (e.g., 500.00 ZMW = 50000 cents) to eliminate floating-point rounding errors.
 - **Instant Thermal & PDF Receipting**: Generates professional receipts with cryptographic verification hashes.
 
-### 🛡️ Child Safeguarding & Data Sovereignty
-- **Local-First Storage**: Built in strict compliance with the **Zambian Data Protection Act No. 3 of 2021** and the **UN Convention on the Rights of the Child (General Comment No. 25)**.
-- **Zero Telemetry**: No third-party analytics pixels, no behavioral tracking, and no ad monetization.
-- **Immutable Audit Trail (`activity_log`)**: Automatically logs all administrative actions for transparent institutional governance.
+### 📡 Zero-Internet Multi-Device Hotspot Synchronization
+- **Peer-to-Peer Subnet Discovery**: Runs a local UDP beacon on port `51741` to automatically discover other bursar laptops connected to the same Wi-Fi router or Windows Mobile Hotspot without internet.
+- **Embedded Local HTTP Sync Engine**: Built-in HTTP replication server (port `51740`) synchronizes payments, student records, and fee structures in real-time.
+- **Multi-Terminal Concurrency**: Uses UUID-based entity mapping and node-prefixed receipt numbers (`REC-T1-2026-XXXX`) so multiple bursars can record payments simultaneously offline without data collision.
+
+### 🛡️ Physical & Local Disaster Recovery Layer
+- **Mandatory USB Backup Prompt on Exit**: Automatically prompts the bursar on application close to save a timestamped `.db` backup to an external flash drive.
+- **Monthly Reconciliation Paper Ledger**: Generates an immutable, cryptographically checksummed monthly paper audit ledger with signature blocks for physical filing in the school safe box.
+- **Local-First Data Sovereignty**: Built in strict compliance with the **Zambian Data Protection Act No. 3 of 2021** and the **UN Convention on the Rights of the Child (General Comment No. 25)**.
 
 ---
 
@@ -49,21 +54,8 @@ In these off-grid, low-connectivity environments:
 - **Frontend:** [React](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
 - **Styling:** [Tailwind CSS](https://tailwindcss.com/)
 - **Local Database:** [SQLite3](https://www.sqlite.org/) with atomic transactions and strict foreign key integrity
+- **Local Sync:** Embedded Node HTTP server + UDP beacon broadcast (`dgram`)
 - **Bundler:** [Vite](https://vitejs.dev/)
-
-```text
-src/
-├── main.ts              # Electron Main Process & SQLite Core Lifecycle
-├── renderer.tsx         # React SPA Renderer & Client Router
-├── components/          # Modular UI (Payments, Student Manager, Class Lists, etc.)
-│   ├── auth/            # Authentication & License Gate
-│   ├── payments/        # Payment Wizard & Receipt Generation
-│   └── student-accounts/# Ledger & Financial Overview Panels
-├── db/                  # SQLite Schema, Migrations, and IPC Bridge
-├── license/             # Open Source DPG & Fleet Activation Validator
-├── services/            # Core business logic services
-└── lib/                 # Database client, auth context, machine fingerprinting
-```
 
 ---
 
@@ -86,8 +78,8 @@ npm install
 npm run dev
 ```
 
-### Free Community Edition Activation
-On initial startup, click **"🌐 Unlock Free Community Edition (Digital Public Good)"** or enter `DPGA-OPEN-SOURCE-COMMUNITY` to immediately access all features unrestricted.
+### 100% Free Community DPG Edition
+School Foundry is completely free and open-source under the MIT License. On first launch, the app directly presents the Welcome & Setup Wizard with zero DRM, zero license keys, and zero machine fingerprinting.
 
 ### Building for Production
 ```bash
@@ -98,13 +90,22 @@ The production installer will be output to the `release/` folder.
 
 ---
 
-## 🌐 Digital Public Goods & UNICEF Alignment
+## 📚 Documentation Hub & Architecture
 
-School Foundry is designed and maintained as a **Digital Public Good (DPG)**:
-- **[DPGA Standard Alignment Dossier](docs/DPGA_STANDARD_ALIGNMENT.md)**: 9-indicator self-assessment.
-- **[UNICEF Venture Fund Grant Proposal](docs/UNICEF_VENTURE_FUND_APPLICATION.md)**: \$100k seed funding dossier.
-- **[2-Minute Demo Video Storyboard](docs/APPLICATION_VIDEO_STORYBOARD.md)**: Screencast script and recording checklist.
-- **[Child Safeguarding & Data Privacy Protocol](SECURITY_AND_PRIVACY.md)**: Zambian Data Protection Act compliance.
+Comprehensive technical blueprints, user manuals, and compliance dossiers are available in the **[Documentation Hub](docs/README.md)**:
+
+- **Technical Blueprints:**
+  - **[System Architecture](docs/architecture/ARCHITECTURE.md)** & **[Database Schema](docs/architecture/DATABASE_SCHEMA.md)**
+  - **[Local Hotspot Sync Protocol](docs/architecture/SYNC_ENGINE.md)**
+- **User & Operator Manuals:**
+  - **[Bursar Quick Start Guide](docs/guides/BURSAR_QUICK_START_GUIDE.md)** & **[User Guide](docs/guides/USER_GUIDE.md)**
+  - **[Quick Reference Card](docs/guides/QUICK_REFERENCE.md)**
+- **Digital Public Goods & Privacy:**
+  - **[DPGA Standard Alignment Dossier](docs/dpg-compliance/DPGA_STANDARD_ALIGNMENT.md)**
+  - **[Data Protection & Privacy Policy](docs/dpg-compliance/DATA_PROTECTION_AND_PRIVACY.md)**
+  - **[UNICEF Venture Fund Proposal](docs/dpg-compliance/UNICEF_VENTURE_FUND.md)**
+- **Commercialization:**
+  - **[Marketing & Distribution](docs/gtm/MARKETING_AND_DISTRIBUTION.md)** & **[WhatsApp Outreach](docs/gtm/WHATSAPP_OUTREACH_PLAYBOOK.md)**
 
 ---
 

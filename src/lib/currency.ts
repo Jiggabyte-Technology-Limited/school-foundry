@@ -18,6 +18,11 @@ export function getCurrencySymbol(): string {
   return currency?.symbol || '$';
 }
 
+export function formatCurrency(cents: number): string {
+  const symbol = getCurrencySymbol();
+  return `${symbol}${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export function getCurrencyCode(): string {
   return cachedCurrency || 'USD';
 }

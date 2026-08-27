@@ -56,11 +56,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [schoolLogo, setSchoolLogo] = useState<string | null>(null);
   const [schoolFeesTerms, setSchoolFeesTerms] = useState('');
   const [enableSubgrades, setEnableSubgrades] = useState(false);
-  const [activeTab, setActiveTab] = useState<'school' | 'users' | 'profile' | 'license' | 'danger' | 'rollover' | 'upload'>(
+  const [activeTab, setActiveTab] = useState<'school' | 'users' | 'profile' | 'dpg' | 'danger' | 'rollover' | 'upload'>(
     user.role === 'admin' ? 'school' : 'profile'
   );
   const [schoolTab, setSchoolTab] = useState<'profile' | 'branding' | 'policies'>('profile');
-  const [licenseInfo, setLicenseInfo] = useState<{machineId: string, activationKey: string} | null>(null);
+  const [dpgInfo, setDpgInfo] = useState<{ nodeId: string; deviceName: string; receiptPrefix: string; syncPort: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [profilePassword, setProfilePassword] = useState('');
   const [profileNewPassword, setProfileNewPassword] = useState('');
@@ -90,7 +90,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     loadUserProfile();
     if (isAdmin) {
       loadUsers();
-      loadLicenseInfo();
+      loadDpgInfo();
     }
   }, [isAdmin]);
 
@@ -231,17 +231,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  const loadLicenseInfo = async () => {
+  const loadDpgInfo = async () => {
     try {
-      const result = await window.api.getLicenseStatus();
-      const machineId = await window.api.getMachineId();
-      if (result.valid) {
-        setLicenseInfo({ machineId: machineId || 'Unknown', activationKey: result.activationKey || 'Unknown' });
-      } else {
-        setLicenseInfo({ machineId: machineId || 'Unknown', activationKey: 'Not Activated' });
+      const res = await window.api.syncGetIdentity();
+      if (res.success && res.identity) {
+        setDpgInfo({
+          nodeId: res.identity.nodeId,
+          deviceName: res.identity.deviceName,
+          receiptPrefix: res.identity.receiptPrefix,
+          syncPort: res.syncPort || 51740,
+        });
       }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load DPG node info:', err);
     }
   };
 
@@ -694,8 +696,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             ),
           },
           {
-            id: 'license' as const,
-            label: 'License',
+            id: 'dpg' as const,
+            label: 'Public Good & Sync',
             icon: (
               <svg
                 width="18"
@@ -705,7 +707,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 stroke="currentColor"
                 strokeWidth="2"
               >
-                <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
               </svg>
             ),
           },
@@ -2286,7 +2290,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
             )}
-            {activeTab === 'license' && (
+            {activeTab === 'dpg' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 <div>
                   <h3
@@ -2297,12 +2301,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       margin: '0 0 8px 0',
                     }}
                   >
-                    License Details
+                    Digital Public Good & Offline Sync Architecture
                   </h3>
                   <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
-                    View your machine hardware ID and activation status.
+                    School Foundry is an open-source, offline-first Digital Public Good engineered for last-mile educational continuity.
                   </p>
                 </div>
+
                 <div
                   style={{
                     backgroundColor: 'var(--background)',
@@ -2311,7 +2316,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     border: '1px solid var(--border)',
                   }}
                 >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                     <div>
                       <div
                         style={{
@@ -2320,18 +2325,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           marginBottom: '4px',
                         }}
                       >
-                        Status
+                        Software License & DPG Status
                       </div>
                       <div
                         style={{
                           fontSize: '15px',
                           fontWeight: 700,
-                          color: '#10b981',
+                          color: '#059669',
                         }}
                       >
-                        Lifetime License (Activated)
+                        Free Community Edition (OSI-Approved MIT Open Source)
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        Aligned with the Digital Public Goods Standard (SDG 4: Quality Education & SDG 10: Reduced Inequalities).
                       </div>
                     </div>
+
                     <div>
                       <div
                         style={{
@@ -2340,19 +2349,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           marginBottom: '4px',
                         }}
                       >
-                        Machine ID
+                        Local Terminal Node Identifier
                       </div>
                       <div
                         style={{
-                          fontSize: '15px',
-                          fontWeight: 600,
+                          fontSize: '14px',
+                          fontWeight: 700,
                           color: 'var(--text-primary)',
-                          fontFamily: 'var(--font-mono)'
+                          fontFamily: 'var(--font-mono)',
                         }}
                       >
-                        {licenseInfo?.machineId || 'Loading...'}
+                        {dpgInfo?.nodeId || 'Loading...'}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        Device Name: <strong>{dpgInfo?.deviceName || 'Bursar Terminal'}</strong> • Receipt Prefix: <strong style={{ fontFamily: 'monospace' }}>{dpgInfo?.receiptPrefix}</strong>
                       </div>
                     </div>
+
                     <div>
                       <div
                         style={{
@@ -2361,17 +2374,36 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           marginBottom: '4px',
                         }}
                       >
-                        Activation Key
+                        Offline Hotspot & LAN Sync Ports
                       </div>
                       <div
                         style={{
-                          fontSize: '15px',
-                          fontWeight: 600,
+                          fontSize: '13px',
                           color: 'var(--text-primary)',
-                          fontFamily: 'var(--font-mono)'
                         }}
                       >
-                        {licenseInfo?.activationKey || 'Loading...'}
+                        HTTP Sync Server: <strong>Port {dpgInfo?.syncPort || 51740}</strong> • UDP Peer Beacon: <strong>Port 51741</strong>
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        Multiple laptops on the same Wi-Fi router or Windows Hotspot automatically discover each other without internet.
+                      </div>
+                    </div>
+
+                    <div>
+                      <div
+                        style={{
+                          fontSize: '13px',
+                          color: 'var(--text-secondary)',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        Data Sovereignty & Privacy Compliance
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 600 }}>
+                        Zambian Data Protection Act No. 3 of 2021 Compliant
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        Local-First Storage • Zero Cloud Telemetry • Immutable Activity Audit Trail.
                       </div>
                     </div>
                   </div>

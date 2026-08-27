@@ -5,56 +5,13 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from 'react-router-dom';
 import './index.css';
 import { db } from './lib/db-client';
 import { AuthProvider, useAuth } from './lib/auth-context';
 import { ToastProvider } from './components/Toast';
 import { loadCurrency } from './lib/currency';
-import { LicenseActivation } from './components/auth/LicenseActivation';
-import { useLocation } from 'react-router-dom';
-
-// License status type
-type LicenseStatusResult = {
-  valid: boolean;
-  status: string;
-  error?: string;
-  expiresAt?: string;
-  daysRemaining?: number;
-};
-
-// Global error handler to catch unhandled errors
-window.onerror = async (message, source, lineno, colno, error) => {
-  const errorMsg = error?.message || String(message);
-  const location = `${source}:${lineno}:${colno}`;
-  const details = `Uncaught error at ${location}: ${errorMsg}`;
-  console.error('Global error:', details);
-  try {
-    await db.run(
-      'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
-      [null, 'System', 'error_uncaught', 'error', null, details]
-    );
-  } catch (e) {
-    console.error('Failed to log error:', e);
-  }
-  return false;
-};
-
-// Global unhandled promise rejection handler
-window.onunhandledrejection = async event => {
-  const errorMsg = event.reason?.message || String(event.reason);
-  const details = `Unhandled promise rejection: ${errorMsg}`;
-  console.error('Unhandled rejection:', details);
-  try {
-    await db.run(
-      'INSERT INTO activity_log (user_id, username, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
-      [null, 'System', 'error_promise', 'error', null, details]
-    );
-  } catch (e) {
-    console.error('Failed to log rejection:', e);
-  }
-};
-
 import PageHeader from './components/PageHeader';
 import SetupWizard from './components/SetupWizard';
 import { Welcome } from './components/auth/Welcome';
@@ -81,71 +38,6 @@ const pageTitles: Record<string, string> = {
   logs: 'Activity Logs',
   backup: 'Backup & Restore',
 };
-
-function LicenseGate({ children }: { children: React.ReactNode }) {
-  const location = useLocation();
-  const [licenseStatus, setLicenseStatus] = useState<'checking' | 'valid' | 'invalid'>('checking');
-  const [licenseData, setLicenseData] = useState<LicenseStatusResult | null>(null);
-
-  useEffect(() => {
-    const checkLicense = async () => {
-      try {
-        const result: LicenseStatusResult = await window.api.getLicenseStatus();
-        if (result.valid) {
-          setLicenseStatus('valid');
-          setLicenseData(result);
-        } else {
-          setLicenseStatus('invalid');
-          setLicenseData(result);
-        }
-      } catch (err) {
-        console.error('Failed to check license:', err);
-        setLicenseStatus('invalid');
-      }
-    };
-
-    checkLicense();
-  }, []);
-
-  if (licenseStatus === 'checking') {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          backgroundColor: 'var(--background)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <div style={{ textAlign: 'center' }}>
-          <div
-            className="animate-spin w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"
-            style={{ borderColor: 'var(--primary) transparent var(--primary) var(--primary)' }}
-          ></div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '16px', fontWeight: 500 }}>
-            Checking license...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (licenseStatus === 'invalid') {
-    if (location.pathname === '/') {
-      return <>{children}</>;
-    }
-    return (
-      <LicenseActivation
-        onActivated={() => {
-          setLicenseStatus('valid');
-        }}
-      />
-    );
-  }
-
-  return <>{children}</>;
-}
 
 function AppInner() {
   const { user, login, logout } = useAuth();
@@ -177,22 +69,28 @@ function AppInner() {
 
   useEffect(() => {
     const loadSchoolDetails = async () => {
-      const setting = await db.get("SELECT value FROM app_settings WHERE key = 'school_name'");
-      setSchoolName(setting?.value || '');
+      try {
+        const setting = await db.get("SELECT value FROM app_settings WHERE key = 'school_name'");
+        setSchoolName(setting?.value || '');
 
-      const termRes = await db.get(`
-        SELECT t.label 
-        FROM terms t 
-        JOIN academic_years y ON t.year_id = y.id 
-        ORDER BY y.label DESC, t.term_number ASC 
-        LIMIT 1
-      `);
-      if (termRes && termRes.label) {
-        setActiveTerm(termRes.label);
+        const termRes = await db.get(`
+          SELECT t.label 
+          FROM terms t 
+          JOIN academic_years y ON t.year_id = y.id 
+          ORDER BY y.is_current DESC, y.label DESC, t.term_number ASC 
+          LIMIT 1
+        `);
+        if (termRes && termRes.label) {
+          setActiveTerm(termRes.label);
+        }
+
+        await loadCurrency();
+      } catch (err) {
+        console.error('Failed to load school details:', err);
       }
     };
     if (isSetup) loadSchoolDetails();
-  }, [isSetup]);
+  }, [isSetup, user]);
 
   const handleLogout = () => {
     logout();
@@ -322,9 +220,7 @@ const App = () => (
   <AuthProvider>
     <ToastProvider>
       <Router>
-        <LicenseGate>
-          <AppInner />
-        </LicenseGate>
+        <AppInner />
       </Router>
     </ToastProvider>
   </AuthProvider>
