@@ -478,7 +478,7 @@ const UserGuide: React.FC = () => {
         setMediaLibrary({
           rootPath: result.rootPath || '',
           sections:
-            result.sections?.map(section => ({
+            result.sections?.map((section: any) => ({
               id: section.id,
               screenshots: section.screenshots || [],
               videos: section.videos || [],

@@ -181,17 +181,25 @@ const ClassLists: React.FC<ClassListsProps> = ({ onViewStudentAccount }) => {
       if (!year) return;
 
       let query = `
-        SELECT s.id, s.student_number, s.full_name, s.gender, s.is_active,
+        SELECT s.id, s.student_number, s.full_name, s.gender, s.is_active, s.is_vulnerable_child,
                e.grade_id,
                CASE
                  WHEN c.label IS NULL OR c.label = '' THEN g.label
                  ELSE g.label || ' - ' || c.label
                END as grade_label,
-               e.class_section_id, c.label as class_section_label
+               e.class_section_id, c.label as class_section_label,
+               sp.name as subsidy_provider_name,
+               CASE
+                 WHEN ss.id IS NOT NULL AND ss.prevent_academic_exclusion = 1 THEN 1
+                 WHEN s.is_vulnerable_child = 1 THEN 1
+                 ELSE 0
+               END as is_protected
         FROM students s
         JOIN student_year_enrollment e ON s.id = e.student_id
         JOIN grades g ON e.grade_id = g.id
         LEFT JOIN class_sections c ON e.class_section_id = c.id
+        LEFT JOIN student_subsidies ss ON s.id = ss.student_id AND ss.year_id = e.year_id AND ss.is_active = 1
+        LEFT JOIN subsidy_providers sp ON ss.provider_id = sp.id
         WHERE e.year_id = ? AND e.grade_id = ?
       `;
       const params = [year.id, selectedGrade];
@@ -208,7 +216,10 @@ const ClassLists: React.FC<ClassListsProps> = ({ onViewStudentAccount }) => {
       query += ` ORDER BY s.full_name ASC`;
 
       const result = await db.all(query, params);
-      setStudents(result);
+      setStudents(result.map((r: any) => ({
+        ...r,
+        is_protected: Boolean(r.is_protected),
+      })));
     } catch (err) {
       console.error('Error loading students for class list:', err);
     }

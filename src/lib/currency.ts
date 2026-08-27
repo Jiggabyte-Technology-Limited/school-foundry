@@ -10,7 +10,7 @@ const currencies = [
   { code: 'LSL', symbol: 'L', name: 'Lesotho Loti' },
 ];
 
-let cachedCurrency: string | null = null;
+let cachedCurrency: string = 'USD';
 let currencyPromise: Promise<string> | null = null;
 
 export function getCurrencySymbol(): string {
@@ -27,17 +27,17 @@ export function getCurrencies() {
 }
 
 export async function loadCurrency(): Promise<string> {
-  if (cachedCurrency) return cachedCurrency;
+  if (cachedCurrency && cachedCurrency !== 'USD') return cachedCurrency;
   if (currencyPromise) return currencyPromise;
 
-  currencyPromise = (async () => {
+  currencyPromise = (async (): Promise<string> => {
     try {
       const setting = await db.get("SELECT value FROM app_settings WHERE key = 'school_currency'");
       cachedCurrency = setting?.value || 'USD';
       return cachedCurrency;
     } catch {
       cachedCurrency = 'USD';
-      return cachedCurrency;
+      return 'USD';
     }
   })();
 

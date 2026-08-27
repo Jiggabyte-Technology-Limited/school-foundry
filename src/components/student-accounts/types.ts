@@ -14,6 +14,11 @@ export interface Student {
   school_logo?: string;
   is_active: number;
   deactivated_at?: string | null;
+  subsidy_name?: string;
+  subsidy_cents?: number;
+  is_protected?: boolean;
+  is_vulnerable_child?: number;
+  ovc_category?: string;
 }
 
 export interface Grade {

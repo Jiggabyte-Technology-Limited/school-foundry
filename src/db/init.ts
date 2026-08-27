@@ -58,4 +58,5 @@ export function initializeDatabase(): Promise<void> {
   });
 }
 
+export { db };
 export default db;

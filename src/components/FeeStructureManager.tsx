@@ -1548,8 +1548,9 @@ const FeeStructureManager: React.FC = () => {
           </div>
           {canManageFees &&
             (() => {
-              const unsavedCount = Object.values(matrix).flatMap(
-                termCells => Object.values(termCells).filter(cell => cell.isUnsaved).length
+              const unsavedCount = Object.values(matrix).reduce(
+                (sum, termCells) => sum + Object.values(termCells).filter(cell => cell.isUnsaved).length,
+                0
               );
               const hasChanges = unsavedCount > 0;
               return (

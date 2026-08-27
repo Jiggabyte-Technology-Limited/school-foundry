@@ -1,56 +1,162 @@
-declare module '*.css';
-declare module '*.svg';
-declare module '*.png';
-declare module '*.jpg';
-declare module '*.jpeg';
-declare module '*.gif';
-declare module '*.webp';
+declare module '*.css' {
+  const content: any;
+  export default content;
+}
+
+declare module '*.svg' {
+  const content: string;
+  export default content;
+}
+
+declare module '*.png' {
+  const content: string;
+  export default content;
+}
+
+declare module '*.jpg' {
+  const content: string;
+  export default content;
+}
+
+declare module '*.jpeg' {
+  const content: string;
+  export default content;
+}
+
+declare module '*.gif' {
+  const content: string;
+  export default content;
+}
+
+declare module '*.webp' {
+  const content: string;
+  export default content;
+}
+
 declare module 'jszip';
+
+declare module '*.mjs' {
+  const content: any;
+  export default content;
+  export const DEFAULT_NEW_USER: any;
+  export const hasUnsavedSettingsChanges: any;
+  export const getDangerZoneConfirmationPhrase: any;
+  export const getClearDatabaseTargets: any;
+  export const getResetAppTargets: any;
+  export const buildWorkbookBytes: any;
+}
 
 declare module '*?raw' {
   const content: string;
   export default content;
 }
 
+export interface DbRunResult {
+  lastID: number;
+  lastInsertRowid: number;
+  changes: number;
+}
 
-interface Window {
-  api: {
-    dbQuery: (sql: string, params: any[]) => Promise<any[]>;
-    dbRun: (
-      sql: string,
-      params: any[]
-    ) => Promise<{ lastID: number; lastInsertRowid: number; changes: number }>;
-    dbGet: (sql: string, params: any[]) => Promise<any>;
-    fsBackup: () => Promise<boolean>;
-    fsRestore: () => Promise<boolean>;
-    printToPdf: (options: {
-      html: string;
+export interface PrintToPdfOptions {
+  html: string;
+  filename: string;
+  title: string;
+}
+
+export interface PrintToPdfResult {
+  success: boolean;
+  filePath?: string;
+  error?: string;
+}
+
+export interface OpenFileResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface LicenseStatusResult {
+  valid: boolean;
+  status: string;
+  error?: string;
+  expiresAt?: string;
+  daysRemaining?: number;
+  activationKey?: string;
+}
+
+export interface XlsxWorkbookData {
+  sheetName: string;
+  topRows?: Array<{ value: string; styleId?: number; mergeAcross?: number }>;
+  columns: Array<{ key: string; header: string; width?: number; type?: string }>;
+  rows: Array<Record<string, any>>;
+  summaryRows?: Array<{
+    label: string;
+    value: string | number;
+    valueType?: string;
+    valueStyleId?: number;
+  }>;
+  freezeRows?: number;
+  autoFilter?: boolean;
+}
+
+export interface WindowApi {
+  dbQuery: (sql: string, params?: any[]) => Promise<any[]>;
+  dbRun: (sql: string, params?: any[]) => Promise<DbRunResult>;
+  dbGet: (sql: string, params?: any[]) => Promise<any>;
+  fsBackup: () => Promise<boolean>;
+  fsRestore: () => Promise<boolean>;
+  printToPdf: (options: PrintToPdfOptions) => Promise<PrintToPdfResult>;
+  openFileForPrint: (filePath: string) => Promise<OpenFileResult>;
+  getPrintOutputDir: () => Promise<string>;
+  autoDebitFees: () => Promise<{ success: boolean; error?: string }>;
+  printStatementsToZip: (
+    statements: { html: string; filename: string }[]
+  ) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }>;
+  exportXlsxStatementsToZip: (options: {
+    suggestedFileName: string;
+    statements: Array<{
       filename: string;
-      title: string;
-    }) => Promise<{ success: boolean; filePath?: string; error?: string }>;
-    openFileForPrint: (filePath: string) => Promise<{ success: boolean; error?: string }>;
-    getPrintOutputDir: () => Promise<string>;
-    autoDebitFees: () => Promise<{ success: boolean; error?: string }>;
-    printStatementsToZip: (
-      statements: { html: string; filename: string }[]
-    ) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }>;
+      workbook: XlsxWorkbookData;
+    }>;
+  }) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }>;
+  openUserGuideWindow: () => Promise<void>;
+  clearDatabase: () => Promise<{ success: boolean; error?: string }>;
+  resetApp: () => Promise<{ success: boolean; error?: string }>;
+  exportXlsxReport: (options: {
+    suggestedFileName: string;
+    workbook: XlsxWorkbookData;
+  }) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }>;
+  getGuideMediaLibrary: () => Promise<{ success: boolean; rootPath?: string; sections?: any[]; error?: string }>;
 
-    // License APIs
-    getMachineId: () => Promise<string | null>;
-    activateLicense: (licenseKey: string) => Promise<{
-      valid: boolean;
-      status: string;
-      error?: string;
-      expiresAt?: string;
-      daysRemaining?: number;
-    }>;
-    getLicenseStatus: () => Promise<{
-      valid: boolean;
-      status: string;
-      error?: string;
-      expiresAt?: string;
-      daysRemaining?: number;
-    }>;
-    deactivateLicense: () => Promise<boolean>;
-  };
+  // Import APIs
+  openImportFileDialog: () => Promise<any>;
+  getImportPreview: (options: {
+    filePath: string;
+    sheetName: string;
+    columnMapping: Record<string, string>;
+    tableType: 'students' | 'payments';
+  }) => Promise<any>;
+  commitImport: (options: {
+    filePath: string;
+    sheetName: string;
+    columnMapping: Record<string, string>;
+    tableType: 'students' | 'payments';
+    dryRun?: boolean;
+  }) => Promise<any>;
+  saveImportTemplate: (options: {
+    fileName: string;
+    headers: string[];
+    sheetName: string;
+  }) => Promise<any>;
+
+  // License APIs
+  getMachineId: () => Promise<string | null>;
+  activateLicense: (licenseKey: string) => Promise<LicenseStatusResult>;
+  getLicenseStatus: () => Promise<LicenseStatusResult>;
+  deactivateLicense: () => Promise<boolean>;
+}
+
+declare global {
+  interface Window {
+    api: WindowApi;
+  }
 }

@@ -1205,7 +1205,6 @@ const SetupWizard: React.FC<SetupWizardProps> = ({ onComplete }) => {
                             fontWeight: 600,
                             position: 'sticky',
                             left: 0,
-                            background: 'var(--surface)',
                             zIndex: 10,
                             background: 'var(--surface)',
                             width: '120px',

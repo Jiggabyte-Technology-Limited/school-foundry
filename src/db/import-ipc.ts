@@ -53,7 +53,7 @@ export function registerImportHandlers() {
         return { success: false, error: `Sheet "${sheetName}" not found` };
       }
 
-      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, any>[];
       const { validRows, errors } = await validateRows(rawRows, columnMapping, tableType);
 
       return {

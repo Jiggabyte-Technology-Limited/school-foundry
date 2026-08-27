@@ -21,41 +21,6 @@ export interface OpenFileResult {
   error?: string;
 }
 
-declare global {
-  interface Window {
-    api: {
-      dbQuery: (sql: string, params: any[]) => Promise<any[]>;
-      dbRun: (sql: string, params: any[]) => Promise<DbRunResult>;
-      dbGet: (sql: string, params: any[]) => Promise<any>;
-      fsBackup: () => Promise<boolean>;
-      fsRestore: () => Promise<boolean>;
-      printToPdf: (options: PrintToPdfOptions) => Promise<PrintToPdfResult>;
-      openFileForPrint: (filePath: string) => Promise<OpenFileResult>;
-      getPrintOutputDir: () => Promise<string>;
-      autoDebitFees: () => Promise<{ success: boolean; error?: string }>;
-      clearDatabase: () => Promise<{ success: boolean; error?: string }>;
-      resetApp: () => Promise<{ success: boolean; error?: string }>;
-      exportXlsxReport: (options: {
-        suggestedFileName: string;
-        workbook: {
-          sheetName: string;
-          topRows?: Array<{ value: string; styleId?: number; mergeAcross?: number }>;
-          columns: Array<{ key: string; header: string; width?: number; type?: string }>;
-          rows: Array<Record<string, any>>;
-          summaryRows?: Array<{
-            label: string;
-            value: string | number;
-            valueType?: string;
-            valueStyleId?: number;
-          }>;
-          freezeRows?: number;
-          autoFilter?: boolean;
-        };
-      }) => Promise<{ success: boolean; filePath?: string; error?: string; canceled?: boolean }>;
-    };
-  }
-}
-
 const getApi = () => {
   if (typeof window === 'undefined' || !window.api) {
     throw new Error(

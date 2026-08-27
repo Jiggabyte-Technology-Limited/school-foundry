@@ -375,36 +375,65 @@ const StudentAccounts: React.FC<StudentAccountsProps> = ({
           const grade = enrollment ? gradeMap[enrollment.grade_id] : null;
           const classSection = enrollment?.class_section_id ? sectionMap[enrollment.class_section_id] : null;
 
-          // Get invoiced - include all enrollments (active and inactive) to show historical fees
-          const invoiced = await db.get(
-            `
-            SELECT COALESCE(SUM(sf.amount_cents), 0) as total
-            FROM student_fees sf
-            JOIN fee_structure fs ON sf.fee_structure_id = fs.id
-            JOIN terms t ON fs.term_id = t.id
-            JOIN student_year_enrollment enrollment ON enrollment.student_id = sf.student_id AND enrollment.year_id = fs.year_id
-            WHERE sf.student_id = ? AND fs.year_id = ?
-              AND (t.end_date IS NULL OR date(t.end_date) >= date(enrollment.created_at))
-          `,
-            [s.id, selectedYear]
-          );
+          const [invoiced, paid, subsidies] = await Promise.all([
+            db.get(
+              `
+              SELECT COALESCE(SUM(sf.amount_cents), 0) as total
+              FROM student_fees sf
+              JOIN fee_structure fs ON sf.fee_structure_id = fs.id
+              JOIN terms t ON fs.term_id = t.id
+              JOIN student_year_enrollment enrollment ON enrollment.student_id = sf.student_id AND enrollment.year_id = fs.year_id
+              WHERE sf.student_id = ? AND fs.year_id = ?
+                AND (t.end_date IS NULL OR date(t.end_date) >= date(enrollment.created_at))
+            `,
+              [s.id, selectedYear]
+            ),
+            db.get(
+              `
+              SELECT COALESCE(SUM(amount_paid_cents), 0) as total
+              FROM payments WHERE student_id = ? AND year_id = ? AND is_voided = 0
+            `,
+              [s.id, selectedYear]
+            ),
+            db.all(
+              `
+              SELECT ss.*, sp.name as provider_name
+              FROM student_subsidies ss
+              JOIN subsidy_providers sp ON ss.provider_id = sp.id
+              WHERE ss.student_id = ? AND ss.year_id = ? AND ss.is_active = 1
+            `,
+              [s.id, selectedYear]
+            ).catch(() => []),
+          ]);
 
-          const paid = await db.get(
-            `
-            SELECT COALESCE(SUM(amount_paid_cents), 0) as total
-            FROM payments WHERE student_id = ? AND year_id = ? AND is_voided = 0
-          `,
-            [s.id, selectedYear]
-          );
+          const invoicedTotal = invoiced?.total || 0;
+          const paidTotal = paid?.total || 0;
+          
+          let subsidyCents = 0;
+          for (const sub of (subsidies || [])) {
+            if (sub.coverage_type === 'full_100') {
+              subsidyCents += invoicedTotal;
+            } else if (sub.coverage_type === 'percentage') {
+              subsidyCents += Math.round((invoicedTotal * sub.coverage_value) / 100);
+            } else if (sub.coverage_type === 'fixed_amount') {
+              subsidyCents += Math.min(invoicedTotal, sub.coverage_value);
+            }
+          }
+
+          const netBalance = Math.max(0, invoicedTotal - paidTotal - subsidyCents);
+          const isProtected = (subsidies && subsidies.length > 0 && subsidies.some((sub: any) => sub.prevent_academic_exclusion === 1)) || Boolean(s.is_vulnerable_child);
 
           return {
             ...s,
             grade_id: enrollment?.grade_id,
             class_section_id: enrollment?.class_section_id,
             grade_label: classSection ? `${grade?.label} - ${classSection.label}` : grade?.label,
-            invoiced: invoiced?.total || 0,
-            paid: paid?.total || 0,
-            balance: (invoiced?.total || 0) - (paid?.total || 0),
+            invoiced: invoicedTotal,
+            paid: paidTotal,
+            subsidy_cents: subsidyCents,
+            subsidy_name: subsidies?.[0]?.provider_name,
+            is_protected: isProtected,
+            balance: netBalance,
           };
         })
       );

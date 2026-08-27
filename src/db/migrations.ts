@@ -717,6 +717,80 @@ const migrations: MigrationStep[] = [
       );
     },
   },
+  {
+    version: '2.3',
+    description: 'Digital Public Good (DPG) & Child Safeguarding — Subsidies, Scholarships & Anti-Exclusion Protection',
+    run: async db => {
+      // 1. subsidy_providers table
+      await runSql(
+        db,
+        `CREATE TABLE IF NOT EXISTS subsidy_providers (
+          id             INTEGER PRIMARY KEY AUTOINCREMENT,
+          name           TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+          provider_type  TEXT    NOT NULL CHECK(provider_type IN ('government', 'ngo', 'bursary', 'internal_scholarship', 'private_donor')),
+          contact_person TEXT,
+          contact_email  TEXT,
+          contact_phone  TEXT,
+          created_at     TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );`
+      );
+
+      // Seed default providers if table empty
+      const defaultProviders = [
+        ['Ministry of Education - Free Education Policy Grant', 'government', 'District Education Board Secretary (DEBS)', 'debs@moe.gov.zm'],
+        ['Constituency Development Fund (CDF) Secondary Bursary', 'government', 'CDF Bursaries Committee', ''],
+        ['UNICEF Education Continuity Grant', 'ngo', 'UNICEF Education Desk', ''],
+        ['CAMFED Girls Education Bursary', 'ngo', 'CAMFED Zambia Operations', ''],
+        ['School Internal OVC / Vulnerable Child Scholarship', 'internal_scholarship', 'Headteacher Welfare Desk', ''],
+      ];
+
+      for (const [name, pType, contact, email] of defaultProviders) {
+        await runSql(
+          db,
+          `INSERT OR IGNORE INTO subsidy_providers (name, provider_type, contact_person, contact_email)
+           VALUES ('${name.replace(/'/g, "''")}', '${pType}', '${contact.replace(/'/g, "''")}', '${email}');`
+        );
+      }
+
+      // 2. student_subsidies table
+      await runSql(
+        db,
+        `CREATE TABLE IF NOT EXISTS student_subsidies (
+          id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_id                 INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+          provider_id                INTEGER NOT NULL REFERENCES subsidy_providers(id) ON DELETE RESTRICT,
+          year_id                    INTEGER NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE,
+          term_id                    INTEGER REFERENCES terms(id) ON DELETE CASCADE,
+          coverage_type              TEXT    NOT NULL CHECK(coverage_type IN ('full_100', 'percentage', 'fixed_amount')),
+          coverage_value             INTEGER NOT NULL,
+          application_reason         TEXT,
+          grant_reference_number     TEXT,
+          is_active                  INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
+          prevent_academic_exclusion INTEGER NOT NULL DEFAULT 1 CHECK(prevent_academic_exclusion IN (0, 1)),
+          created_by                 INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at                 TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+          UNIQUE(student_id, provider_id, year_id, term_id)
+        );`
+      );
+
+      await runSql(db, `CREATE INDEX IF NOT EXISTS idx_student_subsidies_student ON student_subsidies(student_id);`);
+      await runSql(db, `CREATE INDEX IF NOT EXISTS idx_student_subsidies_year    ON student_subsidies(year_id);`);
+      await runSql(db, `CREATE INDEX IF NOT EXISTS idx_student_subsidies_active  ON student_subsidies(is_active);`);
+
+      // 3. Add is_vulnerable_child / ovc_category columns to students table
+      try {
+        await runSql(db, `ALTER TABLE students ADD COLUMN is_vulnerable_child INTEGER NOT NULL DEFAULT 0 CHECK(is_vulnerable_child IN (0, 1));`);
+      } catch (e) { /* already exists */ }
+      try {
+        await runSql(db, `ALTER TABLE students ADD COLUMN ovc_category TEXT;`);
+      } catch (e) { /* already exists */ }
+
+      await runSql(
+        db,
+        `INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES ('schema_version', '2.3', datetime('now'));`
+      );
+    },
+  },
 ];
 
 export async function runMigrations(db: sqlite3.Database): Promise<void> {

@@ -23,12 +23,15 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [grades, setGrades] = useState<{ id: number; label: string }[]>([]);
+  const [subsidyProviders, setSubsidyProviders] = useState<{ id: number; name: string; provider_type: string }[]>([]);
 
   const [form, setForm] = useState({
     first_name: '',
     surname: '',
     date_of_birth: '',
     gender: '',
+    is_vulnerable_child: false,
+    ovc_category: '',
     guardian_first_name: '',
     guardian_surname: '',
     guardian_contact: '',
@@ -38,6 +41,11 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
     guardian_email: '',
     grade_id: '',
     class_section_id: '',
+    has_subsidy: false,
+    subsidy_provider_id: '',
+    subsidy_coverage_type: 'full_100',
+    subsidy_coverage_value: '100',
+    subsidy_ref: '',
     notes: '',
   });
 
@@ -69,7 +77,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
       const isSubgradesEnabled = setting?.value === 'true';
       setEnableSubgrades(isSubgradesEnabled);
 
-      const [student, gradeList, sectionsData, enrollment] = await Promise.all([
+      const [student, gradeList, sectionsData, enrollment, providers, existingSubsidy] = await Promise.all([
         db.get('SELECT * FROM students WHERE id = ?', [studentId]),
         db.all('SELECT id, label FROM grades ORDER BY id'),
         isSubgradesEnabled ? db.all('SELECT id, grade_id, label FROM class_sections ORDER BY label') : Promise.resolve([]),
@@ -77,7 +85,11 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
           'SELECT grade_id, class_section_id FROM student_year_enrollment WHERE student_id = ? AND year_id = ?',
           [studentId, yearId]
         ),
+        db.all('SELECT * FROM subsidy_providers ORDER BY name ASC').catch(() => []),
+        db.get('SELECT * FROM student_subsidies WHERE student_id = ? AND year_id = ? AND is_active = 1', [studentId, yearId]).catch(() => null),
       ]);
+
+      setSubsidyProviders(providers || []);
 
       if (student) {
         // Use first_name/surname if available, otherwise split full_name
@@ -88,6 +100,8 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
           surname: sn || (student.full_name ? student.full_name.split(' ').slice(1).join(' ') : ''),
           date_of_birth: student.date_of_birth || '',
           gender: student.gender || '',
+          is_vulnerable_child: Boolean(student.is_vulnerable_child),
+          ovc_category: student.ovc_category || '',
           guardian_first_name: student.guardian_first_name || (student.guardian_name ? student.guardian_name.split(' ')[0] : ''),
           guardian_surname: student.guardian_surname || (student.guardian_name ? student.guardian_name.split(' ').slice(1).join(' ') : ''),
           guardian_contact: student.guardian_contact || '',
@@ -97,6 +111,11 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
           guardian_email: student.guardian_email || '',
           grade_id: enrollment ? String(enrollment.grade_id) : '',
           class_section_id: enrollment && enrollment.class_section_id ? String(enrollment.class_section_id) : '',
+          has_subsidy: Boolean(existingSubsidy),
+          subsidy_provider_id: existingSubsidy ? String(existingSubsidy.provider_id) : '',
+          subsidy_coverage_type: existingSubsidy ? existingSubsidy.coverage_type : 'full_100',
+          subsidy_coverage_value: existingSubsidy ? String(existingSubsidy.coverage_value) : '100',
+          subsidy_ref: existingSubsidy ? existingSubsidy.grant_reference_number || '' : '',
           notes: student.notes || '',
         });
       }
@@ -151,6 +170,7 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
         UPDATE students SET
           full_name = ?, first_name = ?, surname = ?,
           date_of_birth = ?, gender = ?,
+          is_vulnerable_child = ?, ovc_category = ?,
           guardian_name = ?, guardian_first_name = ?, guardian_surname = ?, guardian_contact = ?,
           guardian_name_2 = ?, guardian_first_name_2 = ?, guardian_surname_2 = ?, guardian_contact_2 = ?,
           guardian_email = ?, notes = ?, updated_at = datetime('now')
@@ -162,6 +182,8 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
           form.surname,
           form.date_of_birth || null,
           form.gender || null,
+          form.is_vulnerable_child ? 1 : 0,
+          form.ovc_category || null,
           guardian_name,
           form.guardian_first_name,
           form.guardian_surname,
@@ -175,6 +197,41 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
           studentId,
         ]
       );
+
+      // Handle subsidy
+      if (form.has_subsidy && form.subsidy_provider_id) {
+        const coverageVal =
+          form.subsidy_coverage_type === 'full_100'
+            ? 100
+            : form.subsidy_coverage_type === 'percentage'
+              ? Math.max(1, Math.min(100, Number(form.subsidy_coverage_value) || 100))
+              : Math.round(Number(form.subsidy_coverage_value || 0) * 100);
+
+        await db.run(
+          `INSERT OR REPLACE INTO student_subsidies (
+            student_id, provider_id, year_id, term_id, coverage_type,
+            coverage_value, application_reason, grant_reference_number,
+            is_active, prevent_academic_exclusion, created_by
+          ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, 1, 1, ?)`,
+          [
+            studentId,
+            Number(form.subsidy_provider_id),
+            yearId,
+            form.subsidy_coverage_type,
+            coverageVal,
+            form.is_vulnerable_child
+              ? `OVC Category ${form.ovc_category || 'Safeguarded'}`
+              : 'Educational Subsidy / Grant',
+            form.subsidy_ref || '',
+            user?.id ?? null,
+          ]
+        );
+      } else {
+        await db.run(
+          'UPDATE student_subsidies SET is_active = 0 WHERE student_id = ? AND year_id = ?',
+          [studentId, yearId]
+        );
+      }
 
       // Update enrollment if grade is provided
       if (form.grade_id) {
@@ -380,6 +437,95 @@ const EditStudentModal: React.FC<EditStudentModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Child Safeguarding & Subsidy Card */}
+              <div
+                style={{
+                  marginTop: 20,
+                  marginBottom: 16,
+                  padding: 16,
+                  borderRadius: 12,
+                  background: 'var(--secondary)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
+                      🛡️ Child Safeguarding & Educational Subsidy
+                    </span>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0 0' }}>
+                      Flag students on government grants, bursaries, or scholarships to shield them from fee lockouts and exclusion.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    id="edit_has_subsidy_toggle"
+                    checked={form.has_subsidy}
+                    onChange={e => setForm({ ...form, has_subsidy: e.target.checked })}
+                    style={{ width: 18, height: 18, cursor: 'pointer', accentColor: 'var(--primary)' }}
+                  />
+                </div>
+
+                {form.has_subsidy && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                    <div className="wizard-field">
+                      <label>Sponsoring Entity / Grant Provider</label>
+                      <select
+                        value={form.subsidy_provider_id}
+                        onChange={e => setForm({ ...form, subsidy_provider_id: e.target.value })}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-primary)' }}
+                      >
+                        <option value="">Select Grant / Scholarship Provider...</option>
+                        {subsidyProviders.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({p.provider_type})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div className="wizard-field">
+                        <label>Coverage Level</label>
+                        <select
+                          value={form.subsidy_coverage_type}
+                          onChange={e => setForm({ ...form, subsidy_coverage_type: e.target.value as any })}
+                          style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-primary)' }}
+                        >
+                          <option value="full_100">100% Full Tuition Grant</option>
+                          <option value="percentage">Percentage (Partial)</option>
+                          <option value="fixed_amount">Fixed Amount</option>
+                        </select>
+                      </div>
+
+                      <div className="wizard-field">
+                        <label>Grant / Bursary Reference Number</label>
+                        <input
+                          type="text"
+                          className="input-default"
+                          placeholder="e.g. CDF/2026/042"
+                          value={form.subsidy_ref}
+                          onChange={e => setForm({ ...form, subsidy_ref: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                      <input
+                        type="checkbox"
+                        id="edit_is_vulnerable_child_toggle"
+                        checked={form.is_vulnerable_child}
+                        onChange={e => setForm({ ...form, is_vulnerable_child: e.target.checked })}
+                        style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#10b981' }}
+                      />
+                      <label htmlFor="edit_is_vulnerable_child_toggle" style={{ fontSize: 13, cursor: 'pointer', color: '#065f46', fontWeight: 600 }}>
+                        Mark as Vulnerable Child / OVC (Enforce permanent anti-exclusion protocol)
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <h3
                 className="text-display"

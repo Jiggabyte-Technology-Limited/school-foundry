@@ -11,6 +11,8 @@
  *   computeBalanceForGrade(yearId, gradeId, termId?) → GradeBalanceResult
  */
 
+import { db } from '../../db/init';
+
 // ── Types ──
 
 export interface FeeEntry {
@@ -64,7 +66,7 @@ export interface DiscountBreakdown {
   applies_to: number[];  // fee_structure_ids this discount touches
 }
 
-export type DiscountType = 'sibling' | 'early_payment' | 'bursary' | 'staff_ward' | 'custom';
+export type DiscountType = 'sibling' | 'early_payment' | 'bursary' | 'staff_ward' | 'custom' | 'subsidy';
 
 export interface DiscountRule {
   type: DiscountType;
@@ -164,8 +166,8 @@ export async function computeBalanceForGrade(
 ): Promise<GradeBalanceResult> {
   const { fetchGradeFees, fetchEnrollmentCount } = defaultGradeFetchers;
 
-  const fees = (fetchers?.fetchGradeFees ?? fetchGradeFees)(yearId, gradeId, termId);
-  const student_count = (fetchers?.fetchEnrollmentCount ?? fetchEnrollmentCount)(yearId, gradeId);
+  const fees = await (fetchers?.fetchGradeFees ?? fetchGradeFees)(yearId, gradeId, termId);
+  const student_count = await (fetchers?.fetchEnrollmentCount ?? fetchEnrollmentCount)(yearId, gradeId);
 
   const expected_fees = fees.reduce((sum, f) => sum + f.expected_amount_cents, 0);
 
@@ -241,7 +243,6 @@ export interface GradeBalanceFetchers {
 // ── Default fetchers (wire to the app's DB) ──
 
 async function defaultFeesFetcher(studentId: number, yearId: number): Promise<FeeEntry[]> {
-  const { db } = await import('../../db/init');
   return new Promise((resolve, reject) => {
     db.all(
       `SELECT sf.fee_structure_id, fs.description, sf.amount_cents, fs.term_id,
@@ -252,7 +253,7 @@ async function defaultFeesFetcher(studentId: number, yearId: number): Promise<Fe
        WHERE sf.student_id = ? AND fs.year_id = ?
        ORDER BY sf.debit_date`,
       [studentId, yearId],
-      (err, rows) => {
+      (err: Error | null, rows: any[]) => {
         if (err) reject(err);
         else resolve(rows as FeeEntry[]);
       }
@@ -261,7 +262,6 @@ async function defaultFeesFetcher(studentId: number, yearId: number): Promise<Fe
 }
 
 async function defaultPaymentsFetcher(studentId: number, yearId: number): Promise<PaymentEntry[]> {
-  const { db } = await import('../../db/init');
   return new Promise((resolve, reject) => {
     db.all(
       `SELECT p.id as payment_id, p.receipt_number, p.amount_paid_cents, p.payment_date,
@@ -271,7 +271,7 @@ async function defaultPaymentsFetcher(studentId: number, yearId: number): Promis
        WHERE p.student_id = ? AND p.year_id = ?
        ORDER BY p.payment_date`,
       [studentId, yearId],
-      (err, rows) => {
+      (err: Error | null, rows: any[]) => {
         if (err) reject(err);
         else resolve(rows as PaymentEntry[]);
       }
@@ -279,20 +279,79 @@ async function defaultPaymentsFetcher(studentId: number, yearId: number): Promis
   });
 }
 
-async function defaultDiscountsFetcher(_studentId: number, _yearId: number): Promise<DiscountBreakdown[]> {
-  // Placeholder: discounts are modeled in Phase 4. For now, no discounts.
-  return [];
+async function defaultDiscountsFetcher(studentId: number, yearId: number): Promise<DiscountBreakdown[]> {
+  return new Promise((resolve) => {
+    db.all(
+      `SELECT sf.fee_structure_id, fs.description, sf.amount_cents, fs.term_id,
+              t.label as term_label, fs.fee_type, sf.debit_date
+       FROM student_fees sf
+       JOIN fee_structure fs ON sf.fee_structure_id = fs.id
+       JOIN terms t ON fs.term_id = t.id
+       WHERE sf.student_id = ? AND fs.year_id = ?
+       ORDER BY sf.debit_date`,
+      [studentId, yearId],
+      (feeErr: Error | null, feeRows: any[]) => {
+        if (feeErr || !feeRows || feeRows.length === 0) {
+          resolve([]);
+          return;
+        }
+
+        db.all(
+          `SELECT ss.*, sp.name as provider_name, sp.provider_type
+           FROM student_subsidies ss
+           JOIN subsidy_providers sp ON ss.provider_id = sp.id
+           WHERE ss.student_id = ? AND ss.year_id = ? AND ss.is_active = 1`,
+          [studentId, yearId],
+          (subErr: Error | null, subRows: any[]) => {
+            if (subErr || !subRows || subRows.length === 0) {
+              resolve([]);
+              return;
+            }
+
+            const deductions: DiscountBreakdown[] = [];
+            const fees = feeRows as FeeEntry[];
+
+            for (const sub of subRows) {
+              const applicableFees = sub.term_id
+                ? fees.filter(f => f.term_id === sub.term_id)
+                : fees;
+              if (applicableFees.length === 0) continue;
+
+              const totalCents = applicableFees.reduce((s, f) => s + f.amount_cents, 0);
+              let amountCents = 0;
+              if (sub.coverage_type === 'full_100') {
+                amountCents = totalCents;
+              } else if (sub.coverage_type === 'percentage') {
+                amountCents = Math.round((totalCents * sub.coverage_value) / 100);
+              } else if (sub.coverage_type === 'fixed_amount') {
+                amountCents = Math.min(totalCents, sub.coverage_value);
+              }
+
+              if (amountCents > 0) {
+                deductions.push({
+                  type: 'subsidy',
+                  amount_cents: amountCents,
+                  description: `Sponsored: ${sub.provider_name}${sub.grant_reference_number ? ` (${sub.grant_reference_number})` : ''}`,
+                  applies_to: applicableFees.map(f => f.fee_structure_id),
+                });
+              }
+            }
+            resolve(deductions);
+          }
+        );
+      }
+    );
+  });
 }
 
 async function defaultGradeFeesFetcher(yearId: number, gradeId: number, termId: number | null): Promise<{ expected_amount_cents: number }[]> {
-  const { db } = await import('../../db/init');
   const query = termId
     ? `SELECT amount_cents as expected_amount_cents FROM fee_structure WHERE year_id = ? AND grade_id = ? AND term_id = ?`
     : `SELECT amount_cents as expected_amount_cents FROM fee_structure WHERE year_id = ? AND grade_id = ?`;
   const params = termId ? [yearId, gradeId, termId] : [yearId, gradeId];
 
   return new Promise((resolve, reject) => {
-    db.all(query, params, (err, rows) => {
+    db.all(query, params, (err: Error | null, rows: any[]) => {
       if (err) reject(err);
       else resolve(rows as { expected_amount_cents: number }[]);
     });
@@ -300,12 +359,11 @@ async function defaultGradeFeesFetcher(yearId: number, gradeId: number, termId: 
 }
 
 async function defaultEnrollmentCountFetcher(yearId: number, gradeId: number): Promise<number> {
-  const { db } = await import('../../db/init');
   return new Promise((resolve, reject) => {
     db.get(
       'SELECT COUNT(*) as c FROM student_year_enrollment WHERE year_id = ? AND grade_id = ? AND is_active = 1',
       [yearId, gradeId],
-      (err, row: any) => {
+      (err: Error | null, row: any) => {
         if (err) reject(err);
         else resolve(row?.c || 0);
       }

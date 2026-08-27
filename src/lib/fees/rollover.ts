@@ -10,7 +10,7 @@
  *   executeRollover(options) → RolloverResult (commits the transaction)
  */
 
-import type { DbRunResult } from '../db/ipc';
+import type { DbRunResult } from '../../declarations';
 
 // ── Types ──
 

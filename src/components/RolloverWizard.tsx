@@ -573,7 +573,7 @@ const RolloverWizard: React.FC<RolloverWizardProps> = ({ onClose }) => {
                 <div>🔁 {result.repeaterCount} students repeating</div>
                 <div>📋 {result.feeStructureRowsCopied} fee rows copied</div>
                 <div>🏫 {result.classSectionsCopied} class sections created</div>
-                <div>📝 {result.termsToCopy} terms created</div>
+                <div>📝 {result.termsCopied} terms created</div>
               </div>
               <div style={{
                 background: '#f0fdf4',

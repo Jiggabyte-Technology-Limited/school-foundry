@@ -13,313 +13,10 @@ import PaymentReceiptPreview from './payments/PaymentReceiptPreview';
 import StudentStatementPreview from './StudentStatementPreview';
 import PaymentMethodToggle, { PaymentMethod } from './ui/PaymentMethodToggle';
 import ChipSelector from './ui/ChipSelector';
-
-interface Payment {
-  id: number;
-  student_id: number;
-  year_id: number;
-  term_id: number;
-  receipt_number: string;
-  amount_paid_cents: number;
-  payment_date: string;
-  received_by: number | null;
-  recorded_by_name: string;
-  student_name: string;
-  year_label: string;
-  term_label: string;
-  guardian_name: string;
-  guardian_contact: string;
-  is_voided?: number;
-  void_reason?: string;
-}
-
-interface PaymentStats {
-  todayTotal: number;
-  weekTotal: number;
-  monthTotal: number;
-  yearTotal: number;
-  todayCount: number;
-  weekCount: number;
-  expectedTermTotal: number;
-  paidTermTotal: number;
-  expectedYearTotal: number;
-  paidYearTotal: number;
-  outstandingTerm: number;
-  outstandingYear: number;
-}
-
-// Helper component for last 10 activities
-const ActivityLogPreview: React.FC = () => {
-  const [recentLogs, setRecentLogs] = useState<any[]>([]);
-
-  useEffect(() => {
-    loadRecentLogs();
-  }, []);
-
-  const loadRecentLogs = async () => {
-    const logs = await db.all(`
-      SELECT al.*, u.username
-      FROM activity_log al
-      LEFT JOIN users u ON al.user_id = u.id
-      ORDER BY al.logged_at DESC
-      LIMIT 10
-    `);
-    setRecentLogs(logs);
-  };
-
-  const formatAction = (action: string) =>
-    action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-  return (
-    <div>
-      {recentLogs.length === 0 ? (
-        <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '24px' }}>
-          No activity yet
-        </p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {recentLogs.map(log => (
-            <div
-              key={log.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '10px 12px',
-                backgroundColor: 'var(--color-sage-cream)',
-                borderRadius: '8px',
-                borderLeft: '3px solid var(--primary)',
-              }}
-            >
-              <div style={{ flex: 1 }}>
-                <span style={{ fontWeight: 600, fontSize: '13px' }}>
-                  {formatAction(log.action)}
-                </span>
-                <span
-                  style={{ color: 'var(--text-secondary)', fontSize: '12px', marginLeft: '8px' }}
-                >
-                  {log.details}
-                </span>
-              </div>
-              <div
-                style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}
-              >
-                {log.username || 'System'} • {formatDate(log.logged_at)}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Helper component for full paginated logs
-const FullActivityLog: React.FC = () => {
-  const [logs, setLogs] = useState<any[]>([]);
-  const [page, setPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
-  const LOGS_PER_PAGE = 50;
-
-  useEffect(() => {
-    loadLogs();
-  }, [page]);
-
-  const loadLogs = async () => {
-    const offset = (page - 1) * LOGS_PER_PAGE;
-    const [logData, countData] = await Promise.all([
-      db.all(
-        `
-        SELECT al.*, u.username
-        FROM activity_log al
-        LEFT JOIN users u ON al.user_id = u.id
-        ORDER BY al.logged_at DESC
-        LIMIT ? OFFSET ?
-      `,
-        [LOGS_PER_PAGE, offset]
-      ),
-      db.get('SELECT COUNT(*) as count FROM activity_log'),
-    ]);
-    setLogs(logData);
-    setTotalCount(countData?.count || 0);
-  };
-
-  const totalPages = Math.ceil(totalCount / LOGS_PER_PAGE);
-
-  const formatAction = (action: string) =>
-    action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-  const PaginationControls = () => (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: '16px',
-        paddingTop: '16px',
-        borderTop: '1px solid var(--border)',
-      }}
-    >
-      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-        Showing {(page - 1) * LOGS_PER_PAGE + 1} - {Math.min(page * LOGS_PER_PAGE, totalCount)} of{' '}
-        {totalCount}
-      </span>
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <button
-          className="btn btn-outline"
-          onClick={() => setPage(p => Math.max(1, p - 1))}
-          disabled={page === 1}
-          style={{ padding: '6px 12px', fontSize: '12px' }}
-        >
-          Previous
-        </button>
-        <span
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            fontSize: '12px',
-            color: 'var(--text-secondary)',
-          }}
-        >
-          Page {page} of {totalPages}
-        </span>
-        <button
-          className="btn btn-outline"
-          onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-          disabled={page >= totalPages}
-          style={{ padding: '6px 12px', fontSize: '12px' }}
-        >
-          Next
-        </button>
-      </div>
-    </div>
-  );
-
-  return (
-    <div>
-      <PaginationControls />
-      <table style={{ marginTop: '12px', width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr>
-            <th
-              style={{
-                textAlign: 'left',
-                padding: '10px',
-                borderBottom: '2px solid var(--border)',
-                fontSize: '12px',
-              }}
-            >
-              Date & Time
-            </th>
-            <th
-              style={{
-                textAlign: 'left',
-                padding: '10px',
-                borderBottom: '2px solid var(--border)',
-                fontSize: '12px',
-              }}
-            >
-              User
-            </th>
-            <th
-              style={{
-                textAlign: 'left',
-                padding: '10px',
-                borderBottom: '2px solid var(--border)',
-                fontSize: '12px',
-              }}
-            >
-              Action
-            </th>
-            <th
-              style={{
-                textAlign: 'left',
-                padding: '10px',
-                borderBottom: '2px solid var(--border)',
-                fontSize: '12px',
-              }}
-            >
-              Details
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {logs.map(log => (
-            <tr key={log.id}>
-              <td
-                style={{
-                  padding: '10px',
-                  borderBottom: '1px solid var(--border)',
-                  fontSize: '12px',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                {formatDate(log.logged_at)}
-              </td>
-              <td
-                style={{
-                  padding: '10px',
-                  borderBottom: '1px solid var(--border)',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                }}
-              >
-                {log.username || 'System'}
-              </td>
-              <td
-                style={{
-                  padding: '10px',
-                  borderBottom: '1px solid var(--border)',
-                  fontSize: '12px',
-                }}
-              >
-                {formatAction(log.action)}
-              </td>
-              <td
-                style={{
-                  padding: '10px',
-                  borderBottom: '1px solid var(--border)',
-                  fontSize: '12px',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                {log.details || '-'}
-              </td>
-            </tr>
-          ))}
-          {logs.length === 0 && (
-            <tr>
-              <td
-                colSpan={4}
-                style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary)' }}
-              >
-                No activity logs found
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      <PaginationControls />
-    </div>
-  );
-};
+import type { Payment, PaymentStats } from './payments/types';
+import { ActivityLogPreview, FullActivityLog } from './payments/ActivityLogComponents';
+import { VoidPaymentModal } from './payments/VoidPaymentModal';
+import { VoidKeyModal } from './payments/VoidKeyModal';
 
 interface PaymentManagerProps {
   onViewStatement?: (studentId: number) => void;
@@ -945,8 +642,8 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
           dateFilter = `AND p.payment_date >= '${monthAgo.toISOString().split('T')[0]}'`;
           break;
         case 'this_term':
-          if (form.term_id) {
-            dateFilter = `AND p.term_id = ${form.term_id}`;
+          if (currentTermWindow?.start && currentTermWindow?.end) {
+            dateFilter = `AND p.payment_date >= '${currentTermWindow.start}' AND p.payment_date <= '${currentTermWindow.end}'`;
           }
           break;
         default:
@@ -2170,182 +1867,36 @@ const PaymentManager: React.FC<PaymentManagerProps> = ({ onViewStatement }) => {
 
       {/* Void Payment Modal */}
       {showVoidModal && voidingPayment && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 50,
-          }}
-          onClick={() => setShowVoidModal(false)}
-        >
-          <div
-            style={{
-              backgroundColor: 'white',
-              borderRadius: '12px',
-              padding: '24px',
-              maxWidth: '400px',
-              width: '90%',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: '16px' }}>Void Payment</h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '14px' }}>
-              Receipt: <strong>{voidingPayment.receipt_number}</strong>
-              <br />
-              Student: <strong>{voidingPayment.student_name}</strong>
-              <br />
-              Amount: <strong>{formatCurrency(voidingPayment.amount_paid_cents)}</strong>
-            </p>
-
-            <div style={{ marginBottom: '16px' }}>
-              <ChipSelector
-                label="Reason *"
-                value={voidReason || null}
-                onChange={value => setVoidReason((value as string) || '')}
-                options={[
-                  { value: 'Mistake', label: 'Mistake' },
-                  { value: 'Wrong learner', label: 'Wrong learner' },
-                  { value: 'Wrong amount', label: 'Wrong amount' },
-                  { value: 'Duplicate payment', label: 'Duplicate payment' },
-                  { value: 'Customer request', label: 'Customer request' },
-                  { value: 'Other', label: 'Other' },
-                ]}
-              />
-            </div>
-
-            <div style={{ marginBottom: '20px' }}>
-              <label
-                style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}
-              >
-                Comment (optional)
-              </label>
-              <textarea
-                value={voidComment}
-                onChange={e => setVoidComment(e.target.value)}
-                className="input-default"
-                style={{ width: '100%', minHeight: '60px', resize: 'vertical' }}
-                placeholder="Additional details..."
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                className="btn btn-outline"
-                onClick={() => setShowVoidModal(false)}
-                style={{ flex: 1 }}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn"
-                onClick={handleVoidPayment}
-                disabled={!voidReason}
-                style={{ flex: 1, background: '#ef4444', color: 'white' }}
-              >
-                Void Payment
-              </button>
-            </div>
-          </div>
-        </div>
+        <VoidPaymentModal
+          payment={voidingPayment}
+          voidReason={voidReason}
+          setVoidReason={setVoidReason}
+          voidComment={voidComment}
+          setVoidComment={setVoidComment}
+          onClose={() => setShowVoidModal(false)}
+          onConfirm={handleVoidPayment}
+          formatCurrency={formatCurrency}
+        />
       )}
 
       {/* Void Key Modal */}
       {showVoidKeyModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 50,
+        <VoidKeyModal
+          voidKeyInput={voidKeyInput}
+          setVoidKeyInput={setVoidKeyInput}
+          voidKeyError={voidKeyError}
+          setVoidKeyError={setVoidKeyError}
+          onClose={() => setShowVoidKeyModal(false)}
+          onSubmit={() => {
+            if (voidKeyInput === voidKey) {
+              setShowVoidKeyModal(false);
+              setVoidingPayment(selectedReceipt);
+              setShowVoidModal(true);
+            } else {
+              setVoidKeyError('Invalid void key');
+            }
           }}
-          onClick={() => setShowVoidKeyModal(false)}
-        >
-          <div
-            style={{
-              backgroundColor: 'white',
-              borderRadius: '12px',
-              padding: '24px',
-              maxWidth: '350px',
-              width: '90%',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <h3 style={{ marginTop: 0, marginBottom: '16px' }}>Enter Void Key</h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '16px', fontSize: '14px' }}>
-              Enter the void key to authorize voiding this payment.
-            </p>
-            <div style={{ marginBottom: '16px' }}>
-              <input
-                type="password"
-                value={voidKeyInput}
-                onChange={e => {
-                  setVoidKeyInput(e.target.value);
-                  setVoidKeyError('');
-                }}
-                className="input-default"
-                style={{
-                  width: '100%',
-                  textAlign: 'center',
-                  fontSize: '18px',
-                  letterSpacing: '4px',
-                }}
-                placeholder="••••"
-                autoFocus
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    if (voidKeyInput === voidKey) {
-                      setShowVoidKeyModal(false);
-                      setVoidingPayment(selectedReceipt);
-                      setShowVoidModal(true);
-                    } else {
-                      setVoidKeyError('Invalid void key');
-                    }
-                  }
-                }}
-              />
-              {voidKeyError && (
-                <p
-                  style={{ color: '#ef4444', fontSize: '12px', marginTop: '8px', marginBottom: 0 }}
-                >
-                  {voidKeyError}
-                </p>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                className="btn btn-outline"
-                onClick={() => setShowVoidKeyModal(false)}
-                style={{ flex: 1 }}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  if (voidKeyInput === voidKey) {
-                    setShowVoidKeyModal(false);
-                    setVoidingPayment(selectedReceipt);
-                    setShowVoidModal(true);
-                  } else {
-                    setVoidKeyError('Invalid void key');
-                  }
-                }}
-                style={{ flex: 1 }}
-              >
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
+        />
       )}
 
       {/* Print Statement Modal */}

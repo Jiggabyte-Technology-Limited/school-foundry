@@ -10,7 +10,7 @@
  */
 
 import * as XLSX from 'xlsx';
-import db from '../init';
+import db from '../../db/init';
 
 export interface ImportOptions {
   filePath: string;
@@ -161,7 +161,7 @@ async function commitRows(
           importedCount++;
         }
 
-        db.run('COMMIT', function(err) {
+        db.run('COMMIT', function(this: any, err: Error | null) {
           if (err) {
             db.run('ROLLBACK');
             resolve({

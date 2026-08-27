@@ -81,7 +81,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [resetAppConfirm, setResetAppConfirm] = useState('');
   const [suppressLeavePrompt, setSuppressLeavePrompt] = useState(false);
   const savedSchoolSettingsRef = useRef<SchoolSettingsSnapshot | null>(null);
-  const userFormBaselineRef = useRef(DEFAULT_NEW_USER);
+  const userFormBaselineRef = useRef<any>(DEFAULT_NEW_USER);
 
   const isAdmin = user.role === 'admin';
 

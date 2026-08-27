@@ -7,6 +7,8 @@ interface ClassListPreviewStudent {
   student_number: string;
   full_name: string;
   gender: string;
+  subsidy_provider_name?: string;
+  is_protected?: boolean;
 }
 
 interface ClassListPrintPreviewProps {
@@ -400,6 +402,27 @@ const ClassListPrintPreview: React.FC<ClassListPrintPreviewProps> = ({
                 </td>
                 <td style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', fontWeight: 600 }}>
                   {student.full_name}
+                  {student.is_protected && (
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        fontSize: '10px',
+                        color: '#065f46',
+                        background: '#d1fae5',
+                        border: '1px solid #a7f3d0',
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        fontWeight: 600,
+                      }}
+                      title={
+                        student.subsidy_provider_name
+                          ? `Sponsored under ${student.subsidy_provider_name}`
+                          : 'Child Safeguarding Protected'
+                      }
+                    >
+                      🛡️ {student.subsidy_provider_name ? 'SPONSORED' : 'PROTECTED'}
+                    </span>
+                  )}
                 </td>
                 <td
                   style={{

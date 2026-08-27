@@ -58,6 +58,27 @@ const StudentAccountsTable: React.FC<StudentAccountsTableProps> = ({
                 className="text-display"
               >
                 {student.full_name}
+                {student.is_protected && (
+                  <span
+                    style={{
+                      marginLeft: 8,
+                      fontSize: '10px',
+                      color: '#065f46',
+                      background: '#d1fae5',
+                      border: '1px solid #a7f3d0',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      fontWeight: 600,
+                    }}
+                    title={
+                      student.subsidy_name
+                        ? `Protected under ${student.subsidy_name} (Shielded from exclusion)`
+                        : 'Child Safeguarding Protected'
+                    }
+                  >
+                    🛡️ {student.subsidy_name ? 'SPONSORED' : 'PROTECTED'}
+                  </span>
+                )}
                 {isInactive && (
                   <span
                     style={{
